@@ -1,0 +1,25 @@
+[package]
+name = "bubble_gw_rs"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description.workspace = true
+readme.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+ndarray = "0.16"
+puruspe = "0.4"
+rayon = "1.11"
+serde = { version = "1.0", features = ["derive"] }
+num-complex = "0.4"
+peroxide = { version = "0.40.0", features = ["complex"] }
+rand = "0.9.2"
+rand_distr = "0.5.1"
+bitvec = "1.0.1"
+array-init = "2.1.0"
+num = "0.4.3"
+
+[lib]
+crate-type = ["cdylib", "lib"]
