@@ -1,6 +1,6 @@
 use bubble_gw_rs::many_bubbles::bubble_formation::{
     BubbleFormationSimulator, Lattice, LatticeType, ManualNucleation, NucleationStrategy,
-    PoissonNucleation, SimulationState,
+    PoissonNucleation, SimulationEndStatus,
 };
 use bubble_gw_rs::many_bubbles::bulk_flow::{BubbleIndex, BulkFlow, CollisionStatus, Segment};
 use ndarray::Array2;
@@ -12,7 +12,6 @@ use numpy::{
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-use std::collections::BTreeMap;
 
 #[pyclass(name = "Lattice")]
 pub struct PyLattice {
@@ -22,8 +21,9 @@ pub struct PyLattice {
 #[pymethods]
 impl PyLattice {
     #[new]
-    fn new(lattice_type: &str, sizes: Vec<f64>, n: usize) -> PyResult<Self> {
-        let inner = Lattice::new(lattice_type, sizes, n).map_err(|e| PyValueError::new_err(e))?;
+    fn new(lattice_type: &str, sizes: Vec<f64>, n_grid: usize) -> PyResult<Self> {
+        let inner =
+            Lattice::new(lattice_type, sizes, n_grid).map_err(|e| PyValueError::new_err(e))?;
         Ok(PyLattice { inner })
     }
 
@@ -32,7 +32,7 @@ impl PyLattice {
     }
 
     fn generate_grid(&self, py: Python) -> PyResult<Py<PyArray2<f64>>> {
-        let (grid, _cell_map) = self.inner.generate_grid();
+        let grid = self.inner.generate_grid();
         Ok(PyArray2::from_array(py, &grid).into())
     }
 
@@ -55,7 +55,7 @@ impl PyLattice {
 
     #[getter]
     fn n(&self) -> usize {
-        self.inner.n
+        self.inner.n_grid
     }
 }
 
@@ -67,13 +67,9 @@ pub struct PyPoissonNucleation {
 #[pymethods]
 impl PyPoissonNucleation {
     #[new]
-    fn new(params: &Bound<PyDict>) -> PyResult<Self> {
-        let mut rust_params = BTreeMap::new();
-        for item in params.items() {
-            let (key, value) = item.extract::<(String, f64)>()?;
-            rust_params.insert(key, value);
-        }
-        let inner = PoissonNucleation::new(rust_params).map_err(|e| PyValueError::new_err(e))?;
+    fn new(gamma0: f64, beta: f64, t0: f64, dp0: f64) -> PyResult<Self> {
+        let inner =
+            PoissonNucleation::new(gamma0, beta, t0, dp0).map_err(|e| PyValueError::new_err(e))?;
         Ok(PyPoissonNucleation { inner })
     }
 }
@@ -86,7 +82,7 @@ pub struct PyManualNucleation {
 #[pymethods]
 impl PyManualNucleation {
     #[new]
-    fn new(schedule: Vec<(f64, Vec<Vec<f64>>)>) -> PyResult<Self> {
+    fn new(schedule: Vec<(f64, Vec<Vec<f64>>)>, dt: f64) -> PyResult<Self> {
         let rust_schedule: Vec<(f64, Vec<[f64; 3]>)> = schedule
             .into_iter()
             .map(|(t, points)| {
@@ -104,7 +100,8 @@ impl PyManualNucleation {
                 Ok((t, rust_points))
             })
             .collect::<PyResult<Vec<(f64, Vec<[f64; 3]>)>>>()?;
-        let inner = ManualNucleation::new(rust_schedule).map_err(|e| PyValueError::new_err(e))?;
+        let inner =
+            ManualNucleation::new(rust_schedule, dt).map_err(|e| PyValueError::new_err(e))?;
         Ok(PyManualNucleation { inner })
     }
 }
@@ -117,11 +114,10 @@ pub struct PyBubbleFormationSimulator {
 #[pymethods]
 impl PyBubbleFormationSimulator {
     #[new]
-    #[pyo3(signature = (lattice, vw = 0.5, dt = 0.1, nucleation_strategy = None, seed=None))]
+    #[pyo3(signature = (lattice, vw = 0.5, nucleation_strategy = None, seed=None))]
     fn new(
         lattice: &PyLattice,
         vw: f64,
-        dt: f64,
         nucleation_strategy: Option<Py<PyAny>>,
         seed: Option<u64>,
         py: Python,
@@ -140,16 +136,78 @@ impl PyBubbleFormationSimulator {
             }
             None => None,
         };
-        let inner = BubbleFormationSimulator::new(lattice.inner.clone(), vw, dt, strategy, seed)
+        let inner = BubbleFormationSimulator::new(lattice.inner.clone(), vw, strategy, seed)
             .map_err(|e| PyValueError::new_err(e))?;
         Ok(PyBubbleFormationSimulator { inner })
     }
 
-    fn run_simulation(&mut self, t_final: f64, verbose: bool) -> PyResult<()> {
+    fn set_seed(&mut self, seed: u64) {
+        self.inner.set_seed(seed);
+    }
+
+    #[pyo3(signature = (t_max=None, min_volume_remaining_fraction=None, max_time_iterations=None))]
+    fn run_simulation(
+        &mut self,
+        t_max: Option<f64>,
+        min_volume_remaining_fraction: Option<f64>,
+        max_time_iterations: Option<usize>,
+    ) -> PyResult<()> {
         self.inner
-            .run_simulation(t_final, verbose)
-            .map_err(|e| PyValueError::new_err(e))?;
+            .run_simulation(t_max, min_volume_remaining_fraction, max_time_iterations);
         Ok(())
+    }
+
+    #[getter]
+    fn end_status(&self, py: Python) -> PyResult<Option<Py<PyDict>>> {
+        match &self.inner.end_status {
+            Some(status) => {
+                let dict = PyDict::new(py);
+                match status {
+                    SimulationEndStatus::TimeLimitReached {
+                        t_end,
+                        volume_remaining_fraction,
+                        time_iteration,
+                    } => {
+                        dict.set_item("status", "TimeLimitReached")?;
+                        dict.set_item("t_end", t_end)?;
+                        dict.set_item("volume_remaining_fraction", volume_remaining_fraction)?;
+                        dict.set_item("time_iteration", time_iteration)?;
+                    }
+                    SimulationEndStatus::VolumeFractionReached {
+                        t_end,
+                        volume_remaining_fraction,
+                        time_iteration,
+                    } => {
+                        dict.set_item("status", "VolumeFractionReached")?;
+                        dict.set_item("t_end", t_end)?;
+                        dict.set_item("volume_remaining_fraction", volume_remaining_fraction)?;
+                        dict.set_item("time_iteration", time_iteration)?;
+                    }
+                    SimulationEndStatus::MaxTimeIterationsReached {
+                        t_end,
+                        volume_remaining_fraction,
+                        time_iteration,
+                    } => {
+                        dict.set_item("status", "MaxTimeIterationsReached")?;
+                        dict.set_item("t_end", t_end)?;
+                        dict.set_item("volume_remaining_fraction", volume_remaining_fraction)?;
+                        dict.set_item("time_iteration", time_iteration)?;
+                    }
+                    SimulationEndStatus::VolumeDepleted {
+                        t_end,
+                        volume_remaining_fraction,
+                        time_iteration,
+                    } => {
+                        dict.set_item("status", "VolumeDepleted")?;
+                        dict.set_item("t_end", t_end)?;
+                        dict.set_item("volume_remaining_fraction", volume_remaining_fraction)?;
+                        dict.set_item("time_iteration", time_iteration)?;
+                    }
+                }
+                Ok(Some(dict.into()))
+            }
+            None => Ok(None),
+        }
     }
 
     fn get_boundary_intersecting_bubbles(&self, t: f64) -> Vec<([f64; 3], f64)> {
@@ -166,13 +224,8 @@ impl PyBubbleFormationSimulator {
     }
 
     #[getter]
-    fn dt(&self) -> f64 {
-        self.inner.dt()
-    }
-
-    #[getter]
-    fn v_remaining(&self) -> f64 {
-        self.inner.v_remaining()
+    fn volume_remaining(&self) -> f64 {
+        self.inner.volume_remaining()
     }
 
     fn get_valid_points(&mut self, t: Option<f64>, py: Python) -> PyResult<Py<PyArray2<f64>>> {
@@ -180,14 +233,20 @@ impl PyBubbleFormationSimulator {
         Ok(PyArray2::from_array(py, &points).into())
     }
 
-    fn update_remaining_volume_bulk(&mut self, t: f64) -> f64 {
-        let valid_points = self.inner.get_valid_points(Some(t));
-        self.inner.update_remaining_volume_bulk(t, &valid_points)
-    }
-
     fn get_bubbles(&self, py: Python) -> PyResult<Py<PyArray2<f64>>> {
         let bubbles_array = self.inner.get_bubbles();
         Ok(PyArray2::from_array(py, &bubbles_array).into())
+    }
+
+    fn get_volume_history(&self, py: Python) -> PyResult<Py<PyArray2<f64>>> {
+        let volume_history = self.inner.get_volume_history();
+        let history_vec: Vec<f64> = volume_history
+            .into_iter()
+            .flat_map(|(dt, vol)| vec![dt, vol])
+            .collect();
+        let history_array = Array2::from_shape_vec((history_vec.len() / 2, 2), history_vec)
+            .map_err(|e| PyValueError::new_err(format!("Failed to create history array: {}", e)))?;
+        Ok(PyArray2::from_array(py, &history_array).into())
     }
 
     #[getter]
@@ -208,8 +267,8 @@ impl PyBubbleFormationSimulator {
     }
 
     #[getter]
-    fn v_total(&self) -> f64 {
-        self.inner.v_total()
+    fn volume_total(&self) -> f64 {
+        self.inner.volume_total()
     }
 }
 
@@ -546,8 +605,6 @@ impl PyBulkFlow {
         Ok(PyArray3::from_array(py, &c_matrix_numpy).into())
     }
 
-    /// Sets the angular resolution for the angular grids.
-    /// Must be called before any computation methods.
     #[pyo3(signature = (n_cos_thetax, n_phix))]
     pub fn set_resolution(&mut self, n_cos_thetax: usize, n_phix: usize) -> PyResult<()> {
         self.inner.set_resolution(n_cos_thetax, n_phix);

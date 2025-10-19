@@ -1,7 +1,7 @@
-use ndarray::{azip, s, stack, Array1, Array2, Array3, Array4, ArrayView1, ArrayView2, Axis, Zip};
+use ndarray::{Array1, Array2, Array3, Array4, ArrayView1, ArrayView2, Axis, Zip, azip, s, stack};
 use num_complex::Complex64;
-use rayon::prelude::*;
 use rayon::ThreadPool;
+use rayon::prelude::*;
 
 /// Represents a bubble index, distinguishing between an interior index, exterior index, and no collision.
 #[derive(Debug, Copy, Clone, PartialEq)]

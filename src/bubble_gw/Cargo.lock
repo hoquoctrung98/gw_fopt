@@ -42,6 +42,7 @@ dependencies = [
 name = "bubble_gw_py"
 version = "0.1.0"
 dependencies = [
+ "bitvec",
  "bubble_gw_rs",
  "ndarray",
  "num",
@@ -60,6 +61,7 @@ dependencies = [
  "ndarray",
  "num",
  "num-complex",
+ "num_cpus",
  "peroxide",
  "puruspe",
  "rand",

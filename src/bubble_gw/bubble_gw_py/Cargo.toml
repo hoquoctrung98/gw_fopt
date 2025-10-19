@@ -19,6 +19,7 @@ numpy = "0.26.0"
 ndarray = "0.16"
 num-complex = "0.4"
 num = "0.4.3"
+bitvec = "1.0.1"
 
 [build-dependencies]
 pyo3-build-config = "0.26"
