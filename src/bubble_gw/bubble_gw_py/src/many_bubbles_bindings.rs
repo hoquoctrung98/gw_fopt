@@ -1,6 +1,6 @@
 use bubble_gw_rs::many_bubbles::bubble_formation::{
-    BubbleFormationSimulator, Lattice, LatticeType, ManualNucleation, NucleationStrategy,
-    PoissonNucleation, SimulationEndStatus,
+    BubbleFormationSimulator, Lattice, LatticeType, ManualNucleation, PoissonNucleation,
+    SimulationEndStatus,
 };
 use bubble_gw_rs::many_bubbles::bulk_flow::{BubbleIndex, BulkFlow, CollisionStatus, Segment};
 use ndarray::Array2;
@@ -108,7 +108,22 @@ impl PyManualNucleation {
 
 #[pyclass(name = "BubbleFormationSimulator")]
 pub struct PyBubbleFormationSimulator {
-    inner: BubbleFormationSimulator,
+    inner: BubbleFormationSimulatorWrapper,
+}
+
+enum BubbleFormationSimulatorWrapper {
+    Poisson(BubbleFormationSimulator<PoissonNucleation>),
+    Manual(BubbleFormationSimulator<ManualNucleation>),
+}
+
+impl PyBubbleFormationSimulator {
+    fn get_inner(&self) -> &BubbleFormationSimulatorWrapper {
+        &self.inner
+    }
+
+    fn get_inner_mut(&mut self) -> &mut BubbleFormationSimulatorWrapper {
+        &mut self.inner
+    }
 }
 
 #[pymethods]
@@ -122,27 +137,49 @@ impl PyBubbleFormationSimulator {
         seed: Option<u64>,
         py: Python,
     ) -> PyResult<Self> {
-        let strategy: Option<NucleationStrategy> = match nucleation_strategy {
+        let inner = match nucleation_strategy {
             Some(obj) => {
                 if let Ok(poisson) = obj.extract::<PyRef<PyPoissonNucleation>>(py) {
-                    Some(NucleationStrategy::Poisson(poisson.inner.clone()))
+                    let simulator = BubbleFormationSimulator::new(
+                        lattice.inner.clone(),
+                        vw,
+                        poisson.inner.clone(),
+                        seed,
+                    )
+                    .map_err(|e| PyValueError::new_err(e))?;
+                    BubbleFormationSimulatorWrapper::Poisson(simulator)
                 } else if let Ok(manual) = obj.extract::<PyRef<PyManualNucleation>>(py) {
-                    Some(NucleationStrategy::Manual(manual.inner.clone()))
+                    let simulator = BubbleFormationSimulator::new(
+                        lattice.inner.clone(),
+                        vw,
+                        manual.inner.clone(),
+                        seed,
+                    )
+                    .map_err(|e| PyValueError::new_err(e))?;
+                    BubbleFormationSimulatorWrapper::Manual(simulator)
                 } else {
                     return Err(PyValueError::new_err(
                         "nucleation_strategy must be PoissonNucleation or ManualNucleation",
                     ));
                 }
             }
-            None => None,
+            None => {
+                let poisson = PoissonNucleation::new(0.1, 1.0, 0.0, 0.1)
+                    .map_err(|e| PyValueError::new_err(e))?;
+                let simulator =
+                    BubbleFormationSimulator::new(lattice.inner.clone(), vw, poisson, seed)
+                        .map_err(|e| PyValueError::new_err(e))?;
+                BubbleFormationSimulatorWrapper::Poisson(simulator)
+            }
         };
-        let inner = BubbleFormationSimulator::new(lattice.inner.clone(), vw, strategy, seed)
-            .map_err(|e| PyValueError::new_err(e))?;
         Ok(PyBubbleFormationSimulator { inner })
     }
 
     fn set_seed(&mut self, seed: u64) {
-        self.inner.set_seed(seed);
+        match self.get_inner_mut() {
+            BubbleFormationSimulatorWrapper::Poisson(sim) => sim.set_seed(seed),
+            BubbleFormationSimulatorWrapper::Manual(sim) => sim.set_seed(seed),
+        }
     }
 
     #[pyo3(signature = (t_max=None, min_volume_remaining_fraction=None, max_time_iterations=None))]
@@ -152,14 +189,24 @@ impl PyBubbleFormationSimulator {
         min_volume_remaining_fraction: Option<f64>,
         max_time_iterations: Option<usize>,
     ) -> PyResult<()> {
-        self.inner
-            .run_simulation(t_max, min_volume_remaining_fraction, max_time_iterations);
+        match self.get_inner_mut() {
+            BubbleFormationSimulatorWrapper::Poisson(sim) => {
+                sim.run_simulation(t_max, min_volume_remaining_fraction, max_time_iterations);
+            }
+            BubbleFormationSimulatorWrapper::Manual(sim) => {
+                sim.run_simulation(t_max, min_volume_remaining_fraction, max_time_iterations);
+            }
+        }
         Ok(())
     }
 
     #[getter]
     fn end_status(&self, py: Python) -> PyResult<Option<Py<PyDict>>> {
-        match &self.inner.end_status {
+        let status = match self.get_inner() {
+            BubbleFormationSimulatorWrapper::Poisson(sim) => &sim.end_status,
+            BubbleFormationSimulatorWrapper::Manual(sim) => &sim.end_status,
+        };
+        match status {
             Some(status) => {
                 let dict = PyDict::new(py);
                 match status {
@@ -211,35 +258,57 @@ impl PyBubbleFormationSimulator {
     }
 
     fn get_boundary_intersecting_bubbles(&self, t: f64) -> Vec<([f64; 3], f64)> {
-        self.inner
-            .get_boundary_intersecting_bubbles(t)
-            .into_iter()
-            .map(|(idx, t)| (self.inner.get_center(idx), t))
-            .collect()
+        match self.get_inner() {
+            BubbleFormationSimulatorWrapper::Poisson(sim) => sim
+                .get_boundary_intersecting_bubbles(t)
+                .into_iter()
+                .map(|(idx, t)| (sim.get_center(idx), t))
+                .collect(),
+            BubbleFormationSimulatorWrapper::Manual(sim) => sim
+                .get_boundary_intersecting_bubbles(t)
+                .into_iter()
+                .map(|(idx, t)| (sim.get_center(idx), t))
+                .collect(),
+        }
     }
 
     fn generate_exterior_bubbles(&self, py: Python) -> PyResult<Py<PyArray2<f64>>> {
-        let exterior_bubbles = self.inner.generate_exterior_bubbles();
+        let exterior_bubbles = match self.get_inner() {
+            BubbleFormationSimulatorWrapper::Poisson(sim) => sim.generate_exterior_bubbles(),
+            BubbleFormationSimulatorWrapper::Manual(sim) => sim.generate_exterior_bubbles(),
+        };
         Ok(PyArray2::from_array(py, &exterior_bubbles).into())
     }
 
     #[getter]
     fn volume_remaining(&self) -> f64 {
-        self.inner.volume_remaining()
+        match self.get_inner() {
+            BubbleFormationSimulatorWrapper::Poisson(sim) => sim.volume_remaining(),
+            BubbleFormationSimulatorWrapper::Manual(sim) => sim.volume_remaining(),
+        }
     }
 
     fn get_valid_points(&mut self, t: Option<f64>, py: Python) -> PyResult<Py<PyArray2<f64>>> {
-        let points = self.inner.get_valid_points(t);
+        let points = match self.get_inner_mut() {
+            BubbleFormationSimulatorWrapper::Poisson(sim) => sim.get_valid_points(t),
+            BubbleFormationSimulatorWrapper::Manual(sim) => sim.get_valid_points(t),
+        };
         Ok(PyArray2::from_array(py, &points).into())
     }
 
     fn get_bubbles(&self, py: Python) -> PyResult<Py<PyArray2<f64>>> {
-        let bubbles_array = self.inner.get_bubbles();
+        let bubbles_array = match self.get_inner() {
+            BubbleFormationSimulatorWrapper::Poisson(sim) => sim.get_bubbles(),
+            BubbleFormationSimulatorWrapper::Manual(sim) => sim.get_bubbles(),
+        };
         Ok(PyArray2::from_array(py, &bubbles_array).into())
     }
 
     fn get_volume_history(&self, py: Python) -> PyResult<Py<PyArray2<f64>>> {
-        let volume_history = self.inner.get_volume_history();
+        let volume_history = match self.get_inner() {
+            BubbleFormationSimulatorWrapper::Poisson(sim) => sim.get_volume_history(),
+            BubbleFormationSimulatorWrapper::Manual(sim) => sim.get_volume_history(),
+        };
         let history_vec: Vec<f64> = volume_history
             .into_iter()
             .flat_map(|(dt, vol)| vec![dt, vol])
@@ -251,24 +320,36 @@ impl PyBubbleFormationSimulator {
 
     #[getter]
     fn lattice(&self) -> PyLattice {
-        PyLattice {
-            inner: self.inner.lattice().clone(),
-        }
+        let lattice = match self.get_inner() {
+            BubbleFormationSimulatorWrapper::Poisson(sim) => sim.lattice().clone(),
+            BubbleFormationSimulatorWrapper::Manual(sim) => sim.lattice().clone(),
+        };
+        PyLattice { inner: lattice }
     }
 
     #[getter]
     fn vw(&self) -> f64 {
-        self.inner.vw()
+        match self.get_inner() {
+            BubbleFormationSimulatorWrapper::Poisson(sim) => sim.vw(),
+            BubbleFormationSimulatorWrapper::Manual(sim) => sim.vw(),
+        }
     }
 
     #[getter]
     fn grid(&self, py: Python) -> PyResult<Py<PyArray2<f64>>> {
-        Ok(PyArray2::from_array(py, self.inner.grid()).into())
+        let grid = match self.get_inner() {
+            BubbleFormationSimulatorWrapper::Poisson(sim) => sim.grid(),
+            BubbleFormationSimulatorWrapper::Manual(sim) => sim.grid(),
+        };
+        Ok(PyArray2::from_array(py, grid).into())
     }
 
     #[getter]
     fn volume_total(&self) -> f64 {
-        self.inner.volume_total()
+        match self.get_inner() {
+            BubbleFormationSimulatorWrapper::Poisson(sim) => sim.volume_total(),
+            BubbleFormationSimulatorWrapper::Manual(sim) => sim.volume_total(),
+        }
     }
 }
 

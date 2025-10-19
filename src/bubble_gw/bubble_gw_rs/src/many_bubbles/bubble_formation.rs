@@ -60,7 +60,6 @@ impl QuantizedPoint {
 }
 
 impl Hash for QuantizedPoint {
-    /// Hashes the quantized coordinates for use in a `HashSet`.
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.0.hash(state);
         self.1.hash(state);
@@ -68,12 +67,10 @@ impl Hash for QuantizedPoint {
     }
 }
 
-/// Enum representing the type of lattice used in the simulation.
+/// Enum representing the type of lattice.
 #[derive(Debug, Clone, PartialEq)]
 pub enum LatticeType {
-    /// A 3D rectangular box with dimensions `[lx, ly, lz]`.
     Cartesian,
-    /// A spherical region with radius `r`.
     Sphere,
 }
 
@@ -213,37 +210,35 @@ impl Lattice {
     }
 }
 
-/// Enum representing the nucleation strategy for bubble formation.
-#[derive(Debug, Clone, PartialEq)]
-pub enum NucleationStrategy {
-    /// Random nucleation based on a Poisson process.
-    Poisson(PoissonNucleation),
-    /// Deterministic nucleation at user-specified times and positions.
-    Manual(ManualNucleation),
+/// Trait defining the nucleation strategy.
+pub trait NucleationStrategy: Clone {
+    fn nucleate(
+        &mut self,
+        t: &mut f64,
+        valid_points: &Array2<f64>,
+        rng: &mut StdRng,
+        vw: f64,
+        volume_remaining: f64,
+        existing_bubbles: Option<&[Bubble]>,
+    ) -> Option<Array2<f64>>;
+    fn initial_time(&self) -> f64;
+    fn validate_schedule(&self, lattice: &Lattice, vw: f64) -> Result<(), String>;
 }
 
-impl NucleationStrategy {
-    /// Nucleates new bubbles according to the strategy.
-    ///
-    /// # Arguments
-    ///
-    /// * `t` - The current simulation time, updated by the strategy.
-    /// * `state` - The current state of the simulator.
-    ///
-    /// # Returns
-    ///
-    /// * `Some(Array2<f64>)` - An array of new bubble centers if nucleation occurs.
-    /// * `None` - If no nucleation occurs.
-    pub fn nucleate(
-        &self,
-        t: &mut f64,
-        state: &mut BubbleFormationSimulator,
-    ) -> Option<Array2<f64>> {
-        match self {
-            NucleationStrategy::Poisson(inner) => inner.nucleate(t, state),
-            NucleationStrategy::Manual(inner) => inner.nucleate(t, state),
-        }
-    }
+/// Represents a single bubble.
+#[derive(Clone, Copy)]
+pub struct Bubble {
+    center: [f64; 3],
+    time: f64,
+}
+
+/// Holds simulation parameters.
+#[derive(Clone)]
+pub struct SimParams {
+    vw: f64,
+    volume_total: f64,
+    volume_remaining: f64,
+    last_update_time: f64,
 }
 
 /// Implements a Poisson process for random bubble nucleation.
@@ -284,52 +279,49 @@ impl PoissonNucleation {
             d_p0,
         })
     }
+}
 
-    /// Nucleates a new bubble using the Poisson process.
-    ///
-    /// The nucleation rate is \( \gamma(t) = \gamma_0 e^{\beta (t - t_0)} \times V_{\text{remaining}} \).
-    /// A bubble is nucleated at a random valid point with probability `d_p0`.
-    ///
-    /// # Arguments
-    ///
-    /// * `t` - The current simulation time, updated by the method.
-    /// * `state` - The current state of the simulator.
-    ///
-    /// # Returns
-    ///
-    /// * `Some(Array2<f64>)` - A single-row array containing the new bubble's center `[x, y, z]`.
-    /// * `None` - If no nucleation occurs or no valid points remain.
-    pub fn nucleate(
-        &self,
+impl NucleationStrategy for PoissonNucleation {
+    fn nucleate(
+        &mut self,
         t: &mut f64,
-        state: &mut BubbleFormationSimulator,
+        valid_points: &Array2<f64>,
+        rng: &mut StdRng,
+        _vw: f64,
+        volume_remaining: f64,
+        _existing_bubbles: Option<&[Bubble]>,
     ) -> Option<Array2<f64>> {
-        let volume_remaining = state.volume_remaining();
         let gamma_t = self.gamma0 * (self.beta * (*t - self.t0)).exp() * volume_remaining;
         let dt = self.d_p0 / gamma_t;
         *t += dt;
-        let valid_points = state.get_valid_points(Some(*t));
         if valid_points.is_empty() || volume_remaining < 1e-10 {
             return None;
         }
-        let x: f64 = state.rng.random(); // Use state.rng for reproducibility
+        let x: f64 = rng.random();
         if x <= self.d_p0 {
             let n = valid_points.nrows();
-            let idx = rand::seq::index::sample(&mut state.rng, n, 1)
+            let idx = rand::seq::index::sample(rng, n, 1)
                 .into_vec()
                 .get(0)
                 .copied()
                 .unwrap();
-            // .unwrap_or(0);
             let point = valid_points.row(idx).to_vec();
             Some(Array2::from_shape_vec((1, 3), point).unwrap())
         } else {
             None
         }
     }
+
+    fn initial_time(&self) -> f64 {
+        self.t0
+    }
+
+    fn validate_schedule(&self, _lattice: &Lattice, _vw: f64) -> Result<(), String> {
+        Ok(())
+    }
 }
 
-/// Implements manual nucleation at user-specified times and positions.
+/// Implements manual nucleation.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ManualNucleation {
     /// A schedule of nucleation times and corresponding bubble centers.
@@ -368,55 +360,6 @@ impl ManualNucleation {
         Ok(ManualNucleation { schedule, dt })
     }
 
-    /// Nucleates bubbles according to the schedule at the current time.
-    ///
-    /// # Arguments
-    ///
-    /// * `t` - The current simulation time, advanced by `dt`.
-    /// * `_state` - The current state of the simulator (unused in this method).
-    ///
-    /// # Returns
-    ///
-    /// * `Some(Array2<f64>)` - An array of new bubble centers if any are scheduled at or before `t`.
-    /// * `None` - If no bubbles are scheduled.
-    pub fn nucleate(
-        &self,
-        t: &mut f64,
-        _state: &mut BubbleFormationSimulator,
-    ) -> Option<Array2<f64>> {
-        let mut new_centers: Vec<[f64; 3]> = Vec::new();
-        for (nucleation_time, centers) in &self.schedule {
-            if *nucleation_time <= *t {
-                new_centers.extend(centers.iter().cloned());
-            }
-        }
-        *t += self.dt;
-        if new_centers.is_empty() {
-            None
-        } else {
-            Some(
-                Array2::from_shape_vec(
-                    (new_centers.len(), 3),
-                    new_centers.into_iter().flatten().collect(),
-                )
-                .unwrap(),
-            )
-        }
-    }
-
-    /// Checks if a point is valid for nucleation (i.e., does not overlap with existing bubbles).
-    ///
-    /// # Arguments
-    ///
-    /// * `point` - The `[x, y, z]` coordinates of the proposed bubble center.
-    /// * `t` - The current simulation time.
-    /// * `existing_bubbles` - A list of existing bubbles as `(center, nucleation_time)` tuples.
-    /// * `vw` - The bubble wall velocity.
-    ///
-    /// # Returns
-    ///
-    /// * `true` - If the point does not overlap with any existing bubbles.
-    /// * `false` - If the point lies within the radius of any existing bubble.
     fn is_point_valid(
         &self,
         point: [f64; 3],
@@ -440,37 +383,103 @@ impl ManualNucleation {
     }
 }
 
-/// Represents a single bubble in the simulation.
-#[derive(Clone, Copy)]
-struct Bubble {
-    /// The center of the bubble as `[x, y, z]`.
-    center: [f64; 3],
-    /// The nucleation time of the bubble.
-    time: f64,
-}
+impl NucleationStrategy for ManualNucleation {
+    fn nucleate(
+        &mut self,
+        t: &mut f64,
+        _valid_points: &Array2<f64>,
+        _rng: &mut StdRng,
+        vw: f64,
+        _volume_remaining: f64,
+        existing_bubbles: Option<&[Bubble]>,
+    ) -> Option<Array2<f64>> {
+        let mut new_centers: Vec<[f64; 3]> = Vec::new();
+        let existing_bubbles = existing_bubbles.unwrap_or(&[]);
+        let existing_bubble_vec: Vec<([f64; 3], f64)> = existing_bubbles
+            .iter()
+            .map(|b| (b.center, b.time))
+            .collect();
+        for (nucleation_time, centers) in &self.schedule {
+            if (*nucleation_time - *t).abs() < 1e-10 {
+                for center in centers {
+                    if self.is_point_valid(*center, *t, &existing_bubble_vec, vw) {
+                        new_centers.push(*center);
+                    }
+                }
+            }
+        }
+        *t += self.dt;
+        if new_centers.is_empty() {
+            None
+        } else {
+            Some(
+                Array2::from_shape_vec(
+                    (new_centers.len(), 3),
+                    new_centers.into_iter().flatten().collect(),
+                )
+                .unwrap(),
+            )
+        }
+    }
 
-/// Holds simulation parameters for bubble growth and volume tracking.
-#[derive(Clone)]
-pub struct SimParams {
-    /// The bubble wall velocity (must be in (0, 1]).
-    vw: f64,
-    /// The total volume of the lattice.
-    volume_total: f64,
-    /// The volume not yet consumed by bubbles.
-    volume_remaining: f64,
-    /// The last time the valid points were updated.
-    last_update_time: f64,
+    fn initial_time(&self) -> f64 {
+        self.schedule
+            .iter()
+            .map(|(t, _)| *t)
+            .min_by(|a, b| a.partial_cmp(b).unwrap())
+            .unwrap_or(0.0)
+    }
+
+    fn validate_schedule(&self, lattice: &Lattice, vw: f64) -> Result<(), String> {
+        let bounds = lattice.get_lattice_bounds();
+        for (t, centers) in &self.schedule {
+            for center in centers {
+                for (i, &(min_bound, max_bound)) in bounds.iter().enumerate() {
+                    if center[i] < min_bound || center[i] > max_bound {
+                        return Err(format!(
+                            "Bubble center {:?} at time {} is outside lattice bounds [{}, {}] for dimension {}",
+                            center, t, min_bound, max_bound, i
+                        ));
+                    }
+                }
+            }
+        }
+        let mut sorted_times: Vec<f64> = self.schedule.iter().map(|(t, _)| *t).collect();
+        sorted_times.sort_by(|a: &f64, b: &f64| a.partial_cmp(b).unwrap());
+        let mut existing_bubbles: Vec<([f64; 3], f64)> = Vec::new();
+        for t in sorted_times {
+            let centers = self
+                .schedule
+                .iter()
+                .find(|(time, _)| (*time - t).abs() < 1e-10)
+                .map(|(_, centers)| centers)
+                .unwrap();
+            let mut valid_centers = Vec::new();
+            for center in centers {
+                if self.is_point_valid(*center, t, &existing_bubbles, vw) {
+                    valid_centers.push(*center);
+                } else {
+                    return Err(format!(
+                        "Bubble at {:?} at time {} overlaps with earlier bubbles",
+                        center, t
+                    ));
+                }
+            }
+            existing_bubbles.extend(valid_centers.into_iter().map(|c| (c, t)));
+        }
+        Ok(())
+    }
 }
 
 /// The main simulator for bubble nucleation and growth.
 #[derive(Clone)]
-pub struct BubbleFormationSimulator {
+pub struct BubbleFormationSimulator<S: NucleationStrategy> {
     /// Simulation parameters.
     params: SimParams,
     /// The lattice defining the simulation domain.
     lattice: Lattice,
     /// The nucleation strategy (Poisson or Manual).
-    strategy: NucleationStrategy,
+    strategy: S,
     /// A list of all nucleated bubbles.
     bubbles: Vec<Bubble>,
     /// The grid of points in the lattice.
@@ -485,53 +494,15 @@ pub struct BubbleFormationSimulator {
     pub end_status: Option<SimulationEndStatus>,
 }
 
-impl BubbleFormationSimulator {
+impl<S: NucleationStrategy> BubbleFormationSimulator<S> {
     /// Creates a new bubble formation simulator.
-    ///
-    /// # Arguments
-    ///
-    /// * `lattice` - The lattice defining the simulation domain.
-    /// * `vw` - The bubble wall velocity (must be in (0, 1]).
-    /// * `strategy` - The nucleation strategy (defaults to Poisson if `None`).
-    /// * `seed` - An optional seed for the random number generator.
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(BubbleFormationSimulator)` - A new simulator instance.
-    /// * `Err(String)` - If `vw` is invalid or manual nucleation centers are outside bounds.
-    pub fn new(
-        lattice: Lattice,
-        vw: f64,
-        strategy: Option<NucleationStrategy>,
-        seed: Option<u64>,
-    ) -> Result<Self, String> {
+    pub fn new(lattice: Lattice, vw: f64, strategy: S, seed: Option<u64>) -> Result<Self, String> {
         if vw <= 0.0 || vw > 1.0 {
             return Err("Wall velocity must be in (0, 1]".to_string());
         }
         let grid = lattice.generate_grid();
         let volume_total = lattice.get_volume();
-        let strategy = strategy.unwrap_or_else(|| {
-            NucleationStrategy::Poisson(PoissonNucleation::new(0.1, 1.0, 0.0, 0.1).unwrap())
-        });
-
-        if let NucleationStrategy::Manual(manual) = &strategy {
-            let bounds = lattice.get_lattice_bounds();
-            for (t, centers) in &manual.schedule {
-                for center in centers {
-                    for (i, &(min_bound, max_bound)) in bounds.iter().enumerate() {
-                        if center[i] < min_bound || center[i] > max_bound {
-                            return Err(format!(
-                                "Bubble center {:?} at time {} is outside lattice bounds [{}, {}] for dimension {}",
-                                center, t, min_bound, max_bound, i
-                            ));
-                        }
-                    }
-                }
-            }
-        }
-
         let outside_points = (0..grid.nrows()).collect::<Vec<usize>>();
-
         let rng = match seed {
             Some(seed_value) => StdRng::seed_from_u64(seed_value),
             None => StdRng::seed_from_u64(random::<u64>()),
@@ -544,7 +515,7 @@ impl BubbleFormationSimulator {
                 volume_remaining: volume_total,
                 last_update_time: 0.0,
             },
-            lattice: lattice.clone(),
+            lattice,
             strategy,
             bubbles: Vec::new(),
             grid,
@@ -554,8 +525,8 @@ impl BubbleFormationSimulator {
             end_status: None,
         };
 
-        if let LatticeType::Sphere = lattice.lattice_type {
-            let r = lattice.sizes[0];
+        if let LatticeType::Sphere = simulator.lattice.lattice_type {
+            let r = simulator.lattice.sizes[0];
             simulator.outside_points.retain(|&i| {
                 let row = simulator.grid.row(i);
                 let d = row[0] * row[0] + row[1] * row[1] + row[2] * row[2];
@@ -584,42 +555,10 @@ impl BubbleFormationSimulator {
     /// * `Ok(())` - If the setup is valid.
     /// * `Err(String)` - If any manual nucleation centers overlap with existing bubbles.
     fn validate(&self) -> Result<(), String> {
-        if let NucleationStrategy::Manual(manual) = &self.strategy {
-            let mut existing_bubbles: Vec<([f64; 3], f64)> = Vec::new();
-            let mut sorted_times: Vec<f64> = manual.schedule.iter().map(|(t, _)| *t).collect();
-            sorted_times.sort_by(|a, b| a.partial_cmp(b).unwrap());
-            for t in sorted_times {
-                let centers = manual
-                    .schedule
-                    .iter()
-                    .find(|(time, _)| (*time - t).abs() < 1e-10)
-                    .map(|(_, centers)| centers)
-                    .unwrap();
-                let mut valid_centers = Vec::new();
-                for center in centers {
-                    if manual.is_point_valid(*center, t, &existing_bubbles, self.vw()) {
-                        valid_centers.push(*center);
-                    } else {
-                        return Err(format!(
-                            "Bubble at {:?} at time {} overlaps with earlier bubbles",
-                            center, t
-                        ));
-                    }
-                }
-                existing_bubbles.extend(valid_centers.into_iter().map(|c| (c, t)));
-            }
-        }
-        Ok(())
+        self.strategy
+            .validate_schedule(&self.lattice, self.params.vw)
     }
 
-    /// Updates the list of valid grid points by removing those inside new bubbles.
-    ///
-    /// Uses parallel iteration for efficiency.
-    ///
-    /// # Arguments
-    ///
-    /// * `new_bubbles` - A list of new bubbles as `(center, nucleation_time)` tuples.
-    /// * `t` - The current simulation time.
     fn update_outside_mask(&mut self, new_bubbles: &Vec<([f64; 3], f64)>, t: f64) {
         if new_bubbles.is_empty() {
             return;
@@ -668,141 +607,89 @@ impl BubbleFormationSimulator {
         min_volume_remaining_fraction: Option<f64>,
         max_time_iterations: Option<usize>,
     ) {
-        self.volume_history.clear(); // Clear volume_history before starting
-        self.end_status = None; // Reset end_status
-        let strategy = self.strategy.clone(); // Clone strategy to avoid borrowing self
+        self.volume_history.clear();
+        self.end_status = None;
         let min_frac = min_volume_remaining_fraction.unwrap_or(0.0);
+        let mut t = self.strategy.initial_time();
+        let mut iteration_count = 0;
 
-        match strategy {
-            NucleationStrategy::Manual(manual) => {
-                let mut t = 0.0;
-                let mut iteration_count = 0;
-                loop {
-                    // Check termination conditions
-                    if t_max.map_or(false, |t_max_val| t >= t_max_val) {
-                        self.end_status = Some(SimulationEndStatus::TimeLimitReached {
-                            t_end: t,
-                            volume_remaining_fraction: self.params.volume_remaining
-                                / self.params.volume_total,
-                            time_iteration: iteration_count,
-                        });
-                        return;
-                    }
-                    if self.params.volume_remaining < min_frac * self.params.volume_total {
-                        self.end_status = Some(SimulationEndStatus::VolumeFractionReached {
-                            t_end: t,
-                            volume_remaining_fraction: self.params.volume_remaining
-                                / self.params.volume_total,
-                            time_iteration: iteration_count,
-                        });
-                        return;
-                    }
-                    if self.params.volume_remaining < 1e-6
-                        || self.get_valid_points(Some(t)).is_empty()
-                    {
-                        self.end_status = Some(SimulationEndStatus::VolumeDepleted {
-                            t_end: t,
-                            volume_remaining_fraction: self.params.volume_remaining
-                                / self.params.volume_total,
-                            time_iteration: iteration_count,
-                        });
-                        return;
-                    }
-
-                    let mut new_bubbles: Vec<([f64; 3], f64)> = Vec::new();
-                    for (nucleation_time, centers) in &manual.schedule {
-                        if (t - manual.dt) < *nucleation_time && *nucleation_time <= t {
-                            new_bubbles
-                                .extend(centers.iter().map(|&center| (center, *nucleation_time)));
-                        }
-                    }
-
-                    self.update_outside_mask(&new_bubbles, t);
-                    for (center, tn) in new_bubbles {
-                        self.bubbles.push(Bubble { center, time: tn });
-                    }
-
-                    let valid_points = self.get_valid_points(Some(t));
-                    self.params.volume_remaining = self.update_volume_remaining(&valid_points);
-                    self.volume_history
-                        .push((manual.dt, self.params.volume_remaining));
-
-                    t += manual.dt;
-                    iteration_count += 1;
-                }
+        loop {
+            // Termination conditions
+            if t_max.map_or(false, |t_max_val| t >= t_max_val) {
+                self.end_status = Some(SimulationEndStatus::TimeLimitReached {
+                    t_end: t,
+                    volume_remaining_fraction: self.params.volume_remaining
+                        / self.params.volume_total,
+                    time_iteration: iteration_count,
+                });
+                return;
             }
-            NucleationStrategy::Poisson(poisson) => {
-                let mut iteration_count = 0;
-                let mut t = poisson.t0;
-
-                loop {
-                    // Check termination conditions
-                    if t_max.map_or(false, |t_max_val| t >= t_max_val) {
-                        self.end_status = Some(SimulationEndStatus::TimeLimitReached {
-                            t_end: t,
-                            volume_remaining_fraction: self.params.volume_remaining
-                                / self.params.volume_total,
-                            time_iteration: iteration_count,
-                        });
-                        return;
-                    }
-                    if self.params.volume_remaining < min_frac * self.params.volume_total {
-                        self.end_status = Some(SimulationEndStatus::VolumeFractionReached {
-                            t_end: t,
-                            volume_remaining_fraction: self.params.volume_remaining
-                                / self.params.volume_total,
-                            time_iteration: iteration_count,
-                        });
-                        return;
-                    }
-                    if max_time_iterations.map_or(false, |max_iter| iteration_count >= max_iter) {
-                        self.end_status = Some(SimulationEndStatus::MaxTimeIterationsReached {
-                            t_end: t,
-                            volume_remaining_fraction: self.params.volume_remaining
-                                / self.params.volume_total,
-                            time_iteration: iteration_count,
-                        });
-                        return;
-                    }
-                    if self.params.volume_remaining < 1e-6
-                        || self.get_valid_points(Some(t)).is_empty()
-                    {
-                        self.end_status = Some(SimulationEndStatus::VolumeDepleted {
-                            t_end: t,
-                            volume_remaining_fraction: self.params.volume_remaining
-                                / self.params.volume_total,
-                            time_iteration: iteration_count,
-                        });
-                        return;
-                    }
-
-                    iteration_count += 1;
-
-                    let initial_t = t;
-                    let mut new_bubbles: Vec<([f64; 3], f64)> = Vec::new();
-                    if let Some(new_centers) = poisson.nucleate(&mut t, self) {
-                        new_bubbles.extend(
-                            new_centers
-                                .outer_iter()
-                                .map(|row| ([row[0], row[1], row[2]], t)),
-                        );
-                    }
-                    let dt = t - initial_t;
-
-                    self.update_outside_mask(&new_bubbles, t);
-                    for (center, tn) in new_bubbles {
-                        self.bubbles.push(Bubble { center, time: tn });
-                    }
-
-                    let valid_points = self.get_valid_points(Some(t));
-                    self.params.volume_remaining = self.update_volume_remaining(&valid_points);
-                    self.volume_history.push((dt, self.params.volume_remaining));
-                }
+            if self.params.volume_remaining < min_frac * self.params.volume_total {
+                self.end_status = Some(SimulationEndStatus::VolumeFractionReached {
+                    t_end: t,
+                    volume_remaining_fraction: self.params.volume_remaining
+                        / self.params.volume_total,
+                    time_iteration: iteration_count,
+                });
+                return;
             }
+            if max_time_iterations.map_or(false, |max_iter| iteration_count >= max_iter) {
+                self.end_status = Some(SimulationEndStatus::MaxTimeIterationsReached {
+                    t_end: t,
+                    volume_remaining_fraction: self.params.volume_remaining
+                        / self.params.volume_total,
+                    time_iteration: iteration_count,
+                });
+                return;
+            }
+            if self.params.volume_remaining < 1e-6 || self.get_valid_points(Some(t)).is_empty() {
+                self.end_status = Some(SimulationEndStatus::VolumeDepleted {
+                    t_end: t,
+                    volume_remaining_fraction: self.params.volume_remaining
+                        / self.params.volume_total,
+                    time_iteration: iteration_count,
+                });
+                return;
+            }
+
+            iteration_count += 1;
+            let initial_t = t;
+            let valid_points = self.get_valid_points(Some(t));
+            let existing_bubbles = Some(self.bubbles.as_slice());
+            let new_bubbles: Vec<([f64; 3], f64)> = if let Some(new_centers) =
+                self.strategy.nucleate(
+                    &mut t,
+                    &valid_points,
+                    &mut self.rng,
+                    self.params.vw,
+                    self.params.volume_remaining,
+                    existing_bubbles,
+                ) {
+                let new_t = t; // Time after nucleation
+                self.update_outside_mask(
+                    &new_centers
+                        .outer_iter()
+                        .map(|row| ([row[0], row[1], row[2]], new_t))
+                        .collect(),
+                    new_t,
+                );
+                new_centers
+                    .outer_iter()
+                    .map(|row| ([row[0], row[1], row[2]], new_t))
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            for (center, tn) in new_bubbles {
+                self.bubbles.push(Bubble { center, time: tn });
+            }
+            let valid_points_updated = self.get_valid_points(Some(t));
+            self.params.volume_remaining = self.update_volume_remaining(&valid_points_updated);
+            self.volume_history
+                .push((t - initial_t, self.params.volume_remaining));
         }
     }
 
-    /// Returns the current remaining volume.
     pub fn volume_remaining(&self) -> f64 {
         self.params.volume_remaining
     }
@@ -1031,14 +918,12 @@ impl BubbleFormationSimulator {
         }
 
         let mut bubbles_array = Array2::zeros((num_bubbles, 4));
-
         for (i, bubble) in self.bubbles.iter().enumerate() {
             bubbles_array[[i, 0]] = bubble.time;
             bubbles_array[[i, 1]] = bubble.center[0];
             bubbles_array[[i, 2]] = bubble.center[1];
             bubbles_array[[i, 3]] = bubble.center[2];
         }
-
         bubbles_array
     }
 

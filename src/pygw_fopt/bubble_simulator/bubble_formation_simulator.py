@@ -322,4 +322,8 @@ class ManualNucleation(NucleationStrategy):
         for nucleation_time, centers in self.schedule.items():
             if time_range[0] < nucleation_time <= time_range[1]:
                 new_centers.extend(centers)
+<<<<<<< HEAD
         return np.array(new_centers) if new_centers else np.array([])
+=======
+        return np.array(new_centers) if new_centers else np.array([])
+>>>>>>> bf636bcfa2d622a68bf1c1418b62abdd2d88243d
