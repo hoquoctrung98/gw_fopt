@@ -2,6 +2,7 @@
 src/bubble_gw/target
 notebooks
 **/*.vim
+.gitignore
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

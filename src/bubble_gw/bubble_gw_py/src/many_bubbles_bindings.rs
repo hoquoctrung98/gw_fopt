@@ -288,7 +288,7 @@ impl PyBubbleFormationSimulator {
         }
     }
 
-    fn get_valid_points(&mut self, t: Option<f64>, py: Python) -> PyResult<Py<PyArray2<f64>>> {
+    fn get_valid_points(&mut self, t: f64, py: Python) -> PyResult<Py<PyArray2<f64>>> {
         let points = match self.get_inner_mut() {
             BubbleFormationSimulatorWrapper::Poisson(sim) => sim.get_valid_points(t),
             BubbleFormationSimulatorWrapper::Manual(sim) => sim.get_valid_points(t),

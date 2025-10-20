@@ -3,7 +3,7 @@ let s:so_save = &g:so | let s:siso_save = &g:siso | setg so=0 siso=0 | setl so=-
 let v:this_session=expand("<sfile>:p")
 silent only
 silent tabonly
-cd ~/workspace/projects/SISSA_projects/code/pygw_fopt/bubble_gw
+cd ~/workspace/projects/SISSA_projects/code/pygw_fopt/src/bubble_gw
 if expand('%') == '' && !&modified && line('$') <= 1 && getline(1) == ''
   let s:wipebuf = bufnr('%')
 endif
