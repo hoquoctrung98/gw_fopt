@@ -1,6 +1,6 @@
 use bubble_gw_rs::many_bubbles::bubble_formation::{
     BubbleFormationSimulator, Lattice, LatticeType, ManualNucleation, PoissonNucleation,
-    SimulationEndStatus,
+    SimulationEndStatus, generate_bubbles_exterior,
 };
 use bubble_gw_rs::many_bubbles::bulk_flow::{BubbleIndex, BulkFlow, CollisionStatus, Segment};
 use ndarray::Array2;
@@ -11,7 +11,7 @@ use numpy::{
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::PyDict;
+use pyo3::types::{PyDict, PyList, PyTuple};
 
 #[pyclass(name = "Lattice")]
 pub struct PyLattice {
@@ -57,6 +57,54 @@ impl PyLattice {
     fn n(&self) -> usize {
         self.inner.n_grid
     }
+}
+
+// PyO3 binding for generate_bubbles_exterior function
+#[pyfunction]
+#[pyo3(name = "generate_bubbles_exterior")]
+pub fn py_generate_bubbles_exterior(
+    py: Python,
+    lattice_sizes: Bound<'_, PyAny>,
+    bubbles_interior: PyReadonlyArray2<f64>,
+) -> PyResult<Py<PyArray2<f64>>> {
+    // Convert lattice_sizes to [f64; 3]
+    let sizes: [f64; 3] = {
+        let vec: Vec<f64> = if let Ok(list) = lattice_sizes.downcast::<PyList>() {
+            list.iter()
+                .map(|item: Bound<PyAny>| item.extract::<f64>())
+                .collect::<PyResult<Vec<f64>>>()
+        } else if let Ok(tuple) = lattice_sizes.downcast::<PyTuple>() {
+            tuple
+                .iter()
+                .map(|item: Bound<PyAny>| item.extract::<f64>())
+                .collect::<PyResult<Vec<f64>>>()
+        } else {
+            return Err(PyValueError::new_err(
+                "lattice_sizes must be a list or tuple",
+            ));
+        }?;
+
+        if vec.len() != 3 {
+            return Err(PyValueError::new_err(
+                "lattice_sizes must contain exactly 3 elements",
+            ));
+        }
+        [vec[0], vec[1], vec[2]]
+    };
+
+    // Validate and convert bubbles_interior to Array2<f64>
+    let bubbles_array = bubbles_interior.to_owned_array();
+    if bubbles_array.shape()[1] != 4 {
+        return Err(PyValueError::new_err(
+            "bubbles_interior must have shape (N, 4)",
+        ));
+    }
+
+    // Call the Rust function
+    let result = generate_bubbles_exterior(sizes, bubbles_array);
+
+    // Convert the result to a NumPy array
+    Ok(PyArray2::from_array(py, &result).into())
 }
 
 #[pyclass(name = "PoissonNucleation")]
@@ -129,7 +177,7 @@ impl PyBubbleFormationSimulator {
 #[pymethods]
 impl PyBubbleFormationSimulator {
     #[new]
-    #[pyo3(signature = (lattice, vw = 0.5, nucleation_strategy = None, seed=None))]
+    #[pyo3(signature = (lattice, vw = 1.0, nucleation_strategy = None, seed=None))]
     fn new(
         lattice: &PyLattice,
         vw: f64,
@@ -272,10 +320,18 @@ impl PyBubbleFormationSimulator {
         }
     }
 
-    fn generate_exterior_bubbles(&self, py: Python) -> PyResult<Py<PyArray2<f64>>> {
+    fn get_bubbles_interior(&self, py: Python) -> PyResult<Py<PyArray2<f64>>> {
+        let bubbles_array = match self.get_inner() {
+            BubbleFormationSimulatorWrapper::Poisson(sim) => sim.get_bubbles_interior(),
+            BubbleFormationSimulatorWrapper::Manual(sim) => sim.get_bubbles_interior(),
+        };
+        Ok(PyArray2::from_array(py, &bubbles_array).into())
+    }
+
+    fn get_bubbles_exterior(&self, py: Python) -> PyResult<Py<PyArray2<f64>>> {
         let exterior_bubbles = match self.get_inner() {
-            BubbleFormationSimulatorWrapper::Poisson(sim) => sim.generate_exterior_bubbles(),
-            BubbleFormationSimulatorWrapper::Manual(sim) => sim.generate_exterior_bubbles(),
+            BubbleFormationSimulatorWrapper::Poisson(sim) => sim.get_bubbles_exterior(),
+            BubbleFormationSimulatorWrapper::Manual(sim) => sim.get_bubbles_exterior(),
         };
         Ok(PyArray2::from_array(py, &exterior_bubbles).into())
     }
@@ -294,14 +350,6 @@ impl PyBubbleFormationSimulator {
             BubbleFormationSimulatorWrapper::Manual(sim) => sim.get_valid_points(t),
         };
         Ok(PyArray2::from_array(py, &points).into())
-    }
-
-    fn get_bubbles(&self, py: Python) -> PyResult<Py<PyArray2<f64>>> {
-        let bubbles_array = match self.get_inner() {
-            BubbleFormationSimulatorWrapper::Poisson(sim) => sim.get_bubbles(),
-            BubbleFormationSimulatorWrapper::Manual(sim) => sim.get_bubbles(),
-        };
-        Ok(PyArray2::from_array(py, &bubbles_array).into())
     }
 
     fn get_volume_history(&self, py: Python) -> PyResult<Py<PyArray2<f64>>> {
@@ -361,14 +409,14 @@ pub struct PyBulkFlow {
 #[pymethods]
 impl PyBulkFlow {
     #[new]
-    #[pyo3(signature = (bubble_four_vectors_interior, bubble_four_vectors_exterior = None))]
+    #[pyo3(signature = (bubbles_interior, bubbles_exterior = None))]
     pub fn new(
-        bubble_four_vectors_interior: PyReadonlyArray2<f64>,
-        bubble_four_vectors_exterior: Option<PyReadonlyArray2<f64>>,
+        bubbles_interior: PyReadonlyArray2<f64>,
+        bubbles_exterior: Option<PyReadonlyArray2<f64>>,
     ) -> PyResult<Self> {
-        let interior_four_vectors = bubble_four_vectors_interior.to_owned_array();
+        let interior_four_vectors = bubbles_interior.to_owned_array();
         let exterior_four_vectors =
-            bubble_four_vectors_exterior.map_or(Array2::zeros((0, 4)), |arr| arr.to_owned_array());
+            bubbles_exterior.map_or(Array2::zeros((0, 4)), |arr| arr.to_owned_array());
         Ok(PyBulkFlow {
             inner: BulkFlow::new(interior_four_vectors, exterior_four_vectors),
         })
@@ -376,12 +424,12 @@ impl PyBulkFlow {
 
     #[getter]
     pub fn get_four_vectors_interior(&self, py: Python) -> PyResult<Py<PyArray2<f64>>> {
-        Ok(PyArray2::from_array(py, self.inner.bubble_four_vectors_interior()).into())
+        Ok(PyArray2::from_array(py, self.inner.bubbles_interior()).into())
     }
 
     #[getter]
     pub fn get_four_vectors_exterior(&self, py: Python) -> PyResult<Py<PyArray2<f64>>> {
-        Ok(PyArray2::from_array(py, self.inner.bubble_four_vectors_exterior()).into())
+        Ok(PyArray2::from_array(py, self.inner.bubbles_exterior()).into())
     }
 
     #[setter]
@@ -433,7 +481,7 @@ impl PyBulkFlow {
 
     #[getter]
     pub fn get_powers_sets(&self, py: Python) -> PyResult<Py<PyArray2<f64>>> {
-        Ok(PyArray2::from_array(py, self.inner.powers_sets()).into())
+        Ok(PyArray2::from_array(py, self.inner.get_powers_sets()).into())
     }
 
     #[setter]
@@ -445,7 +493,7 @@ impl PyBulkFlow {
 
     #[getter]
     pub fn get_active_sets(&self, py: Python) -> PyResult<Py<PyArray1<bool>>> {
-        Ok(PyArray1::from_array(py, self.inner.active_sets()).into())
+        Ok(PyArray1::from_array(py, self.inner.get_active_sets()).into())
     }
 
     #[setter]
@@ -476,7 +524,7 @@ impl PyBulkFlow {
         idx: usize,
         t: f64,
     ) -> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>)> {
-        let ta = self.inner.bubble_four_vectors_interior()[[0, 0]];
+        let ta = self.inner.bubbles_interior()[[0, 0]];
         let delta_ta = t - ta;
         let t_nc_grid = t_nc_grid.to_owned_array();
         let rust_segments: Vec<Segment> = segments
@@ -660,13 +708,11 @@ impl PyBulkFlow {
         &self,
         py: Python,
         w_arr: PyReadonlyArray1<f64>,
-        tmax: f64,
-        n_time_points: usize,
+        t_max: f64,
+        n_t: usize,
     ) -> PyResult<Py<PyArray4<NumpyComplex64>>> {
         let w_arr = w_arr.to_owned_array();
-        let integrand = self
-            .inner
-            .compute_c_integrand(w_arr.view(), tmax, n_time_points);
+        let integrand = self.inner.compute_c_integrand(w_arr.view(), t_max, n_t);
         let integrand_numpy = integrand.mapv(|c: RustComplex64| NumpyComplex64::new(c.re, c.im));
         Ok(PyArray4::from_array(py, &integrand_numpy).into())
     }
@@ -675,13 +721,11 @@ impl PyBulkFlow {
         &mut self,
         py: Python,
         w_arr: PyReadonlyArray1<f64>,
-        tmax: f64,
-        n_time_points: usize,
+        t_max: f64,
+        n_t: usize,
     ) -> PyResult<Py<PyArray3<NumpyComplex64>>> {
         let w_arr = w_arr.to_owned_array();
-        let c_matrix = self
-            .inner
-            .compute_c_matrix(w_arr.view(), tmax, n_time_points);
+        let c_matrix = self.inner.compute_c_matrix(w_arr.view(), t_max, n_t);
         let c_matrix_numpy = c_matrix.mapv(|c: RustComplex64| NumpyComplex64::new(c.re, c.im));
         Ok(PyArray3::from_array(py, &c_matrix_numpy).into())
     }

@@ -16,10 +16,9 @@ crate-type = ["cdylib", "lib"]
 bubble_gw_rs = { path = "../bubble_gw_rs" }
 pyo3 = { version = "0.26", features = ["extension-module", "num-complex"] }
 numpy = "0.26.0"
-ndarray = "0.16"
-num-complex = "0.4"
+ndarray = {version = "0.16.1", features = ["rayon"]}
+num-complex = "0.4.6"
 num = "0.4.3"
-bitvec = "1.0.1"
 
 [build-dependencies]
 pyo3-build-config = "0.26"

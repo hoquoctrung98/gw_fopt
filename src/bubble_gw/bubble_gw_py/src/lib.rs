@@ -15,6 +15,10 @@ fn bubble_gw(py: Python, parent_module: &Bound<'_, PyModule>) -> PyResult<()> {
     many_bubbles_module.add_class::<many_bubbles_bindings::PyPoissonNucleation>()?;
     many_bubbles_module.add_class::<many_bubbles_bindings::PyManualNucleation>()?;
     many_bubbles_module.add_class::<many_bubbles_bindings::PyBubbleFormationSimulator>()?;
+    many_bubbles_module.add_function(wrap_pyfunction!(
+        many_bubbles_bindings::py_generate_bubbles_exterior,
+        parent_module
+    )?)?;
 
     let utils_module = PyModule::new(parent_module.py(), "utils")?;
     utils_module.add_function(wrap_pyfunction!(utils_bindings::sample, parent_module)?)?;
