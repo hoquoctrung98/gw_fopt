@@ -27,8 +27,8 @@ impl PyLattice {
         Ok(PyLattice { inner })
     }
 
-    fn get_volume(&self) -> f64 {
-        self.inner.get_volume()
+    fn volume(&self) -> f64 {
+        self.inner.volume()
     }
 
     fn generate_grid(&self, py: Python) -> PyResult<Py<PyArray2<f64>>> {
@@ -36,8 +36,8 @@ impl PyLattice {
         Ok(PyArray2::from_array(py, &grid).into())
     }
 
-    fn get_lattice_bounds(&self) -> Vec<(f64, f64)> {
-        self.inner.get_lattice_bounds()
+    fn lattice_bounds(&self) -> Vec<(f64, f64)> {
+        self.inner.lattice_bounds()
     }
 
     #[getter]
@@ -305,33 +305,33 @@ impl PyBubbleFormationSimulator {
         }
     }
 
-    fn get_boundary_intersecting_bubbles(&self, t: f64) -> Vec<([f64; 3], f64)> {
+    fn boundary_intersecting_bubbles(&self, t: f64) -> Vec<([f64; 3], f64)> {
         match self.get_inner() {
             BubbleFormationSimulatorWrapper::Poisson(sim) => sim
-                .get_boundary_intersecting_bubbles(t)
+                .boundary_intersecting_bubbles(t)
                 .into_iter()
-                .map(|(idx, t)| (sim.get_center(idx), t))
+                .map(|(idx, t)| (sim.centers(idx), t))
                 .collect(),
             BubbleFormationSimulatorWrapper::Manual(sim) => sim
-                .get_boundary_intersecting_bubbles(t)
+                .boundary_intersecting_bubbles(t)
                 .into_iter()
-                .map(|(idx, t)| (sim.get_center(idx), t))
+                .map(|(idx, t)| (sim.centers(idx), t))
                 .collect(),
         }
     }
 
-    fn get_bubbles_interior(&self, py: Python) -> PyResult<Py<PyArray2<f64>>> {
+    fn bubbles_interior(&self, py: Python) -> PyResult<Py<PyArray2<f64>>> {
         let bubbles_array = match self.get_inner() {
-            BubbleFormationSimulatorWrapper::Poisson(sim) => sim.get_bubbles_interior(),
-            BubbleFormationSimulatorWrapper::Manual(sim) => sim.get_bubbles_interior(),
+            BubbleFormationSimulatorWrapper::Poisson(sim) => sim.bubbles_interior(),
+            BubbleFormationSimulatorWrapper::Manual(sim) => sim.bubbles_interior(),
         };
         Ok(PyArray2::from_array(py, &bubbles_array).into())
     }
 
-    fn get_bubbles_exterior(&self, py: Python) -> PyResult<Py<PyArray2<f64>>> {
+    fn bubbles_exterior(&self, py: Python) -> PyResult<Py<PyArray2<f64>>> {
         let exterior_bubbles = match self.get_inner() {
-            BubbleFormationSimulatorWrapper::Poisson(sim) => sim.get_bubbles_exterior(),
-            BubbleFormationSimulatorWrapper::Manual(sim) => sim.get_bubbles_exterior(),
+            BubbleFormationSimulatorWrapper::Poisson(sim) => sim.bubbles_exterior(),
+            BubbleFormationSimulatorWrapper::Manual(sim) => sim.bubbles_exterior(),
         };
         Ok(PyArray2::from_array(py, &exterior_bubbles).into())
     }
@@ -481,7 +481,7 @@ impl PyBulkFlow {
 
     #[getter]
     pub fn get_powers_sets(&self, py: Python) -> PyResult<Py<PyArray2<f64>>> {
-        Ok(PyArray2::from_array(py, self.inner.get_powers_sets()).into())
+        Ok(PyArray2::from_array(py, self.inner.powers_sets()).into())
     }
 
     #[setter]
@@ -493,7 +493,7 @@ impl PyBulkFlow {
 
     #[getter]
     pub fn get_active_sets(&self, py: Python) -> PyResult<Py<PyArray1<bool>>> {
-        Ok(PyArray1::from_array(py, self.inner.get_active_sets()).into())
+        Ok(PyArray1::from_array(py, self.inner.active_sets()).into())
     }
 
     #[setter]
@@ -730,9 +730,15 @@ impl PyBulkFlow {
         Ok(PyArray3::from_array(py, &c_matrix_numpy).into())
     }
 
-    #[pyo3(signature = (n_cos_thetax, n_phix))]
-    pub fn set_resolution(&mut self, n_cos_thetax: usize, n_phix: usize) -> PyResult<()> {
-        self.inner.set_resolution(n_cos_thetax, n_phix);
+    #[pyo3(signature = (n_cos_thetax, n_phix, precompute_first_bubbles = true))]
+    pub fn set_resolution(
+        &mut self,
+        n_cos_thetax: usize,
+        n_phix: usize,
+        precompute_first_bubbles: bool,
+    ) -> PyResult<()> {
+        self.inner
+            .set_resolution(n_cos_thetax, n_phix, precompute_first_bubbles);
         Ok(())
     }
 }

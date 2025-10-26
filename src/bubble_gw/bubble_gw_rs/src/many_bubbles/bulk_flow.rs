@@ -13,7 +13,7 @@ pub enum BubbleIndex {
 
 /// Stores precomputed data to optimize collision and boundary calculations.
 /// Contains 4-vector differences (`delta`), their squared Minkowski norms (`delta_squared`),
-/// and an optional cache of first colliding bubble data (`first_colliding_bubble`).
+/// and an optional cache of first colliding bubble data (`first_colliding_bubbles`).
 pub struct CachedData {
     delta: Array3<f64>,
     delta_squared: Array2<f64>,
@@ -109,8 +109,8 @@ impl BulkFlow {
             .unwrap();
 
         BulkFlow {
-            bubbles_interior: bubbles_interior,
-            bubbles_exterior: bubbles_exterior,
+            bubbles_interior,
+            bubbles_exterior,
             cached_data,
             coefficients_sets: Array2::from_elem((1, 1), 1.0),
             powers_sets: Array2::from_elem((1, 1), 3.0),
@@ -125,9 +125,15 @@ impl BulkFlow {
         }
     }
 
-    /// Sets the angular resolutions and updates the associated grids (`cos_thetax`, `phix`, `direction_vectors`)
-    /// and computes the `first_colliding_bubble` cache. Panics if resolutions are zero.
-    pub fn set_resolution(&mut self, n_cos_thetax: usize, n_phix: usize) {
+    /// Sets the angular resolutions and updates the associated grids (`cos_thetax`, `phix`, `direction_vectors`).
+    /// Optionally precomputes the `first_colliding_bubbles` cache if `precompute_first_bubbles` is true.
+    /// Panics if resolutions are zero.
+    pub fn set_resolution(
+        &mut self,
+        n_cos_thetax: usize,
+        n_phix: usize,
+        precompute_first_bubbles: bool,
+    ) {
         if n_cos_thetax == 0 || n_phix == 0 {
             panic!("Angular resolutions must be greater than zero");
         }
@@ -150,23 +156,27 @@ impl BulkFlow {
         });
         self.direction_vectors = Some(direction_vectors);
 
-        // Compute and cache first_colliding_bubble
-        let n_interior = self.bubbles_interior.shape()[0];
-        let first_bubble_arrays: Vec<Array2<BubbleIndex>> = self.thread_pool.install(|| {
-            (0..n_interior)
-                .into_par_iter()
-                .map(|a_idx| self.compute_first_colliding_bubble(a_idx))
-                .collect()
-        });
-        let first_bubble_cache = stack(
-            Axis(0),
-            &first_bubble_arrays
-                .iter()
-                .map(|arr| arr.view())
-                .collect::<Vec<_>>(),
-        )
-        .unwrap();
-        self.cached_data.first_colliding_bubbles = Some(first_bubble_cache);
+        if precompute_first_bubbles {
+            // Compute and cache first_colliding_bubble
+            let n_interior = self.bubbles_interior.shape()[0];
+            let first_bubble_arrays: Vec<Array2<BubbleIndex>> = self.thread_pool.install(|| {
+                (0..n_interior)
+                    .into_par_iter()
+                    .map(|a_idx| self.compute_first_colliding_bubble(a_idx))
+                    .collect()
+            });
+            let first_bubble_cache = stack(
+                Axis(0),
+                &first_bubble_arrays
+                    .iter()
+                    .map(|arr| arr.view())
+                    .collect::<Vec<_>>(),
+            )
+            .unwrap();
+            self.cached_data.first_colliding_bubbles = Some(first_bubble_cache);
+        } else {
+            self.cached_data.first_colliding_bubbles = None;
+        }
     }
 
     /// Sets the active bubble sets array.
@@ -287,7 +297,7 @@ impl BulkFlow {
     }
 
     /// Returns a reference to the power sets array.
-    pub fn get_powers_sets(&self) -> &Array2<f64> {
+    pub fn powers_sets(&self) -> &Array2<f64> {
         &self.powers_sets
     }
 
@@ -297,7 +307,7 @@ impl BulkFlow {
     }
 
     /// Returns a reference to the array indicating active bubble sets.
-    pub fn get_active_sets(&self) -> &Array1<bool> {
+    pub fn active_sets(&self) -> &Array1<bool> {
         &self.active_bubbles
     }
 
@@ -372,8 +382,9 @@ impl BulkFlow {
         let mut b_minus_arr = Array1::zeros(n_sets);
         let dphi_grid = 2.0 * std::f64::consts::PI / self.n_phix.unwrap() as f64;
         let phi_to_idx = self.n_phix.unwrap() as f64 / (2.0 * std::f64::consts::PI);
-        let tolerance = 1e-6;
+        let tolerance = 1e-10;
 
+        // Only consider bubbles nucleated before given time
         let delta_ta_cubed = if delta_ta > 0.0 {
             delta_ta.powi(3)
         } else {
@@ -381,12 +392,13 @@ impl BulkFlow {
         };
 
         for seg in segments.iter() {
+            // Find the segment correspond to input cos_thetax
             if (seg.cos_thetax - cos_thetax).abs() >= tolerance {
                 continue;
             }
             let phi_left = seg.phi_lower;
             let phi_right = seg.phi_upper;
-            // integrate over zero-width range
+            // ignore integrating over zero-width range
             if (phi_right - phi_left).abs() < 1e-10 {
                 continue;
             }
@@ -731,92 +743,165 @@ impl BulkFlow {
         let t_arr = Array1::linspace(0.0, t_max, n_t);
         let dt = t_max / (n_t - 1) as f64;
 
-        let first_colliding_bubbles = self
-            .cached_data
-            .first_colliding_bubbles
-            .as_ref()
-            .expect("Resolution must be set before computing C-integrand");
-
-        // Precompute delta_tab_grid for each a_idx in parallel
-        let delta_tab_grids: Vec<Array2<f64>> = self.thread_pool.install(|| {
-            (0..n_interior)
-                .into_par_iter()
-                .map(|a_idx| {
-                    let first_bubble = first_colliding_bubbles.slice(s![a_idx, .., ..]);
-                    self.compute_delta_tab(a_idx, first_bubble)
-                })
-                .collect()
-        });
+        // Initialize the output array with shape (2, n_sets, n_w, n_t)
+        let mut integrand = Array4::zeros((2, n_sets, n_w, n_t));
 
         // Precompute z_a for each a_idx
         let z_a_vec: Vec<f64> = (0..n_interior)
             .map(|a_idx| self.bubbles_interior[[a_idx, 3]])
             .collect();
 
-        // Initialize the output array with shape (2, n_sets, n_w, n_t)
-        let mut integrand = Array4::zeros((2, n_sets, n_w, n_t));
+        // Check if first_colliding_bubbles is precomputed
+        let first_colliding_bubbles = self.cached_data.first_colliding_bubbles.as_ref();
 
-        // Compute integrand slices in parallel
-        let results: Vec<(usize, Array2<Complex64>, Array2<Complex64>)> =
-            self.thread_pool.install(|| {
-                t_arr
-                    .iter()
-                    .enumerate()
-                    .par_bridge()
-                    .map(|(t_idx, &t)| {
-                        let mut integrand_dt_plus: Array2<Complex64> = Array2::zeros((n_sets, n_w));
-                        let mut integrand_dt_minus: Array2<Complex64> =
-                            Array2::zeros((n_sets, n_w));
-
-                        // Sum over interior bubbles only
-                        for a_idx in 0..n_interior {
-                            // Skip bubbles that nucleate after time t
-                            let t_nucleation = self.bubbles_interior[[a_idx, 0]];
-                            if t_nucleation >= t {
-                                continue;
-                            }
-
-                            let first_bubble = first_colliding_bubbles.slice(s![a_idx, .., ..]);
-                            let delta_tab = delta_tab_grids[a_idx].view();
-                            let z_a = z_a_vec[a_idx];
-                            let (a_plus, a_minus) =
-                                self.compute_a_matrix(a_idx, w_arr, t, first_bubble, delta_tab);
-                            for s in 0..n_sets {
-                                for w_idx in 0..n_w {
-                                    let w = w_arr[w_idx];
-                                    let complex_phase = Complex64::new(0.0, w * (t - z_a)).exp();
-                                    let weight = if t_idx == 0 || t_idx == n_t - 1 {
-                                        0.5
-                                    } else {
-                                        1.0
-                                    };
-                                    integrand_dt_plus[[s, w_idx]] +=
-                                        a_plus[[s, w_idx]] * complex_phase * weight;
-                                    integrand_dt_minus[[s, w_idx]] +=
-                                        a_minus[[s, w_idx]] * complex_phase * weight;
-                                }
-                            }
-                        }
-
-                        // Scale by dt
-                        let dt_complex = Complex64::new(dt, 0.0);
-                        integrand_dt_plus *= dt_complex;
-                        integrand_dt_minus *= dt_complex;
-
-                        (t_idx, integrand_dt_plus, integrand_dt_minus)
+        if let Some(first_bubble_cache) = first_colliding_bubbles {
+            // Original approach: use precomputed first_colliding_bubbles
+            // Precompute delta_tab_grid for each a_idx in parallel
+            let delta_tab_grids: Vec<Array2<f64>> = self.thread_pool.install(|| {
+                (0..n_interior)
+                    .into_par_iter()
+                    .map(|a_idx| {
+                        let first_bubble = first_bubble_cache.slice(s![a_idx, .., ..]);
+                        self.compute_delta_tab(a_idx, first_bubble)
                     })
                     .collect()
             });
 
-        // Assign results to integrand array
-        for (t_idx, integrand_dt_plus, integrand_dt_minus) in results {
-            for s in 0..n_sets {
-                for w_idx in 0..n_w {
-                    integrand[[0, s, w_idx, t_idx]] = integrand_dt_plus[[s, w_idx]];
-                    integrand[[1, s, w_idx, t_idx]] = integrand_dt_minus[[s, w_idx]];
+            // Compute integrand slices in parallel
+            let results: Vec<(usize, Array2<Complex64>, Array2<Complex64>)> =
+                self.thread_pool.install(|| {
+                    t_arr
+                        .iter()
+                        .enumerate()
+                        .par_bridge()
+                        .map(|(t_idx, &t)| {
+                            let mut integrand_dt_plus: Array2<Complex64> =
+                                Array2::zeros((n_sets, n_w));
+                            let mut integrand_dt_minus: Array2<Complex64> =
+                                Array2::zeros((n_sets, n_w));
+
+                            // Sum over interior bubbles only
+                            for a_idx in 0..n_interior {
+                                // Skip bubbles that nucleate after time t
+                                let t_nucleation = self.bubbles_interior[[a_idx, 0]];
+                                if t_nucleation >= t {
+                                    continue;
+                                }
+
+                                let first_bubble = first_bubble_cache.slice(s![a_idx, .., ..]);
+                                let delta_tab = delta_tab_grids[a_idx].view();
+                                let z_a = z_a_vec[a_idx];
+                                let (a_plus, a_minus) =
+                                    self.compute_a_matrix(a_idx, w_arr, t, first_bubble, delta_tab);
+                                for s in 0..n_sets {
+                                    for w_idx in 0..n_w {
+                                        let w = w_arr[w_idx];
+                                        let complex_phase =
+                                            Complex64::new(0.0, w * (t - z_a)).exp();
+                                        let weight = if t_idx == 0 || t_idx == n_t - 1 {
+                                            0.5
+                                        } else {
+                                            1.0
+                                        };
+                                        integrand_dt_plus[[s, w_idx]] +=
+                                            a_plus[[s, w_idx]] * complex_phase * weight;
+                                        integrand_dt_minus[[s, w_idx]] +=
+                                            a_minus[[s, w_idx]] * complex_phase * weight;
+                                    }
+                                }
+                            }
+
+                            // Scale by dt
+                            let dt_complex = Complex64::new(dt, 0.0);
+                            integrand_dt_plus *= dt_complex;
+                            integrand_dt_minus *= dt_complex;
+
+                            (t_idx, integrand_dt_plus, integrand_dt_minus)
+                        })
+                        .collect()
+                });
+
+            // Assign results to integrand array
+            for (t_idx, integrand_dt_plus, integrand_dt_minus) in results {
+                for s in 0..n_sets {
+                    for w_idx in 0..n_w {
+                        integrand[[0, s, w_idx, t_idx]] = integrand_dt_plus[[s, w_idx]];
+                        integrand[[1, s, w_idx, t_idx]] = integrand_dt_minus[[s, w_idx]];
+                    }
+                }
+            }
+        } else {
+            // On-the-fly approach: compute first_bubble for each a_idx
+            let results: Vec<(usize, Array2<Complex64>, Array2<Complex64>)> =
+                self.thread_pool.install(|| {
+                    t_arr
+                        .iter()
+                        .enumerate()
+                        .par_bridge()
+                        .map(|(t_idx, &t)| {
+                            let mut integrand_dt_plus: Array2<Complex64> =
+                                Array2::zeros((n_sets, n_w));
+                            let mut integrand_dt_minus: Array2<Complex64> =
+                                Array2::zeros((n_sets, n_w));
+
+                            // Sum over interior bubbles only
+                            for a_idx in 0..n_interior {
+                                // Skip bubbles that nucleate after time t
+                                let t_nucleation = self.bubbles_interior[[a_idx, 0]];
+                                if t_nucleation >= t {
+                                    continue;
+                                }
+
+                                // Compute first_bubble on-the-fly
+                                let first_bubble = self.compute_first_colliding_bubble(a_idx);
+                                let delta_tab = self.compute_delta_tab(a_idx, first_bubble.view());
+                                let z_a = z_a_vec[a_idx];
+                                let (a_plus, a_minus) = self.compute_a_matrix(
+                                    a_idx,
+                                    w_arr,
+                                    t,
+                                    first_bubble.view(),
+                                    delta_tab.view(),
+                                );
+                                for s in 0..n_sets {
+                                    for w_idx in 0..n_w {
+                                        let w = w_arr[w_idx];
+                                        let complex_phase =
+                                            Complex64::new(0.0, w * (t - z_a)).exp();
+                                        let weight = if t_idx == 0 || t_idx == n_t - 1 {
+                                            0.5
+                                        } else {
+                                            1.0
+                                        };
+                                        integrand_dt_plus[[s, w_idx]] +=
+                                            a_plus[[s, w_idx]] * complex_phase * weight;
+                                        integrand_dt_minus[[s, w_idx]] +=
+                                            a_minus[[s, w_idx]] * complex_phase * weight;
+                                    }
+                                }
+                            }
+
+                            // Scale by dt
+                            let dt_complex = Complex64::new(dt, 0.0);
+                            integrand_dt_plus *= dt_complex;
+                            integrand_dt_minus *= dt_complex;
+
+                            (t_idx, integrand_dt_plus, integrand_dt_minus)
+                        })
+                        .collect()
+                });
+
+            // Assign results to integrand array
+            for (t_idx, integrand_dt_plus, integrand_dt_minus) in results {
+                for s in 0..n_sets {
+                    for w_idx in 0..n_w {
+                        integrand[[0, s, w_idx, t_idx]] = integrand_dt_plus[[s, w_idx]];
+                        integrand[[1, s, w_idx, t_idx]] = integrand_dt_minus[[s, w_idx]];
+                    }
                 }
             }
         }
+
         let factor = Complex64::new(1.0 / (6.0 * std::f64::consts::PI), 0.0);
         integrand *= factor;
 
@@ -830,107 +915,163 @@ impl BulkFlow {
         &mut self,
         w_arr: ArrayView1<f64>,
         t_max: f64,
-        n_time_points: usize,
+        n_t: usize,
     ) -> Array3<Complex64> {
         let n_interior = self.bubbles_interior.shape()[0];
         let n_sets = self.coefficients_sets.shape()[0];
         let n_w = w_arr.len();
-        let t_arr = Array1::linspace(0.0, t_max, n_time_points);
-        let dt = t_max / (n_time_points - 1) as f64;
-
-        let first_bubble_cache = self
-            .cached_data
-            .first_colliding_bubbles
-            .as_ref()
-            .expect("Resolution must be set before computing C-matrix");
-
-        // Precompute delta_tab_grid for each a_idx in parallel
-        let delta_tab_grid: Vec<Array2<f64>> = self.thread_pool.install(|| {
-            (0..n_interior)
-                .into_par_iter()
-                .map(|a_idx| {
-                    let first_bubble = first_bubble_cache.slice(s![a_idx, .., ..]);
-                    self.compute_delta_tab(a_idx, first_bubble)
-                })
-                .collect()
-        });
+        let t_arr = Array1::linspace(0.0, t_max, n_t);
+        let dt = t_max / (n_t - 1) as f64;
 
         // Precompute z_a for each a_idx
         let z_a_vec: Vec<f64> = (0..n_interior)
             .map(|a_idx| self.bubbles_interior[[a_idx, 3]])
             .collect();
 
-        let (c_plus, c_minus) = self.thread_pool.install(|| {
-            t_arr
-                .iter()
-                .enumerate()
-                .par_bridge()
-                .fold(
-                    || (Array2::zeros((n_sets, n_w)), Array2::zeros((n_sets, n_w))),
-                    |(mut integral_plus, mut integral_minus), (t_idx, &t)| {
-                        let mut integrand_dt_plus = Array2::zeros((n_sets, n_w));
-                        let mut integrand_dt_minus = Array2::zeros((n_sets, n_w));
-                        // Sum over interior bubbles only
-                        for a_idx in 0..n_interior {
-                            // Skip bubbles that nucleate after time t
-                            let t_nucleation = self.bubbles_interior[[a_idx, 0]];
-                            if t_nucleation >= t {
-                                continue;
-                            }
+        let first_colliding_bubbles = self.cached_data.first_colliding_bubbles.as_ref();
 
-                            let first_bubble = first_bubble_cache.slice(s![a_idx, .., ..]);
-                            let delta_tab = delta_tab_grid[a_idx].view();
-                            let z_a = z_a_vec[a_idx];
-                            let (a_plus, a_minus) =
-                                self.compute_a_matrix(a_idx, w_arr, t, first_bubble, delta_tab);
-                            for s in 0..n_sets {
-                                for w_idx in 0..n_w {
-                                    let w = w_arr[w_idx];
-                                    let complex_phase = Complex64::new(0.0, w * (t - z_a)).exp();
-                                    let weight = if t_idx == 0 || t_idx == n_time_points - 1 {
-                                        0.5
-                                    } else {
-                                        1.0
-                                    };
-                                    integrand_dt_plus[[s, w_idx]] +=
-                                        a_plus[[s, w_idx]] * complex_phase * weight;
-                                    integrand_dt_minus[[s, w_idx]] +=
-                                        a_minus[[s, w_idx]] * complex_phase * weight;
+        if let Some(first_colliding_bubbles) = first_colliding_bubbles {
+            // Original approach: use precomputed first_colliding_bubbles
+            // Precompute delta_tab_grid for each a_idx in parallel
+            let delta_tab_grid: Vec<Array2<f64>> = self.thread_pool.install(|| {
+                (0..n_interior)
+                    .into_par_iter()
+                    .map(|a_idx| {
+                        self.compute_delta_tab(
+                            a_idx,
+                            first_colliding_bubbles.slice(s![a_idx, .., ..]),
+                        )
+                    })
+                    .collect()
+            });
+
+            let (c_plus, c_minus) = self.thread_pool.install(|| {
+                t_arr
+                    .iter()
+                    .enumerate()
+                    .par_bridge()
+                    .fold(
+                        || (Array2::zeros((n_sets, n_w)), Array2::zeros((n_sets, n_w))),
+                        |(mut integral_plus, mut integral_minus), (t_idx, &t)| {
+                            let mut integrand_dt_plus = Array2::zeros((n_sets, n_w));
+                            let mut integrand_dt_minus = Array2::zeros((n_sets, n_w));
+                            // Sum over interior bubbles only
+                            for a_idx in 0..n_interior {
+                                // Skip bubbles that nucleate after time t
+                                let t_nucleation = self.bubbles_interior[[a_idx, 0]];
+                                if t_nucleation >= t {
+                                    continue;
+                                }
+
+                                let z_a = z_a_vec[a_idx];
+                                let (a_plus, a_minus) = self.compute_a_matrix(
+                                    a_idx,
+                                    w_arr,
+                                    t,
+                                    first_colliding_bubbles.slice(s![a_idx, .., ..]),
+                                    delta_tab_grid[a_idx].view(),
+                                );
+                                for s in 0..n_sets {
+                                    for w_idx in 0..n_w {
+                                        let w = w_arr[w_idx];
+                                        let complex_phase =
+                                            Complex64::new(0.0, w * (t - z_a)).exp();
+                                        let weight = if t_idx == 0 || t_idx == n_t - 1 {
+                                            0.5
+                                        } else {
+                                            1.0
+                                        };
+                                        integrand_dt_plus[[s, w_idx]] +=
+                                            a_plus[[s, w_idx]] * complex_phase * weight;
+                                        integrand_dt_minus[[s, w_idx]] +=
+                                            a_minus[[s, w_idx]] * complex_phase * weight;
+                                    }
                                 }
                             }
-                        }
-                        let dt_complex = Complex64::new(dt, 0.0);
-                        integrand_dt_plus *= dt_complex;
-                        integrand_dt_minus *= dt_complex;
-                        for s in 0..n_sets {
-                            for w_idx in 0..n_w {
-                                integral_plus[[s, w_idx]] += integrand_dt_plus[[s, w_idx]];
-                                integral_minus[[s, w_idx]] += integrand_dt_minus[[s, w_idx]];
+                            let dt_complex = Complex64::new(dt, 0.0);
+                            integrand_dt_plus *= dt_complex;
+                            integrand_dt_minus *= dt_complex;
+                            for s in 0..n_sets {
+                                for w_idx in 0..n_w {
+                                    integral_plus[[s, w_idx]] += integrand_dt_plus[[s, w_idx]];
+                                    integral_minus[[s, w_idx]] += integrand_dt_minus[[s, w_idx]];
+                                }
                             }
-                        }
-                        (integral_plus, integral_minus)
-                    },
-                )
-                .reduce(
-                    || (Array2::zeros((n_sets, n_w)), Array2::zeros((n_sets, n_w))),
-                    |(plus1, minus1), (plus2, minus2)| (plus1 + plus2, minus1 + minus2),
-                )
-        });
+                            (integral_plus, integral_minus)
+                        },
+                    )
+                    .reduce(
+                        || (Array2::zeros((n_sets, n_w)), Array2::zeros((n_sets, n_w))),
+                        |(plus1, minus1), (plus2, minus2)| (plus1 + plus2, minus1 + minus2),
+                    )
+            });
+            let factor = Complex64::new(1.0 / (6.0 * std::f64::consts::PI), 0.0);
+            let c_plus = c_plus * factor;
+            let c_minus = c_minus * factor;
 
-        let factor = Complex64::new(1.0 / (6.0 * std::f64::consts::PI), 0.0);
-        let c_plus = c_plus * factor;
-        let c_minus = c_minus * factor;
+            stack(Axis(0), &[c_plus.view(), c_minus.view()]).unwrap()
+        } else {
+            // On-the-fly approach: compute first_colliding_bubbles_a for each a_idx
+            let (c_plus, c_minus) = self.thread_pool.install(|| {
+                (0..n_interior)
+                    .into_par_iter()
+                    .fold(
+                        || (Array2::zeros((n_sets, n_w)), Array2::zeros((n_sets, n_w))),
+                        |(mut integral_plus, mut integral_minus), a_idx| {
+                            // Compute first_colliding_bubbles_a and delta_tab once per a_idx
+                            let first_colliding_bubbles_a =
+                                self.compute_first_colliding_bubble(a_idx);
+                            let delta_tab =
+                                self.compute_delta_tab(a_idx, first_colliding_bubbles_a.view());
 
-        stack(Axis(0), &[c_plus.view(), c_minus.view()]).unwrap()
-    }
+                            // Iterate over time points
+                            for (t_idx, &t) in t_arr.iter().enumerate() {
+                                // Skip bubbles that nucleate after time t
+                                let t_nucleation = self.bubbles_interior[[a_idx, 0]];
+                                if t_nucleation >= t {
+                                    continue;
+                                }
 
-    /// Returns all interior bubbles in the simulation.
-    ///
-    /// # Returns
-    ///
-    /// An `Array2<f64>` with shape `(N, 4)`, where each row is `[time, x, y, z]`.
-    pub fn get_bubbles_interior(&self) -> &Array2<f64> {
-        return &self.bubbles_interior;
+                                let z_a = z_a_vec[a_idx];
+                                let (a_plus, a_minus) = self.compute_a_matrix(
+                                    a_idx,
+                                    w_arr,
+                                    t,
+                                    first_colliding_bubbles_a.view(),
+                                    delta_tab.view(),
+                                );
+                                for s in 0..n_sets {
+                                    for w_idx in 0..n_w {
+                                        let w = w_arr[w_idx];
+                                        let complex_phase =
+                                            Complex64::new(0.0, w * (t - z_a)).exp();
+                                        let weight = if t_idx == 0 || t_idx == n_t - 1 {
+                                            0.5
+                                        } else {
+                                            1.0
+                                        };
+                                        integral_plus[[s, w_idx]] +=
+                                            a_plus[[s, w_idx]] * complex_phase * weight * dt;
+                                        integral_minus[[s, w_idx]] +=
+                                            a_minus[[s, w_idx]] * complex_phase * weight * dt;
+                                    }
+                                }
+                            }
+                            (integral_plus, integral_minus)
+                        },
+                    )
+                    .reduce(
+                        || (Array2::zeros((n_sets, n_w)), Array2::zeros((n_sets, n_w))),
+                        |(plus1, minus1), (plus2, minus2)| (plus1 + plus2, minus1 + minus2),
+                    )
+            });
+
+            let factor = Complex64::new(1.0 / (6.0 * std::f64::consts::PI), 0.0);
+            let c_plus = c_plus * factor;
+            let c_minus = c_minus * factor;
+
+            stack(Axis(0), &[c_plus.view(), c_minus.view()]).unwrap()
+        }
     }
 }
 

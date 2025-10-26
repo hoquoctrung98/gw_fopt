@@ -1,4 +1,4 @@
-use bubble_gw_rs::utils::{SampleParams, SampleType};
+use bubble_gw_rs::utils::sample::{SampleParams, SampleType};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*; // Import from utils.rs
 
@@ -50,7 +50,7 @@ pub fn sample(
             return Err(PyValueError::new_err(format!(
                 "Invalid sample_type: {}",
                 sample_type
-            )))
+            )));
         }
     };
 
@@ -111,7 +111,7 @@ pub fn sample_arr(
             return Err(PyValueError::new_err(format!(
                 "Invalid sample_type: {}",
                 sample_type
-            )))
+            )));
         }
     };
 

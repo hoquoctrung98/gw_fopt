@@ -131,7 +131,7 @@ impl Lattice {
     ///
     /// * For Cartesian: \( lx \times ly \times lz \).
     /// * For Sphere: \( \frac{4}{3} \pi r^3 \).
-    pub fn get_volume(&self) -> f64 {
+    pub fn volume(&self) -> f64 {
         match self.lattice_type {
             LatticeType::Cartesian => self.sizes[0] * self.sizes[1] * self.sizes[2],
             LatticeType::Sphere => (4.0 / 3.0) * std::f64::consts::PI * self.sizes[0].powi(3),
@@ -194,7 +194,7 @@ impl Lattice {
     /// A vector of tuples `(min, max)` for each dimension:
     /// * For Cartesian: `[(0, lx), (0, ly), (0, lz)]`.
     /// * For Sphere: `[(-r, r), (-r, r), (-r, r)]`.
-    pub fn get_lattice_bounds(&self) -> Vec<(f64, f64)> {
+    pub fn lattice_bounds(&self) -> Vec<(f64, f64)> {
         match self.lattice_type {
             LatticeType::Cartesian => vec![
                 (0.0, self.sizes[0]),
@@ -524,7 +524,7 @@ impl NucleationStrategy for ManualNucleation {
     }
 
     fn validate_schedule(&self, lattice: &Lattice, vw: f64) -> Result<(), String> {
-        let bounds = lattice.get_lattice_bounds();
+        let bounds = lattice.lattice_bounds();
         for (t, centers) in &self.schedule {
             for center in centers {
                 for (i, &(min_bound, max_bound)) in bounds.iter().enumerate() {
@@ -606,7 +606,7 @@ impl<S: NucleationStrategy> BubbleFormationSimulator<S> {
             return Err("Wall velocity must be in (0, 1]".to_string());
         }
         let grid = lattice.generate_grid();
-        let volume_total = lattice.get_volume();
+        let volume_total = lattice.volume();
         let outside_points = (0..grid.nrows()).collect::<Vec<usize>>();
         let rng = match seed {
             Some(seed_value) => StdRng::seed_from_u64(seed_value),
@@ -926,7 +926,7 @@ impl<S: NucleationStrategy> BubbleFormationSimulator<S> {
     /// # Returns
     ///
     /// A vector of tuples `(index, nucleation_time)` for bubbles intersecting the boundaries.
-    pub fn get_boundary_intersecting_bubbles(&self, t: f64) -> Vec<(usize, f64)> {
+    pub fn boundary_intersecting_bubbles(&self, t: f64) -> Vec<(usize, f64)> {
         let mut boundary_bubbles = Vec::new();
         for (i, bubble) in self.bubbles_interior.iter().enumerate() {
             let tn = bubble.time;
@@ -971,11 +971,11 @@ impl<S: NucleationStrategy> BubbleFormationSimulator<S> {
     ///
     /// An `Array2<f64>` with shape `(N, 4)`, where each row is `[time, x, y, z]` for exterior bubbles.
     /// Returns an empty array for non-Cartesian lattices.
-    pub fn get_bubbles_exterior(&self) -> Array2<f64> {
+    pub fn bubbles_exterior(&self) -> Array2<f64> {
         if self.lattice.lattice_type != LatticeType::Cartesian {
             return Array2::zeros((0, 4));
         }
-        generate_bubbles_exterior(self.lattice.sizes, self.get_bubbles_interior())
+        generate_bubbles_exterior(self.lattice.sizes, self.bubbles_interior())
     }
 
     /// Returns the lattice used in the simulation.
@@ -1007,7 +1007,7 @@ impl<S: NucleationStrategy> BubbleFormationSimulator<S> {
     /// # Returns
     ///
     /// The `[x, y, z]` coordinates of the bubble's center.
-    pub fn get_center(&self, idx: usize) -> [f64; 3] {
+    pub fn centers(&self, idx: usize) -> [f64; 3] {
         self.bubbles_interior[idx].center
     }
 
@@ -1016,7 +1016,7 @@ impl<S: NucleationStrategy> BubbleFormationSimulator<S> {
     /// # Returns
     ///
     /// An `Array2<f64>` with shape `(N, 4)`, where each row is `[time, x, y, z]`.
-    pub fn get_bubbles_interior(&self) -> Array2<f64> {
+    pub fn bubbles_interior(&self) -> Array2<f64> {
         let num_bubbles = self.bubbles_interior.len();
         if num_bubbles == 0 {
             return Array2::zeros((0, 4));
