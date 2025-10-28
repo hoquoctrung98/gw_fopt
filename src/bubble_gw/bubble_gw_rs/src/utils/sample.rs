@@ -1,6 +1,23 @@
 use num::Float;
 use std::fmt::Debug;
 
+#[derive(Debug)]
+pub enum SampleError {
+    InvalidRange {
+        start: f64,
+        stop: f64,
+    },
+    InvalidBase {
+        base: f64,
+        sample_type: &'static str,
+    },
+    InvalidParameter {
+        param: &'static str,
+        value: f64,
+    },
+    ConversionError,
+}
+
 #[derive(Clone, Debug)]
 pub enum SampleType<T> {
     Uniform,
@@ -28,33 +45,63 @@ impl<T: Float + PartialEq> PartialEq for SampleType<T> {
             (SampleType::Exponential { base: b1 }, SampleType::Exponential { base: b2 }) => {
                 b1 == b2
             }
-            (SampleType::Distribution { .. }, SampleType::Distribution { .. }) => false, // Avoid comparing function pointers
+            (SampleType::Distribution { .. }, SampleType::Distribution { .. }) => false,
             _ => false,
         }
     }
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct SampleParams<T: num::Float> {
+pub struct SampleParams<T: Float> {
     start: T,
     stop: T,
     sample_type: SampleType<T>,
 }
 
-impl<T: Float + Debug> SampleParams<T> {
-    pub fn new(start: T, stop: T, sample_type: SampleType<T>) -> Result<Self, &'static str> {
+impl<T: Float + Debug + 'static> SampleParams<T> {
+    pub fn new(start: T, stop: T, sample_type: SampleType<T>) -> Result<Self, SampleError> {
         if start >= stop {
-            return Err("`start` must be less than `stop`.");
+            return Err(SampleError::InvalidRange {
+                start: start.to_f64().unwrap_or(f64::NAN),
+                stop: stop.to_f64().unwrap_or(f64::NAN),
+            });
         }
-        if let SampleType::Logarithmic { base } = &sample_type {
-            if *base <= T::zero() {
-                return Err("`base` must be greater than 0 for logarithmic sampling.");
-            }
+        if start.is_nan() || stop.is_nan() {
+            return Err(SampleError::InvalidParameter {
+                param: "start or stop",
+                value: f64::NAN,
+            });
         }
-        if let SampleType::Exponential { base } = &sample_type {
-            if *base <= T::zero() {
-                return Err("`base` must be greater than 0 for exponential sampling.");
+        match &sample_type {
+            SampleType::Logarithmic { base } => {
+                if *base <= T::zero() {
+                    return Err(SampleError::InvalidBase {
+                        base: base.to_f64().unwrap_or(f64::NAN),
+                        sample_type: "Logarithmic",
+                    });
+                }
+                if start <= T::zero() || stop <= T::zero() {
+                    return Err(SampleError::InvalidRange {
+                        start: start.to_f64().unwrap_or(f64::NAN),
+                        stop: stop.to_f64().unwrap_or(f64::NAN),
+                    });
+                }
             }
+            SampleType::Exponential { base } => {
+                if *base <= T::zero() {
+                    return Err(SampleError::InvalidBase {
+                        base: base.to_f64().unwrap_or(f64::NAN),
+                        sample_type: "Exponential",
+                    });
+                }
+                if start <= T::zero() || stop <= T::zero() {
+                    return Err(SampleError::InvalidRange {
+                        start: start.to_f64().unwrap_or(f64::NAN),
+                        stop: stop.to_f64().unwrap_or(f64::NAN),
+                    });
+                }
+            }
+            _ => {}
         }
         Ok(Self {
             start,
@@ -63,72 +110,129 @@ impl<T: Float + Debug> SampleParams<T> {
         })
     }
 
-    fn distribution_sample(
+    pub fn sample(
         &self,
-        nsample: usize,
-        ngrid: usize,
-        niter: usize,
-        dist: &impl Fn(T) -> T,
-        dist_inv: &impl Fn(T) -> T,
-    ) -> Vec<T> {
-        let transformed_start = dist(self.start);
-        let transformed_stop = dist(self.stop);
-        let transformed_range = transformed_stop - transformed_start;
-
-        if niter == 0 {
-            (0..=nsample)
-                .map(|i| {
-                    let t = T::from(i).unwrap() / T::from(nsample).unwrap();
-                    dist_inv(transformed_start + t * transformed_range)
-                })
-                .collect()
-        } else {
-            let factor = T::from(ngrid).unwrap().powi(niter as i32);
-            let sub_factor = T::from(ngrid).unwrap().powi((niter - 1) as i32);
-
-            (0..nsample * sub_factor.to_usize().unwrap())
-                .flat_map(|i2| {
-                    (1..ngrid).map(move |i1| {
-                        let t = (T::from(i1).unwrap() / factor + T::from(i2).unwrap() / sub_factor)
-                            / T::from(nsample).unwrap();
-                        dist_inv(transformed_start + t * transformed_range)
-                    })
-                })
-                .collect()
+        n_sample: usize,
+        n_grid: usize,
+        n_iter: usize,
+    ) -> Result<Vec<T>, SampleError> {
+        if n_sample == 0 {
+            return Err(SampleError::InvalidParameter {
+                param: "n_sample",
+                value: 0.0,
+            });
         }
-    }
+        if n_iter > 0 && n_grid < 2 {
+            return Err(SampleError::InvalidParameter {
+                param: "n_grid",
+                value: n_grid as f64,
+            });
+        }
 
-    pub fn sample(&self, nsample: usize, ngrid: usize, niter: usize) -> Vec<T> {
-        match &self.sample_type {
+        Ok(match &self.sample_type {
             SampleType::Uniform => {
                 let dist = |x: T| x;
-                self.distribution_sample(nsample, ngrid, niter, &dist, &dist)
+                if n_iter == 0 {
+                    self.distribution_sample_simple(n_sample, &dist, &dist)
+                        .collect()
+                } else {
+                    self.distribution_sample_grid(n_sample, n_grid, n_iter, &dist, &dist)
+                        .collect()
+                }
             }
             SampleType::Linear => {
-                let step = (self.stop - self.start) / T::from(nsample).unwrap();
-                (0..=nsample)
-                    .map(|i| self.start + T::from(i).unwrap() * step)
-                    .collect()
+                let dist = |x: T| x;
+                if n_iter == 0 {
+                    self.distribution_sample_simple(n_sample, &dist, &dist)
+                        .collect()
+                } else {
+                    self.distribution_sample_grid(n_sample, n_grid, n_iter, &dist, &dist)
+                        .collect()
+                }
             }
             SampleType::Logarithmic { base } => {
                 let dist = |x: T| x.log(*base);
                 let dist_inv = |x: T| base.powf(x);
-                self.distribution_sample(nsample, ngrid, niter, &dist, &dist_inv)
+                if n_iter == 0 {
+                    self.distribution_sample_simple(n_sample, &dist, &dist_inv)
+                        .collect()
+                } else {
+                    self.distribution_sample_grid(n_sample, n_grid, n_iter, &dist, &dist_inv)
+                        .collect()
+                }
             }
             SampleType::Exponential { base } => {
-                let dist = |x: T| base.powf(x);
-                let dist_inv = |x: T| x.log(*base);
-                self.distribution_sample(nsample, ngrid, niter, &dist, &dist_inv)
+                let dist = |x: T| x;
+                let dist_inv = |x: T| base.powf(x);
+                if n_iter == 0 {
+                    self.distribution_sample_simple(n_sample, &dist, &dist_inv)
+                        .collect()
+                } else {
+                    self.distribution_sample_grid(n_sample, n_grid, n_iter, &dist, &dist_inv)
+                        .collect()
+                }
             }
             SampleType::Distribution { dist, dist_inv } => {
-                self.distribution_sample(nsample, ngrid, niter, dist, dist_inv)
+                if n_iter == 0 {
+                    self.distribution_sample_simple(n_sample, dist, dist_inv)
+                        .collect()
+                } else {
+                    self.distribution_sample_grid(n_sample, n_grid, n_iter, dist, dist_inv)
+                        .collect()
+                }
             }
-        }
+        })
     }
 
-    pub fn sample_arr(&self, nsample: usize, ngrid: usize, niter: usize) -> Vec<T> {
-        (0..=niter)
-            .flat_map(|iter| self.sample(nsample, ngrid, iter))
-            .collect()
+    pub fn sample_arr(
+        &self,
+        n_sample: usize,
+        n_grid: usize,
+        n_iter: usize,
+    ) -> Result<Vec<T>, SampleError> {
+        let samples: Result<Vec<Vec<T>>, SampleError> = (0..=n_iter)
+            .map(|iter| self.sample(n_sample, n_grid, iter))
+            .collect();
+        samples.map(|v| v.into_iter().flatten().collect())
+    }
+
+    fn distribution_sample_simple<'a>(
+        &self,
+        n_sample: usize,
+        dist: &impl Fn(T) -> T,
+        dist_inv: &'a impl Fn(T) -> T,
+    ) -> impl Iterator<Item = T> + 'a {
+        let transformed_start = dist(self.start);
+        let transformed_stop = dist(self.stop);
+        let transformed_range = transformed_stop - transformed_start;
+
+        (0..=n_sample).map(move |i| {
+            let t = T::from(i).unwrap() / T::from(n_sample).unwrap();
+            dist_inv(transformed_start + t * transformed_range)
+        })
+    }
+
+    fn distribution_sample_grid<'a>(
+        &self,
+        n_sample: usize,
+        n_grid: usize,
+        n_iter: usize,
+        dist: &impl Fn(T) -> T,
+        dist_inv: &'a impl Fn(T) -> T,
+    ) -> impl Iterator<Item = T> + 'a {
+        let transformed_start = dist(self.start);
+        let transformed_stop = dist(self.stop);
+        let transformed_range = transformed_stop - transformed_start;
+
+        let factor = T::from(n_grid).unwrap().powi(n_iter as i32);
+        let sub_factor = T::from(n_grid).unwrap().powi((n_iter - 1) as i32);
+
+        (0..n_sample * sub_factor.to_usize().unwrap()).flat_map(move |i2| {
+            (0..n_grid).map(move |i1| {
+                let t = (T::from(i1).unwrap() / factor + T::from(i2).unwrap() / sub_factor)
+                    / T::from(n_sample).unwrap();
+                dist_inv(transformed_start + t * transformed_range)
+            })
+        })
     }
 }

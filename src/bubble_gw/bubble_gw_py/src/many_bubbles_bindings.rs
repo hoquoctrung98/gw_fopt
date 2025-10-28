@@ -730,6 +730,22 @@ impl PyBulkFlow {
         Ok(PyArray3::from_array(py, &c_matrix_numpy).into())
     }
 
+    pub fn compute_c_matrix_fixed_bubble(
+        &mut self,
+        py: Python,
+        a_idx: usize,
+        w_arr: PyReadonlyArray1<f64>,
+        t_max: f64,
+        n_t: usize,
+    ) -> PyResult<Py<PyArray3<NumpyComplex64>>> {
+        let w_arr = w_arr.to_owned_array();
+        let c_matrix = self
+            .inner
+            .compute_c_matrix_fixed_bubble(a_idx, w_arr.view(), t_max, n_t);
+        let c_matrix_numpy = c_matrix.mapv(|c: RustComplex64| NumpyComplex64::new(c.re, c.im));
+        Ok(PyArray3::from_array(py, &c_matrix_numpy).into())
+    }
+
     #[pyo3(signature = (n_cos_thetax, n_phix, precompute_first_bubbles = true))]
     pub fn set_resolution(
         &mut self,
