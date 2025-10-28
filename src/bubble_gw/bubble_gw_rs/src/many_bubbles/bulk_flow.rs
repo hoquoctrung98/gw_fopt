@@ -1,4 +1,3 @@
-use crate::utils::integrate::Integrate;
 use ndarray::{Array1, Array2, Array3, Array4, ArrayView1, ArrayView2, Axis, Zip, azip, s, stack};
 use num_complex::Complex64;
 use rayon::ThreadPool;
@@ -465,7 +464,7 @@ impl BulkFlow {
     pub fn generate_segments(
         &self,
         first_bubble: ArrayView2<BubbleIndex>,
-        collision_status: ArrayView2<i32>,
+        collision_status: ArrayView2<CollisionStatus>, // Changed to CollisionStatus
     ) -> Vec<Segment> {
         let n_cos_thetax = self.n_cos_thetax.unwrap();
         let n_phix = self.n_phix.unwrap();
@@ -476,46 +475,109 @@ impl BulkFlow {
         }
         let mut segments = Vec::with_capacity(n_cos_thetax * 10);
 
+        let phix = self.phix.as_ref().unwrap(); // Precompute phix reference
+        let cos_thetax = self.cos_thetax.as_ref().unwrap(); // Precompute cos_thetax reference
+
         for i in 0..n_cos_thetax {
-            let mut phi_left = self.phix.as_ref().unwrap()[0];
-            let mut current_bubble = first_bubble[[i, 0]];
-            let mut current_status = collision_status[[i, 0]];
+            let first_bubble_row = first_bubble.slice(s![i, ..]);
+            let collision_status_row = collision_status.slice(s![i, ..]);
 
-            for j in 1..n_phix {
-                let bubble = first_bubble[[i, j]];
-                let status = collision_status[[i, j]];
+            let mut phi_left = phix[0];
+            let mut current_bubble = first_bubble_row[0];
+            let mut current_status = collision_status_row[0];
 
-                if bubble != current_bubble || status != current_status || j == n_phix - 1 {
-                    let phi_right = if j == n_phix - 1
-                        && bubble == current_bubble
-                        && status == current_status
-                    {
-                        self.phix.as_ref().unwrap()[j]
-                    } else {
-                        self.phix.as_ref().unwrap()[j]
-                    };
-                    if phi_right != phi_left {
+            // Use zip to iterate over adjacent phi points
+            for (j, ((bubble, status), &phi_right)) in first_bubble_row
+                .iter()
+                .zip(collision_status_row.iter())
+                .zip(phix.iter())
+                .enumerate()
+                .skip(1)
+            {
+                if *bubble != current_bubble || *status != current_status || j == n_phix - 1 {
+                    // Create segment if width is non-zero
+                    if (phi_right - phi_left).abs() > 1e-10 {
                         segments.push(Segment {
-                            cos_thetax: self.cos_thetax.as_ref().unwrap()[i],
+                            cos_thetax: cos_thetax[i],
                             phi_lower: phi_left,
-                            phi_upper: phi_right,
-                            bubble_index: current_bubble,
-                            collision_status: match current_status {
-                                0 => CollisionStatus::NeverCollided,
-                                1 => CollisionStatus::AlreadyCollided,
-                                2 => CollisionStatus::NotYetCollided,
-                                _ => CollisionStatus::NeverCollided,
+                            phi_upper: if j == n_phix - 1
+                                && *bubble == current_bubble
+                                && *status == current_status
+                            {
+                                phix[n_phix - 1]
+                            } else {
+                                phi_right // Fixed: Removed incorrect *phi_right
                             },
+                            bubble_index: current_bubble,
+                            collision_status: current_status,
                         });
                     }
-                    phi_left = self.phix.as_ref().unwrap()[j];
-                    current_bubble = bubble;
-                    current_status = status;
+                    phi_left = phi_right; // Fixed: Removed incorrect *phi_right
+                    current_bubble = *bubble;
+                    current_status = *status;
                 }
             }
         }
         segments
     }
+
+    // /// Generates a vector of `Segment` objects by grouping contiguous regions with the same
+    // /// bubble index and collision status across the angular grid.
+    // /// Panics if resolution is not set.
+    // pub fn generate_segments(
+    //     &self,
+    //     first_bubble: ArrayView2<BubbleIndex>,
+    //     collision_status: ArrayView2<i32>,
+    // ) -> Vec<Segment> {
+    //     let n_cos_thetax = self.n_cos_thetax.unwrap();
+    //     let n_phix = self.n_phix.unwrap();
+    //     if first_bubble.shape() != [n_cos_thetax, n_phix]
+    //         || collision_status.shape() != [n_cos_thetax, n_phix]
+    //     {
+    //         panic!("Input arrays must match the set resolution");
+    //     }
+    //     let mut segments = Vec::with_capacity(n_cos_thetax * 10);
+    //
+    //     for i in 0..n_cos_thetax {
+    //         let mut phi_left = self.phix.as_ref().unwrap()[0];
+    //         let mut current_bubble = first_bubble[[i, 0]];
+    //         let mut current_status = collision_status[[i, 0]];
+    //
+    //         for j in 1..n_phix {
+    //             let bubble = first_bubble[[i, j]];
+    //             let status = collision_status[[i, j]];
+    //
+    //             if bubble != current_bubble || status != current_status || j == n_phix - 1 {
+    //                 let phi_right = if j == n_phix - 1
+    //                     && bubble == current_bubble
+    //                     && status == current_status
+    //                 {
+    //                     self.phix.as_ref().unwrap()[j]
+    //                 } else {
+    //                     self.phix.as_ref().unwrap()[j]
+    //                 };
+    //                 if phi_right != phi_left {
+    //                     segments.push(Segment {
+    //                         cos_thetax: self.cos_thetax.as_ref().unwrap()[i],
+    //                         phi_lower: phi_left,
+    //                         phi_upper: phi_right,
+    //                         bubble_index: current_bubble,
+    //                         collision_status: match current_status {
+    //                             0 => CollisionStatus::NeverCollided,
+    //                             1 => CollisionStatus::AlreadyCollided,
+    //                             2 => CollisionStatus::NotYetCollided,
+    //                             _ => CollisionStatus::NeverCollided,
+    //                         },
+    //                     });
+    //                 }
+    //                 phi_left = self.phix.as_ref().unwrap()[j];
+    //                 current_bubble = bubble;
+    //                 current_status = status;
+    //             }
+    //         }
+    //     }
+    //     segments
+    // }
 
     /// Computes the time differences (`delta_tab`) for each direction
     /// relative to a reference bubble.
@@ -681,132 +743,9 @@ impl BulkFlow {
         (b_plus_arr, b_minus_arr)
     }
 
-    // /// use simpson method, 5% slower
-    // /// Computes the B-matrix components (`b_plus` and `b_minus`) for a given polar angle and segments.
-    // /// Incorporates collision status and performs numerical integration using integrate.rs where needed.
-    // /// Panics if resolution is not set.
-    // pub fn compute_b_matrix(
-    //     &self,
-    //     cos_thetax: f64,
-    //     segments: &[Segment],
-    //     delta_tab_grid: ArrayView2<f64>,
-    //     idx: usize,
-    //     delta_ta: f64,
-    // ) -> (Array1<f64>, Array1<f64>) {
-    //     let n_cos_thetax = self.n_cos_thetax.unwrap();
-    //     let n_sets = self.coefficients_sets.shape()[0];
-    //     if idx >= n_cos_thetax {
-    //         panic!("Index out of bounds for cos_thetax grid");
-    //     }
-    //     let sin_squared_thetax = 1.0 - cos_thetax.powi(2);
-    //     let mut b_plus_arr = Array1::zeros(n_sets);
-    //     let mut b_minus_arr = Array1::zeros(n_sets);
-    //     let dphi_grid = 2.0 * std::f64::consts::PI / self.n_phix.unwrap() as f64;
-    //     let phi_to_idx = self.n_phix.unwrap() as f64 / (2.0 * std::f64::consts::PI);
-    //     let tolerance = 1e-10;
-    //
-    //     // Only consider bubbles nucleated before given time
-    //     let delta_ta_cubed = if delta_ta > 0.0 {
-    //         delta_ta.powi(3)
-    //     } else {
-    //         0.0
-    //     };
-    //
-    //     for seg in segments.iter() {
-    //         // Find the segment corresponding to input cos_thetax
-    //         if (seg.cos_thetax - cos_thetax).abs() >= tolerance {
-    //             continue;
-    //         }
-    //         let phi_left = seg.phi_lower;
-    //         let phi_right = seg.phi_upper;
-    //         // Ignore integrating over zero-width range
-    //         if (phi_right - phi_left).abs() < 1e-10 {
-    //             continue;
-    //         }
-    //         let status = seg.collision_status;
-    //         if status == CollisionStatus::NeverCollided || status == CollisionStatus::NotYetCollided
-    //         {
-    //             let sin_term = (2.0 * phi_right).sin() - (2.0 * phi_left).sin();
-    //             let cos_term = (2.0 * phi_right).cos() - (2.0 * phi_left).cos();
-    //             let scaling_factor = 0.25 * sin_squared_thetax * delta_ta_cubed;
-    //             for s in 0..n_sets {
-    //                 b_plus_arr[s] += scaling_factor * sin_term;
-    //                 b_minus_arr[s] += -scaling_factor * cos_term;
-    //             }
-    //             continue;
-    //         } else if status == CollisionStatus::AlreadyCollided {
-    //             let segment_width = phi_right - phi_left;
-    //             let n_integration_points = (segment_width / dphi_grid).ceil().max(2.0) as usize;
-    //             let phi: Vec<f64> = (0..n_integration_points)
-    //                 .map(|i| {
-    //                     phi_left + i as f64 * segment_width / (n_integration_points - 1) as f64
-    //                 })
-    //                 .collect();
-    //             let sin_terms: Vec<f64> = phi.iter().map(|&p| (2.0 * p).sin()).collect();
-    //             let cos_terms: Vec<f64> = phi.iter().map(|&p| (2.0 * p).cos()).collect();
-    //             let time_ratios: Vec<f64> = phi
-    //                 .iter()
-    //                 .map(|&p| {
-    //                     let j_float = p * phi_to_idx;
-    //                     let j = (j_float.round() as usize)
-    //                         .min(self.n_phix.unwrap() - 1)
-    //                         .max(0);
-    //                     delta_tab_grid[[idx, j]] / delta_ta
-    //                 })
-    //                 .collect();
-    //
-    //             let mut integral_cos = Array1::zeros(n_sets);
-    //             let mut integral_sin = Array1::zeros(n_sets);
-    //             if delta_ta > 0.0 {
-    //                 let active_indices: Vec<usize> =
-    //                     (0..n_sets).filter(|&s| self.active_bubbles[s]).collect();
-    //                 for &s in &active_indices {
-    //                     let scaling_factors: Vec<f64> = time_ratios
-    //                         .iter()
-    //                         .map(|&ratio| {
-    //                             let mut f = 0.0;
-    //                             for k in 0..self.coefficients_sets.shape()[1] {
-    //                                 f += self.coefficients_sets[[s, k]]
-    //                                     * ratio.powf(self.powers_sets[[s, k]]);
-    //                             }
-    //                             if let Some(damping_width) = self.damping_width {
-    //                                 f *= (-delta_ta * (1.0 - ratio) / damping_width).exp();
-    //                             }
-    //                             f * delta_ta_cubed
-    //                         })
-    //                         .collect();
-    //                     let sin_integrand: Vec<f64> = scaling_factors
-    //                         .iter()
-    //                         .zip(&sin_terms)
-    //                         .map(|(&f, &s)| f * s)
-    //                         .collect();
-    //                     let cos_integrand: Vec<f64> = scaling_factors
-    //                         .iter()
-    //                         .zip(&cos_terms)
-    //                         .map(|(&f, &c)| f * c)
-    //                         .collect();
-    //                     integral_sin[s] = sin_integrand
-    //                         .as_slice()
-    //                         .simpson(Some(&phi), None, None)
-    //                         .unwrap();
-    //                     integral_cos[s] = cos_integrand
-    //                         .as_slice()
-    //                         .simpson(Some(&phi), None, None)
-    //                         .unwrap();
-    //                 }
-    //             }
-    //             for s in 0..n_sets {
-    //                 b_plus_arr[s] += 0.5 * sin_squared_thetax * integral_cos[s];
-    //                 b_minus_arr[s] += 0.5 * sin_squared_thetax * integral_sin[s];
-    //             }
-    //         }
-    //     }
-    //
-    //     (b_plus_arr, b_minus_arr)
-    // }
-
     /// Computes the A-matrix components (`a_plus` and `a_minus`) for a reference bubble,
     /// using frequency array, time, and angular grid data.
+    /// Integrates over cos_thetax using the trapezoidal rule.
     /// Panics if resolution is not set.
     pub fn compute_a_matrix(
         &self,
@@ -823,8 +762,7 @@ impl BulkFlow {
         let delta_ta = t - ta;
         let collision_status =
             self.compute_collision_status(a_idx, t, first_bubble, delta_tab_grid);
-        let segments =
-            self.generate_segments(first_bubble, collision_status.mapv(|s| s as i32).view());
+        let segments = self.generate_segments(first_bubble, collision_status.view());
 
         let mut a_plus = Array2::zeros((n_sets, n_w));
         let mut a_minus = Array2::zeros((n_sets, n_w));
@@ -840,7 +778,14 @@ impl BulkFlow {
             for w_idx in 0..n_w {
                 angular_phases[w_idx] = (w_arr[w_idx] * phase_base).exp();
             }
-            let phase_factors = angular_phases.mapv(|p| p * dcos_thetax);
+
+            // Apply trapezoidal rule weights: 0.5 for endpoints, 1.0 for interior points
+            let weight = if i == 0 || i == n_cos_thetax - 1 {
+                0.5
+            } else {
+                1.0
+            };
+            let phase_factors = angular_phases.mapv(|p| p * dcos_thetax * weight);
 
             for s in 0..n_sets {
                 let b_plus_s = Complex64::new(b_plus[s], 0.0);

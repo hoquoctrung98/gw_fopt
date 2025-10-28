@@ -661,48 +661,48 @@ impl PyBulkFlow {
         Ok(PyArray2::from_array(py, &collision_status_int).into())
     }
 
-    pub fn generate_segments(
-        &self,
-        first_bubble: PyReadonlyArray2<i32>,
-        collision_status: PyReadonlyArray2<i32>,
-    ) -> PyResult<Vec<(f64, f64, f64, i32, i32)>> {
-        let first_bubble = first_bubble.to_owned_array().mapv(|i: i32| {
-            if i == -1 {
-                BubbleIndex::None
-            } else if i >= 0 {
-                BubbleIndex::Interior(i as usize)
-            } else {
-                BubbleIndex::Exterior((-i - 2) as usize)
-            }
-        });
-        let collision_status = collision_status.to_owned_array();
-        let segments = self
-            .inner
-            .generate_segments(first_bubble.view(), collision_status.view());
-        let py_segments: Vec<(f64, f64, f64, i32, i32)> = segments
-            .into_iter()
-            .map(|s| {
-                let status_int = match s.collision_status {
-                    CollisionStatus::NeverCollided => 0,
-                    CollisionStatus::AlreadyCollided => 1,
-                    CollisionStatus::NotYetCollided => 2,
-                };
-                let bubble_int = match s.bubble_index {
-                    BubbleIndex::None => -1,
-                    BubbleIndex::Interior(i) => i as i32,
-                    BubbleIndex::Exterior(i) => -((i as i32) + 2),
-                };
-                (
-                    s.cos_thetax,
-                    s.phi_lower,
-                    s.phi_upper,
-                    bubble_int,
-                    status_int,
-                )
-            })
-            .collect();
-        Ok(py_segments)
-    }
+    // pub fn generate_segments(
+    //     &self,
+    //     first_bubble: PyReadonlyArray2<i32>,
+    //     collision_status: PyReadonlyArray2<i32>,
+    // ) -> PyResult<Vec<(f64, f64, f64, i32, i32)>> {
+    //     let first_bubble = first_bubble.to_owned_array().mapv(|i: i32| {
+    //         if i == -1 {
+    //             BubbleIndex::None
+    //         } else if i >= 0 {
+    //             BubbleIndex::Interior(i as usize)
+    //         } else {
+    //             BubbleIndex::Exterior((-i - 2) as usize)
+    //         }
+    //     });
+    //     let collision_status = collision_status.to_owned_array();
+    //     let segments = self
+    //         .inner
+    //         .generate_segments(first_bubble.view(), collision_status.view());
+    //     let py_segments: Vec<(f64, f64, f64, i32, i32)> = segments
+    //         .into_iter()
+    //         .map(|s| {
+    //             let status_int = match s.collision_status {
+    //                 CollisionStatus::NeverCollided => 0,
+    //                 CollisionStatus::AlreadyCollided => 1,
+    //                 CollisionStatus::NotYetCollided => 2,
+    //             };
+    //             let bubble_int = match s.bubble_index {
+    //                 BubbleIndex::None => -1,
+    //                 BubbleIndex::Interior(i) => i as i32,
+    //                 BubbleIndex::Exterior(i) => -((i as i32) + 2),
+    //             };
+    //             (
+    //                 s.cos_thetax,
+    //                 s.phi_lower,
+    //                 s.phi_upper,
+    //                 bubble_int,
+    //                 status_int,
+    //             )
+    //         })
+    //         .collect();
+    //     Ok(py_segments)
+    // }
 
     pub fn compute_c_integrand(
         &self,
