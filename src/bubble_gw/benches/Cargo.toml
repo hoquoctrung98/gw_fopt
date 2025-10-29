@@ -1,0 +1,17 @@
+[package]
+name = "bubble_gw_benchmarks"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description.workspace = true
+readme.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+bubble_gw_rs = { path = "../bubble_gw_rs" }
+criterion = "0.7.0"
+
+# [[bench]]
+# name = "foo_bench"
+# harness = false  # Required for Criterion

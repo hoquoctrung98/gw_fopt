@@ -2,6 +2,7 @@
 members = [
     "bubble_gw_rs",
     "bubble_gw_py",
+    "benches",
 ]
 resolver = "2"
 

@@ -2,24 +2,93 @@ use ndarray::{ArrayBase, Axis, Data, Dimension, OwnedRepr, RemoveAxis};
 use num_traits::Num;
 use std::fmt;
 
-// Custom error type for integration
+/// Errors that can occur during numerical integration.
 #[derive(Debug)]
-pub struct IntegrationError {
-    message: String,
+pub enum IntegrationError {
+    /// Input array has fewer than 2 points, which is insufficient for integration.
+    InsufficientPoints { len: usize },
+    /// The length of the x-coordinates does not match the length of the y-values.
+    MismatchedLengths { x_len: usize, y_len: usize },
+    /// The specified axis is out of bounds for the array's dimensions.
+    InvalidAxis { axis: usize, ndim: usize },
+    /// Failed to obtain a contiguous slice from the array.
+    NonContiguousSlice,
+    /// Failed to create the output array with the specified shape.
+    OutputArrayCreationFailed,
 }
 
 impl fmt::Display for IntegrationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Integration error: {}", self.message)
+        match self {
+            IntegrationError::InsufficientPoints { len } => {
+                write!(f, "At least 2 points required for integration, got {}", len)
+            }
+            IntegrationError::MismatchedLengths { x_len, y_len } => {
+                write!(
+                    f,
+                    "x and y must have the same length, got x: {}, y: {}",
+                    x_len, y_len
+                )
+            }
+            IntegrationError::InvalidAxis { axis, ndim } => {
+                write!(
+                    f,
+                    "Axis {} out of bounds for array with {} dimensions",
+                    axis, ndim
+                )
+            }
+            IntegrationError::NonContiguousSlice => {
+                write!(f, "Cannot get contiguous slice from array")
+            }
+            IntegrationError::OutputArrayCreationFailed => {
+                write!(f, "Failed to create output array")
+            }
+        }
     }
 }
 
 impl std::error::Error for IntegrationError {}
 
-// Define a generic Integrate trait with associated output type
+/// A trait for performing numerical integration on data structures.
+///
+/// This trait provides methods for numerical integration using the trapezoid rule and
+/// Simpson's rules. It is implemented for slices (`&[T]`) and `ndarray::ArrayBase` types,
+/// supporting both evenly spaced (`dx`) and unevenly spaced (`x`) data points.
+///
+/// # Type Parameters
+/// - `X`: The type of the x-coordinates, which must support numeric operations and ordering.
+///
+/// # Associated Types
+/// - `Output`: The type of the integration result, which depends on the implementing type
+///   (e.g., a scalar for slices, an array for `ArrayBase`).
 pub trait Integrate<X: PartialOrd> {
+    /// The output type of the integration methods.
     type Output;
 
+    /// Performs integration using the trapezoid rule.
+    ///
+    /// The trapezoid rule approximates the integral by summing the areas of trapezoids
+    /// formed by connecting consecutive data points:
+    /// \[
+    /// \int_a^b f(x) \, dx \approx \sum_{i=0}^{n-2} \frac{f(x_i) + f(x_{i+1})}{2} \cdot (x_{i+1} - x_i)
+    /// \]
+    /// For evenly spaced points with step size `dx`, the formula simplifies to:
+    /// \[
+    /// \int_a^b f(x) \, dx \approx \sum_{i=0}^{n-2} \frac{f(x_i) + f(x_{i+1})}{2} \cdot dx
+    /// \]
+    ///
+    /// # Arguments
+    /// - `x`: Optional slice of x-coordinates for unevenly spaced data. Must have the same length as the input data.
+    /// - `dx`: Optional step size for evenly spaced data. Defaults to 1.0 if `x` is not provided.
+    /// - `axis`: Optional axis along which to integrate (for `ndarray`). Defaults to the last axis.
+    ///
+    /// # Errors
+    /// Returns an `IntegrationError` if:
+    /// - The input has fewer than 2 points.
+    /// - The lengths of `x` and the input data do not match.
+    /// - The specified axis is out of bounds (for `ndarray`).
+    /// - A contiguous slice cannot be obtained (for `ndarray`).
+    /// - The output array cannot be created (for `ndarray`).
     fn trapezoid<'a>(
         &self,
         x: Option<&'a [X]>,
@@ -27,6 +96,33 @@ pub trait Integrate<X: PartialOrd> {
         axis: Option<isize>,
     ) -> Result<Self::Output, IntegrationError>;
 
+    /// Performs integration using Simpson's rules.
+    ///
+    /// The implementation uses:
+    /// - Trapezoid rule for `n = 2` points (insufficient for Simpson's rules).
+    /// - Simpson's 3/8 rule for `n = 3` or the first 4 points when `n ≥ 4, even`:
+    ///   \[
+    ///   \int_{x_0}^{x_3} f(x) \, dx \approx \frac{3h}{8} \left[ f(x_0) + 3f(x_1) + 3f(x_2) + f(x_3) \right]
+    ///   \]
+    ///   where \( h = (x_3 - x_0)/3 \).
+    /// - Simpson's 1/3 rule for `n ≥ 3, odd` or remaining points when `n > 4, even`:
+    ///   \[
+    ///   \int_{x_0}^{x_{n-1}} f(x) \, dx \approx \frac{h}{3} \left[ f(x_0) + 4 \sum_{\text{odd } i} f(x_i) + 2 \sum_{\text{even } i} f(x_i) + f(x_{n-1}) \right]
+    ///   \]
+    ///   where \( h = (x_{n-1} - x_0)/(n-1) \).
+    ///
+    /// # Arguments
+    /// - `x`: Optional slice of x-coordinates for unevenly spaced data. Must have the same length as the input data.
+    /// - `dx`: Optional step size for evenly spaced data. Defaults to 1.0 if `x` is not provided.
+    /// - `axis`: Optional axis along which to integrate (for `ndarray`). Defaults to the last axis.
+    ///
+    /// # Errors
+    /// Returns an `IntegrationError` if:
+    /// - The input has fewer than 2 points.
+    /// - The lengths of `x` and the input data do not match.
+    /// - The specified axis is out of bounds (for `ndarray`).
+    /// - A contiguous slice cannot be obtained (for `ndarray`).
+    /// - The output array cannot be created (for `ndarray`).
     fn simpson<'a>(
         &self,
         x: Option<&'a [X]>,
@@ -35,7 +131,7 @@ pub trait Integrate<X: PartialOrd> {
     ) -> Result<Self::Output, IntegrationError>;
 }
 
-// Implement Integrate for slices
+/// Implementation of the `Integrate` trait for slices.
 impl<'a, T, X> Integrate<X> for &'a [T]
 where
     T: Num + Copy + From<X> + From<f64>,
@@ -51,15 +147,14 @@ where
     ) -> Result<Self::Output, IntegrationError> {
         let n = self.len();
         if n < 2 {
-            return Err(IntegrationError {
-                message: "At least 2 points required for trapezoid rule".to_string(),
-            });
+            return Err(IntegrationError::InsufficientPoints { len: n });
         }
 
         if let Some(x_slice) = x {
             if x_slice.len() != n {
-                return Err(IntegrationError {
-                    message: "x and y must have the same length".to_string(),
+                return Err(IntegrationError::MismatchedLengths {
+                    x_len: x_slice.len(),
+                    y_len: n,
                 });
             }
             let result = (0..n - 1)
@@ -85,15 +180,14 @@ where
     ) -> Result<Self::Output, IntegrationError> {
         let n = self.len();
         if n < 2 {
-            return Err(IntegrationError {
-                message: "At least 2 points required for Simpson's rule".to_string(),
-            });
+            return Err(IntegrationError::InsufficientPoints { len: n });
         }
 
         if let Some(x_slice) = x {
             if x_slice.len() != n {
-                return Err(IntegrationError {
-                    message: "x and y must have the same length".to_string(),
+                return Err(IntegrationError::MismatchedLengths {
+                    x_len: x_slice.len(),
+                    y_len: n,
                 });
             }
             let h = (x_slice[n - 1] - x_slice[0]) / X::from((n - 1) as f64);
@@ -168,7 +262,7 @@ where
     }
 }
 
-// Implement Integrate for generic ArrayBase
+/// Implementation of the `Integrate` trait for `ndarray::ArrayBase`.
 impl<S, A, X, D> Integrate<X> for ArrayBase<S, D>
 where
     S: Data<Elem = A>,
@@ -186,26 +280,22 @@ where
     ) -> Result<Self::Output, IntegrationError> {
         let axis = axis.unwrap_or(self.ndim() as isize - 1) as usize;
         if axis >= self.ndim() {
-            return Err(IntegrationError {
-                message: format!(
-                    "Axis {} out of bounds for array with {} dimensions",
-                    axis,
-                    self.ndim()
-                ),
+            return Err(IntegrationError::InvalidAxis {
+                axis,
+                ndim: self.ndim(),
             });
         }
 
         let n = self.shape()[axis];
         if n < 2 {
-            return Err(IntegrationError {
-                message: "At least 2 points required for trapezoid rule".to_string(),
-            });
+            return Err(IntegrationError::InsufficientPoints { len: n });
         }
 
         if let Some(x_slice) = x {
             if x_slice.len() != n {
-                return Err(IntegrationError {
-                    message: "x and y must have the same length".to_string(),
+                return Err(IntegrationError::MismatchedLengths {
+                    x_len: x_slice.len(),
+                    y_len: n,
                 });
             }
         }
@@ -215,16 +305,13 @@ where
         let mut results = Vec::with_capacity(output_len);
 
         if self.ndim() == 1 {
-            let y = self.as_slice().ok_or(IntegrationError {
-                message: "Cannot get contiguous slice from 1D array".to_string(),
-            })?;
+            let y = self
+                .as_slice()
+                .ok_or(IntegrationError::NonContiguousSlice)?;
             if y.len() != n {
-                return Err(IntegrationError {
-                    message: format!(
-                        "Slice length {} does not match expected dimension {}",
-                        y.len(),
-                        n
-                    ),
+                return Err(IntegrationError::MismatchedLengths {
+                    x_len: y.len(),
+                    y_len: n,
                 });
             }
             let slice_result = if let Some(x_slice) = x {
@@ -244,17 +331,13 @@ where
             let iter_axis = if axis == self.ndim() - 1 { 0 } else { axis };
             for slice in self.axis_iter(Axis(iter_axis)) {
                 let owned = slice.to_owned();
-                let y = owned.as_slice().ok_or(IntegrationError {
-                    message: "Cannot get contiguous slice from array after conversion".to_string(),
-                })?;
+                let y = owned
+                    .as_slice()
+                    .ok_or(IntegrationError::NonContiguousSlice)?;
                 if y.len() != n {
-                    return Err(IntegrationError {
-                        message: format!(
-                            "Slice length {} does not match expected dimension {} for axis {}",
-                            y.len(),
-                            n,
-                            axis
-                        ),
+                    return Err(IntegrationError::MismatchedLengths {
+                        x_len: y.len(),
+                        y_len: n,
                     });
                 }
                 let slice_result = if let Some(x_slice) = x {
@@ -274,9 +357,8 @@ where
         }
 
         let output: ArrayBase<OwnedRepr<A>, D::Smaller> =
-            ArrayBase::from_shape_vec(output_shape, results).map_err(|_| IntegrationError {
-                message: "Failed to create output array".to_string(),
-            })?;
+            ArrayBase::from_shape_vec(output_shape, results)
+                .map_err(|_| IntegrationError::OutputArrayCreationFailed)?;
         Ok(output)
     }
 
@@ -288,26 +370,22 @@ where
     ) -> Result<Self::Output, IntegrationError> {
         let axis = axis.unwrap_or(self.ndim() as isize - 1) as usize;
         if axis >= self.ndim() {
-            return Err(IntegrationError {
-                message: format!(
-                    "Axis {} out of bounds for array with {} dimensions",
-                    axis,
-                    self.ndim()
-                ),
+            return Err(IntegrationError::InvalidAxis {
+                axis,
+                ndim: self.ndim(),
             });
         }
 
         let n = self.shape()[axis];
         if n < 2 {
-            return Err(IntegrationError {
-                message: "At least 2 points required for Simpson's rule".to_string(),
-            });
+            return Err(IntegrationError::InsufficientPoints { len: n });
         }
 
         if let Some(x_slice) = x {
             if x_slice.len() != n {
-                return Err(IntegrationError {
-                    message: "x and y must have the same length".to_string(),
+                return Err(IntegrationError::MismatchedLengths {
+                    x_len: x_slice.len(),
+                    y_len: n,
                 });
             }
         }
@@ -317,16 +395,13 @@ where
         let mut results = Vec::with_capacity(output_len);
 
         if self.ndim() == 1 {
-            let y = self.as_slice().ok_or(IntegrationError {
-                message: "Cannot get contiguous slice from 1D array".to_string(),
-            })?;
+            let y = self
+                .as_slice()
+                .ok_or(IntegrationError::NonContiguousSlice)?;
             if y.len() != n {
-                return Err(IntegrationError {
-                    message: format!(
-                        "Slice length {} does not match expected dimension {}",
-                        y.len(),
-                        n
-                    ),
+                return Err(IntegrationError::MismatchedLengths {
+                    x_len: y.len(),
+                    y_len: n,
                 });
             }
             let slice_result = if let Some(x_slice) = x {
@@ -402,17 +477,13 @@ where
             let iter_axis = if axis == self.ndim() - 1 { 0 } else { axis };
             for slice in self.axis_iter(Axis(iter_axis)) {
                 let owned = slice.to_owned();
-                let y = owned.as_slice().ok_or(IntegrationError {
-                    message: "Cannot get contiguous slice from array after conversion".to_string(),
-                })?;
+                let y = owned
+                    .as_slice()
+                    .ok_or(IntegrationError::NonContiguousSlice)?;
                 if y.len() != n {
-                    return Err(IntegrationError {
-                        message: format!(
-                            "Slice length {} does not match expected dimension {} for axis {}",
-                            y.len(),
-                            n,
-                            axis
-                        ),
+                    return Err(IntegrationError::MismatchedLengths {
+                        x_len: y.len(),
+                        y_len: n,
                     });
                 }
                 let slice_result = if let Some(x_slice) = x {
@@ -488,296 +559,8 @@ where
         }
 
         let output: ArrayBase<OwnedRepr<A>, D::Smaller> =
-            ArrayBase::from_shape_vec(output_shape, results).map_err(|_| IntegrationError {
-                message: "Failed to create output array".to_string(),
-            })?;
+            ArrayBase::from_shape_vec(output_shape, results)
+                .map_err(|_| IntegrationError::OutputArrayCreationFailed)?;
         Ok(output)
     }
 }
-
-// use ndarray::{
-//     Array1, ArrayBase, ArrayView1, Axis, Data, Dimension, OwnedRepr, RemoveAxis, Zip, s,
-// };
-// use num_traits::{FromPrimitive, Num};
-// use std::fmt;
-//
-// // Custom error type for integration
-// #[derive(Debug)]
-// pub struct IntegrationError {
-//     message: String,
-// }
-//
-// impl fmt::Display for IntegrationError {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         write!(f, "Integration error: {}", self.message)
-//     }
-// }
-//
-// impl std::error::Error for IntegrationError {}
-//
-// // Define a generic Integrate trait with associated output type
-// pub trait Integrate<X: PartialOrd> {
-//     type Output;
-//
-//     fn trapezoid<'a>(
-//         &self,
-//         x: Option<&'a [X]>,
-//         dx: Option<X>,
-//         axis: Option<isize>,
-//     ) -> Result<Self::Output, IntegrationError>;
-//
-//     fn simpson<'a>(
-//         &self,
-//         x: Option<&'a [X]>,
-//         dx: Option<X>,
-//         axis: Option<isize>,
-//     ) -> Result<Self::Output, IntegrationError>;
-// }
-//
-// // Helper function to compute weights for trapezoidal and Simpson's rules
-// fn compute_weights<A, X>(
-//     n: usize,
-//     x: Option<&[X]>,
-//     dx: Option<X>,
-//     is_simpson: bool,
-// ) -> Result<(Array1<A>, A), IntegrationError>
-// where
-//     A: Num + Copy + From<X> + FromPrimitive + ndarray::ScalarOperand,
-//     X: Num + Copy + PartialOrd + FromPrimitive,
-// {
-//     if n < 2 {
-//         return Err(IntegrationError {
-//             message: "At least 2 points required for integration".to_string(),
-//         });
-//     }
-//
-//     let h = if let Some(x_slice) = x {
-//         if x_slice.len() != n {
-//             return Err(IntegrationError {
-//                 message: "x and y must have the same length".to_string(),
-//             });
-//         }
-//         A::from((x_slice[n - 1] - x_slice[0]) / X::from_usize(n - 1).unwrap_or(X::one()))
-//     } else {
-//         A::from(dx.unwrap_or(X::from_f64(1.0).unwrap_or(X::one())))
-//     };
-//
-//     let mut weights = Array1::zeros(n);
-//
-//     if is_simpson {
-//         // Simpson's rule
-//         if n == 2 {
-//             // Trapezoidal rule for 2 points
-//             weights[0] = A::from_f64(0.5).unwrap_or(A::one());
-//             weights[1] = A::from_f64(0.5).unwrap_or(A::one());
-//             Ok((weights, h))
-//         } else if n == 3 {
-//             // Simpson's 3/8 rule for 3 points
-//             weights[0] = A::from_f64(1.0).unwrap_or(A::one());
-//             weights[1] = A::from_f64(3.0).unwrap_or(A::one() + A::one() + A::one());
-//             weights[2] = A::from_f64(3.0).unwrap_or(A::one() + A::one() + A::one());
-//             Ok((weights * A::from_f64(3.0 / 8.0).unwrap_or(A::one()), h))
-//         } else if n % 2 == 1 {
-//             // Odd n (even intervals): use Simpson's 1/3 rule
-//             weights[0] = A::from_f64(1.0).unwrap_or(A::one());
-//             weights[n - 1] = A::from_f64(1.0).unwrap_or(A::one());
-//             for i in 1..n - 1 {
-//                 weights[i] = if i % 2 == 0 {
-//                     A::from_f64(2.0).unwrap_or(A::one() + A::one())
-//                 } else {
-//                     A::from_f64(4.0).unwrap_or(A::one() + A::one() + A::one() + A::one())
-//                 };
-//             }
-//             Ok((weights * A::from_f64(1.0 / 3.0).unwrap_or(A::one()), h))
-//         } else {
-//             // Even n (odd intervals): use 3/8 rule for first 4 points, 1/3 rule for rest
-//             // 3/8 rule for [0, 1, 2, 3]
-//             weights[0] = A::from_f64(1.0).unwrap_or(A::one());
-//             weights[1] = A::from_f64(3.0).unwrap_or(A::one() + A::one() + A::one());
-//             weights[2] = A::from_f64(3.0).unwrap_or(A::one() + A::one() + A::one());
-//             weights[3] = A::from_f64(1.0).unwrap_or(A::one());
-//             weights
-//                 .slice_mut(s![0..4])
-//                 .mapv_inplace(|w| w * A::from_f64(3.0 / 8.0).unwrap_or(A::one()));
-//
-//             if n > 4 {
-//                 // 1/3 rule for [3, 4, ..., n-1]
-//                 weights[3] = weights[3] + A::from_f64(1.0).unwrap_or(A::one()); // Accumulate at index 3
-//                 for i in 4..n - 1 {
-//                     weights[i] = if (i - 3) % 2 == 0 {
-//                         A::from_f64(2.0).unwrap_or(A::one() + A::one())
-//                     } else {
-//                         A::from_f64(4.0).unwrap_or(A::one() + A::one() + A::one() + A::one())
-//                     };
-//                 }
-//                 weights[n - 1] = A::from_f64(1.0).unwrap_or(A::one());
-//                 weights
-//                     .slice_mut(s![3..n])
-//                     .mapv_inplace(|w| w * A::from_f64(1.0 / 3.0).unwrap_or(A::one()));
-//             }
-//             Ok((weights, h))
-//         }
-//     } else {
-//         // Trapezoidal rule
-//         weights[0] = A::from_f64(0.5).unwrap_or(A::one());
-//         weights[n - 1] = A::from_f64(0.5).unwrap_or(A::one());
-//         for i in 1..n - 1 {
-//             weights[i] = A::from_f64(1.0).unwrap_or(A::one());
-//         }
-//         Ok((weights, h))
-//     }
-// }
-//
-// // Implement Integrate for slices
-// impl<'a, T, X> Integrate<X> for &'a [T]
-// where
-//     T: Num + Copy + From<X> + FromPrimitive + ndarray::ScalarOperand,
-//     X: Num + Copy + PartialOrd + FromPrimitive,
-// {
-//     type Output = T;
-//
-//     fn trapezoid<'b>(
-//         &self,
-//         x: Option<&'b [X]>,
-//         dx: Option<X>,
-//         _axis: Option<isize>,
-//     ) -> Result<Self::Output, IntegrationError> {
-//         let n = self.len();
-//         let (weights, h) = compute_weights::<T, X>(n, x, dx, false)?;
-//         let mut result = T::zero();
-//         for i in 0..n {
-//             result = result + weights[i] * self[i];
-//         }
-//         Ok(result * h)
-//     }
-//
-//     fn simpson<'b>(
-//         &self,
-//         x: Option<&'b [X]>,
-//         dx: Option<X>,
-//         _axis: Option<isize>,
-//     ) -> Result<Self::Output, IntegrationError> {
-//         let n = self.len();
-//         let (weights, h) = compute_weights::<T, X>(n, x, dx, true)?;
-//         let mut result = T::zero();
-//         for i in 0..n {
-//             result = result + weights[i] * self[i];
-//         }
-//         Ok(result * h)
-//     }
-// }
-//
-// // Implement Integrate for generic ArrayBase
-// impl<S, A, X, D> Integrate<X> for ArrayBase<S, D>
-// where
-//     S: Data<Elem = A>,
-//     A: Num + Copy + From<X> + FromPrimitive + ndarray::ScalarOperand,
-//     X: Num + Copy + PartialOrd + FromPrimitive,
-//     D: Dimension + RemoveAxis,
-// {
-//     type Output = ArrayBase<OwnedRepr<A>, D::Smaller>;
-//
-//     fn trapezoid<'a>(
-//         &self,
-//         x: Option<&'a [X]>,
-//         dx: Option<X>,
-//         axis: Option<isize>,
-//     ) -> Result<Self::Output, IntegrationError> {
-//         let axis = axis.unwrap_or(self.ndim() as isize - 1) as usize;
-//         if axis >= self.ndim() {
-//             return Err(IntegrationError {
-//                 message: format!(
-//                     "Axis {} out of bounds for array with {} dimensions",
-//                     axis,
-//                     self.ndim()
-//                 ),
-//             });
-//         }
-//
-//         let n = self.shape()[axis];
-//         let (weights, h) = compute_weights::<A, X>(n, x, dx, false)?;
-//         let output_shape = self.raw_dim().remove_axis(Axis(axis));
-//         let mut results = Vec::with_capacity(output_shape.size());
-//
-//         if self.ndim() == 1 {
-//             let y = self.as_slice().ok_or(IntegrationError {
-//                 message: "Cannot get contiguous slice from 1D array".to_string(),
-//             })?;
-//             let mut result = A::zero();
-//             Zip::from(&weights)
-//                 .and(ArrayView1::from(y))
-//                 .for_each(|&w, &y_val| result = result + w * y_val);
-//             results.push(result * h);
-//         } else {
-//             let iter_axis = if axis == self.ndim() - 1 { 0 } else { axis };
-//             for slice in self.axis_iter(Axis(iter_axis)) {
-//                 let y = slice.as_slice().ok_or(IntegrationError {
-//                     message: "Cannot get contiguous slice from array".to_string(),
-//                 })?;
-//                 let mut result = A::zero();
-//                 Zip::from(&weights)
-//                     .and(ArrayView1::from(y))
-//                     .for_each(|&w, &y_val| result = result + w * y_val);
-//                 results.push(result * h);
-//             }
-//         }
-//
-//         let output: ArrayBase<OwnedRepr<A>, D::Smaller> =
-//             ArrayBase::from_shape_vec(output_shape, results).map_err(|_| IntegrationError {
-//                 message: "Failed to create output array".to_string(),
-//             })?;
-//         Ok(output)
-//     }
-//
-//     fn simpson<'a>(
-//         &self,
-//         x: Option<&'a [X]>,
-//         dx: Option<X>,
-//         axis: Option<isize>,
-//     ) -> Result<Self::Output, IntegrationError> {
-//         let axis = axis.unwrap_or(self.ndim() as isize - 1) as usize;
-//         if axis >= self.ndim() {
-//             return Err(IntegrationError {
-//                 message: format!(
-//                     "Axis {} out of bounds for array with {} dimensions",
-//                     axis,
-//                     self.ndim()
-//                 ),
-//             });
-//         }
-//
-//         let n = self.shape()[axis];
-//         let (weights, h) = compute_weights::<A, X>(n, x, dx, true)?;
-//         let output_shape = self.raw_dim().remove_axis(Axis(axis));
-//         let mut results = Vec::with_capacity(output_shape.size());
-//
-//         if self.ndim() == 1 {
-//             let y = self.as_slice().ok_or(IntegrationError {
-//                 message: "Cannot get contiguous slice from 1D array".to_string(),
-//             })?;
-//             let mut result = A::zero();
-//             Zip::from(&weights)
-//                 .and(ArrayView1::from(y))
-//                 .for_each(|&w, &y_val| result = result + w * y_val);
-//             results.push(result * h);
-//         } else {
-//             let iter_axis = if axis == self.ndim() - 1 { 0 } else { axis };
-//             for slice in self.axis_iter(Axis(iter_axis)) {
-//                 let y = slice.as_slice().ok_or(IntegrationError {
-//                     message: "Cannot get contiguous slice from array".to_string(),
-//                 })?;
-//                 let mut result = A::zero();
-//                 Zip::from(&weights)
-//                     .and(ArrayView1::from(y))
-//                     .for_each(|&w, &y_val| result = result + w * y_val);
-//                 results.push(result * h);
-//             }
-//         }
-//
-//         let output: ArrayBase<OwnedRepr<A>, D::Smaller> =
-//             ArrayBase::from_shape_vec(output_shape, results).map_err(|_| IntegrationError {
-//                 message: "Failed to create output array".to_string(),
-//             })?;
-//         Ok(output)
-//     }
-// }
