@@ -1,40 +1,40 @@
 use pyo3::prelude::*;
 
-pub mod many_bubbles_bindings;
-pub mod two_bubbles_bindings;
-pub mod utils_bindings;
+pub mod py_many_bubbles;
+pub mod py_two_bubbles;
+pub mod py_utils;
 
 #[pymodule]
-fn bubble_gw(py: Python, parent_module: &Bound<'_, PyModule>) -> PyResult<()> {
-    let two_bubbles_module = PyModule::new(parent_module.py(), "two_bubbles")?;
-    two_bubbles_module.add_class::<two_bubbles_bindings::PyGravitationalWaveCalculator>()?;
+fn bubble_gw(py: Python, module_parent: &Bound<'_, PyModule>) -> PyResult<()> {
+    let module_two_bubbles = PyModule::new(module_parent.py(), "two_bubbles")?;
+    module_two_bubbles.add_class::<py_two_bubbles::PyGravitationalWaveCalculator>()?;
 
-    let many_bubbles_module = PyModule::new(parent_module.py(), "many_bubbles")?;
-    many_bubbles_module.add_class::<many_bubbles_bindings::PyBulkFlow>()?;
-    many_bubbles_module.add_class::<many_bubbles_bindings::PyLattice>()?;
-    many_bubbles_module.add_class::<many_bubbles_bindings::PyPoissonNucleation>()?;
-    many_bubbles_module.add_class::<many_bubbles_bindings::PyManualNucleation>()?;
-    many_bubbles_module.add_class::<many_bubbles_bindings::PyBubbleFormationSimulator>()?;
-    many_bubbles_module.add_function(wrap_pyfunction!(
-        many_bubbles_bindings::py_generate_bubbles_exterior,
-        parent_module
+    let module_many_bubbles = PyModule::new(module_parent.py(), "many_bubbles")?;
+    module_many_bubbles.add_class::<py_many_bubbles::PyBulkFlow>()?;
+    module_many_bubbles.add_class::<py_many_bubbles::PyLattice>()?;
+    module_many_bubbles.add_class::<py_many_bubbles::PyPoissonNucleation>()?;
+    module_many_bubbles.add_class::<py_many_bubbles::PyManualNucleation>()?;
+    module_many_bubbles.add_class::<py_many_bubbles::PyBubbleFormationSimulator>()?;
+    module_many_bubbles.add_function(wrap_pyfunction!(
+        py_many_bubbles::py_generate_bubbles_exterior,
+        module_parent
     )?)?;
 
-    let utils_module = PyModule::new(parent_module.py(), "utils")?;
-    utils_module.add_function(wrap_pyfunction!(utils_bindings::sample, parent_module)?)?;
-    utils_module.add_function(wrap_pyfunction!(utils_bindings::sample_arr, parent_module)?)?;
+    let module_utils = PyModule::new(module_parent.py(), "utils")?;
+    module_utils.add_function(wrap_pyfunction!(py_utils::sample, module_parent)?)?;
+    module_utils.add_function(wrap_pyfunction!(py_utils::sample_arr, module_parent)?)?;
 
-    parent_module.add_submodule(&two_bubbles_module)?;
-    parent_module.add_submodule(&many_bubbles_module)?;
-    parent_module.add_submodule(&utils_module)?;
+    module_parent.add_submodule(&module_two_bubbles)?;
+    module_parent.add_submodule(&module_many_bubbles)?;
+    module_parent.add_submodule(&module_utils)?;
     py.import("sys")?
         .getattr("modules")?
-        .set_item("bubble_gw.two_bubbles", two_bubbles_module)?;
+        .set_item("bubble_gw.two_bubbles", module_two_bubbles)?;
     py.import("sys")?
         .getattr("modules")?
-        .set_item("bubble_gw.many_bubbles", many_bubbles_module)?;
+        .set_item("bubble_gw.many_bubbles", module_many_bubbles)?;
     py.import("sys")?
         .getattr("modules")?
-        .set_item("bubble_gw.utils", utils_module)?;
+        .set_item("bubble_gw.utils", module_utils)?;
     Ok(())
 }

@@ -31,7 +31,7 @@ impl PyGravitationalWaveCalculator {
             _ => {
                 return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
                     "Invalid initial_field_status".to_string(),
-                ))
+                ));
             }
         };
 
