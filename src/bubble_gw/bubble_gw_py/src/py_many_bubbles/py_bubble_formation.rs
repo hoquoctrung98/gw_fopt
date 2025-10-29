@@ -225,19 +225,19 @@ impl PyBubbleFormationSimulator {
         }
     }
 
-    #[pyo3(signature = (t_max=None, min_volume_remaining_fraction=None, max_time_iterations=None))]
+    #[pyo3(signature = (t_end=None, min_volume_remaining_fraction=None, max_time_iterations=None))]
     fn run_simulation(
         &mut self,
-        t_max: Option<f64>,
+        t_end: Option<f64>,
         min_volume_remaining_fraction: Option<f64>,
         max_time_iterations: Option<usize>,
     ) -> PyResult<()> {
         match self.get_inner_mut() {
             BubbleFormationSimulatorWrapper::Poisson(sim) => {
-                sim.run_simulation(t_max, min_volume_remaining_fraction, max_time_iterations);
+                sim.run_simulation(t_end, min_volume_remaining_fraction, max_time_iterations);
             }
             BubbleFormationSimulatorWrapper::Manual(sim) => {
-                sim.run_simulation(t_max, min_volume_remaining_fraction, max_time_iterations);
+                sim.run_simulation(t_end, min_volume_remaining_fraction, max_time_iterations);
             }
         }
         Ok(())

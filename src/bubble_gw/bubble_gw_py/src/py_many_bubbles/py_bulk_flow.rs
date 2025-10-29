@@ -1,12 +1,53 @@
-use bubble_gw_rs::many_bubbles::bulk_flow::{BubbleIndex, BulkFlow, CollisionStatus, Segment};
+use bubble_gw_rs::many_bubbles::bulk_flow::{
+    BubbleIndex, BulkFlow, BulkFlowError, CollisionStatus, Segment,
+};
 use ndarray::Array2;
 use num_complex::Complex64 as RustComplex64;
 use numpy::{
     Complex64 as NumpyComplex64, PyArray1, PyArray2, PyArray3, PyArray4, PyArrayMethods,
     PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3,
 };
-use pyo3::exceptions::PyValueError;
+use pyo3::Python;
+use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
+
+// Newtype wrapper for BulkFlowError to satisfy orphan rules
+#[derive(Debug)]
+struct PyBulkFlowError(BulkFlowError);
+
+// Convert BulkFlowError to PyBulkFlowError
+impl From<BulkFlowError> for PyBulkFlowError {
+    fn from(err: BulkFlowError) -> Self {
+        PyBulkFlowError(err)
+    }
+}
+
+// Convert PyBulkFlowError to PyErr for Python exception handling
+impl From<PyBulkFlowError> for PyErr {
+    fn from(err: PyBulkFlowError) -> PyErr {
+        match err.0 {
+            BulkFlowError::InvalidIndex { index, max } => {
+                PyIndexError::new_err(format!("Index {} out of bounds for max {}", index, max))
+            }
+            BulkFlowError::UninitializedField(field) => {
+                PyValueError::new_err(format!("Field '{}' is not initialized", field))
+            }
+            BulkFlowError::InvalidResolution(msg) => {
+                PyValueError::new_err(format!("Invalid resolution: {}", msg))
+            }
+            BulkFlowError::InvalidTimeRange { begin, end } => PyValueError::new_err(format!(
+                "Invalid time range: t_begin={} > t_end={}",
+                begin, end
+            )),
+            BulkFlowError::ArrayShapeMismatch(msg) => {
+                PyValueError::new_err(format!("Array shape mismatch: {}", msg))
+            }
+            BulkFlowError::ThreadPoolBuildError(msg) => {
+                PyValueError::new_err(format!("Building thread pool unsucessfully: {}", msg))
+            }
+        }
+    }
+}
 
 #[pyclass(name = "BulkFlow")]
 pub struct PyBulkFlow {
@@ -21,46 +62,45 @@ impl PyBulkFlow {
         bubbles_interior: PyReadonlyArray2<f64>,
         bubbles_exterior: Option<PyReadonlyArray2<f64>>,
     ) -> PyResult<Self> {
-        let interior_four_vectors = bubbles_interior.to_owned_array();
-        let exterior_four_vectors =
+        let bubbles_interior = bubbles_interior.to_owned_array();
+        let bubbles_exterior =
             bubbles_exterior.map_or(Array2::zeros((0, 4)), |arr| arr.to_owned_array());
-        Ok(PyBulkFlow {
-            inner: BulkFlow::new(interior_four_vectors, exterior_four_vectors),
-        })
+        let bulk_flow = BulkFlow::new(bubbles_interior, bubbles_exterior);
+        Ok(PyBulkFlow { inner: bulk_flow })
     }
 
     #[getter]
-    pub fn get_four_vectors_interior(&self, py: Python) -> PyResult<Py<PyArray2<f64>>> {
+    pub fn bubbles_interior(&self, py: Python) -> PyResult<Py<PyArray2<f64>>> {
         Ok(PyArray2::from_array(py, self.inner.bubbles_interior()).into())
     }
 
     #[getter]
-    pub fn get_four_vectors_exterior(&self, py: Python) -> PyResult<Py<PyArray2<f64>>> {
+    pub fn bubbles_exterior(&self, py: Python) -> PyResult<Py<PyArray2<f64>>> {
         Ok(PyArray2::from_array(py, self.inner.bubbles_exterior()).into())
     }
 
     #[setter]
-    pub fn set_four_vectors_interior(
+    pub fn set_bubbles_interior(
         &mut self,
-        four_vectors: PyReadonlyArray2<f64>,
+        bubbles_interior: PyReadonlyArray2<f64>,
     ) -> PyResult<()> {
-        let four_vectors = four_vectors.to_owned_array();
-        self.inner.set_interior_four_vectors(four_vectors);
+        self.inner
+            .set_bubbles_interior(bubbles_interior.to_owned_array());
         Ok(())
     }
 
     #[setter]
-    pub fn set_four_vectors_exterior(
+    pub fn set_bubbles_exterior(
         &mut self,
-        four_vectors: PyReadonlyArray2<f64>,
+        bubbles_exterior: PyReadonlyArray2<f64>,
     ) -> PyResult<()> {
-        let four_vectors = four_vectors.to_owned_array();
-        self.inner.set_exterior_four_vectors(four_vectors);
+        self.inner
+            .set_bubbles_exterior(bubbles_exterior.to_owned_array());
         Ok(())
     }
 
     #[getter]
-    pub fn get_delta(&self, py: Python) -> PyResult<Py<PyArray3<f64>>> {
+    pub fn delta(&self, py: Python) -> PyResult<Py<PyArray3<f64>>> {
         Ok(PyArray3::from_array(py, self.inner.delta()).into())
     }
 
@@ -72,7 +112,7 @@ impl PyBulkFlow {
     }
 
     #[getter]
-    pub fn get_coefficients_sets(&self, py: Python) -> PyResult<Py<PyArray2<f64>>> {
+    pub fn coefficients_sets(&self, py: Python) -> PyResult<Py<PyArray2<f64>>> {
         Ok(PyArray2::from_array(py, self.inner.coefficients_sets()).into())
     }
 
@@ -92,14 +132,14 @@ impl PyBulkFlow {
     }
 
     #[setter]
-    pub fn set_powers_sets(&mut self, powers_sets: PyReadonlyArray2<f64>) -> PyResult<()> {
+    pub fn powers_sets(&mut self, powers_sets: PyReadonlyArray2<f64>) -> PyResult<()> {
         let powers_sets = powers_sets.to_owned_array();
         self.inner.set_powers_sets(powers_sets);
         Ok(())
     }
 
     #[getter]
-    pub fn get_active_sets(&self, py: Python) -> PyResult<Py<PyArray1<bool>>> {
+    pub fn active_sets(&self, py: Python) -> PyResult<Py<PyArray1<bool>>> {
         Ok(PyArray1::from_array(py, self.inner.active_sets()).into())
     }
 
@@ -119,10 +159,11 @@ impl PyBulkFlow {
     ) -> PyResult<()> {
         self.inner
             .set_gradient_scaling_params(coefficients_sets, powers_sets, damping_factor)
-            .map_err(|e| PyValueError::new_err(e))
+            .map_err(PyBulkFlowError)?;
+        Ok(())
     }
 
-    pub fn compute_b_matrix(
+    pub fn compute_b_integral(
         &self,
         py: Python,
         cos_thetax: f64,
@@ -141,7 +182,12 @@ impl PyBulkFlow {
                     0 => CollisionStatus::NeverCollided,
                     1 => CollisionStatus::AlreadyCollided,
                     2 => CollisionStatus::NotYetCollided,
-                    _ => return Err(PyValueError::new_err("Invalid collision status")),
+                    _ => {
+                        return Err(PyValueError::new_err(format!(
+                            "Invalid collision status: {}",
+                            s.4
+                        )));
+                    }
                 };
                 let bubble_index = if s.3 == -1 {
                     BubbleIndex::None
@@ -159,20 +205,17 @@ impl PyBulkFlow {
                 })
             })
             .collect::<PyResult<Vec<_>>>()?;
-        let (b_plus_arr, b_minus_arr) = self.inner.compute_b_matrix(
-            cos_thetax,
-            &rust_segments,
-            t_nc_grid.view(),
-            idx,
-            delta_ta,
-        );
+        let (b_plus_arr, b_minus_arr) = self
+            .inner
+            .compute_b_integral(cos_thetax, &rust_segments, t_nc_grid.view(), idx, delta_ta)
+            .map_err(PyBulkFlowError)?;
         Ok((
             PyArray1::from_array(py, &b_plus_arr).into(),
             PyArray1::from_array(py, &b_minus_arr).into(),
         ))
     }
 
-    pub fn compute_a_matrix(
+    pub fn compute_a_integral(
         &self,
         py: Python,
         a_idx: usize,
@@ -192,13 +235,16 @@ impl PyBulkFlow {
             }
         });
         let delta_tab_grid = delta_tab_grid.to_owned_array();
-        let (a_plus, a_minus) = self.inner.compute_a_matrix(
-            a_idx,
-            w_arr.view(),
-            t,
-            first_bubble.view(),
-            delta_tab_grid.view(),
-        );
+        let (a_plus, a_minus) = self
+            .inner
+            .compute_a_integral(
+                a_idx,
+                w_arr.view(),
+                t,
+                first_bubble.view(),
+                delta_tab_grid.view(),
+            )
+            .map_err(PyBulkFlowError)?;
         let a_plus_numpy = a_plus.mapv(|c: RustComplex64| NumpyComplex64::new(c.re, c.im));
         let a_minus_numpy = a_minus.mapv(|c: RustComplex64| NumpyComplex64::new(c.re, c.im));
         Ok((
@@ -212,7 +258,10 @@ impl PyBulkFlow {
         py: Python,
         a_idx: usize,
     ) -> PyResult<Py<PyArray2<i32>>> {
-        let first_bubble = self.inner.compute_first_colliding_bubble(a_idx);
+        let first_bubble = self
+            .inner
+            .compute_first_colliding_bubble(a_idx)
+            .map_err(PyBulkFlowError)?;
         let first_bubble_int = first_bubble.mapv(|bi| match bi {
             BubbleIndex::None => -1i32,
             BubbleIndex::Interior(i) => i as i32,
@@ -236,7 +285,10 @@ impl PyBulkFlow {
                 BubbleIndex::Exterior((-i - 2) as usize)
             }
         });
-        let delta_tab_grid = self.inner.compute_delta_tab(a_idx, first_bubble.view());
+        let delta_tab_grid = self
+            .inner
+            .compute_delta_tab(a_idx, first_bubble.view())
+            .map_err(PyBulkFlowError)?;
         Ok(PyArray2::from_array(py, &delta_tab_grid).into())
     }
 
@@ -258,97 +310,107 @@ impl PyBulkFlow {
             }
         });
         let delta_tab_grid = delta_tab_grid.to_owned_array();
-        let collision_status = self.inner.compute_collision_status(
-            a_idx,
-            t,
-            first_bubble.view(),
-            delta_tab_grid.view(),
-        );
+        let collision_status = self
+            .inner
+            .compute_collision_status(a_idx, t, first_bubble.view(), delta_tab_grid.view())
+            .map_err(PyBulkFlowError)?;
         let collision_status_int = collision_status.mapv(|s| s as i32);
         Ok(PyArray2::from_array(py, &collision_status_int).into())
     }
 
-    // pub fn generate_segments(
-    //     &self,
-    //     first_bubble: PyReadonlyArray2<i32>,
-    //     collision_status: PyReadonlyArray2<i32>,
-    // ) -> PyResult<Vec<(f64, f64, f64, i32, i32)>> {
-    //     let first_bubble = first_bubble.to_owned_array().mapv(|i: i32| {
-    //         if i == -1 {
-    //             BubbleIndex::None
-    //         } else if i >= 0 {
-    //             BubbleIndex::Interior(i as usize)
-    //         } else {
-    //             BubbleIndex::Exterior((-i - 2) as usize)
-    //         }
-    //     });
-    //     let collision_status = collision_status.to_owned_array();
-    //     let segments = self
-    //         .inner
-    //         .generate_segments(first_bubble.view(), collision_status.view());
-    //     let py_segments: Vec<(f64, f64, f64, i32, i32)> = segments
-    //         .into_iter()
-    //         .map(|s| {
-    //             let status_int = match s.collision_status {
-    //                 CollisionStatus::NeverCollided => 0,
-    //                 CollisionStatus::AlreadyCollided => 1,
-    //                 CollisionStatus::NotYetCollided => 2,
-    //             };
-    //             let bubble_int = match s.bubble_index {
-    //                 BubbleIndex::None => -1,
-    //                 BubbleIndex::Interior(i) => i as i32,
-    //                 BubbleIndex::Exterior(i) => -((i as i32) + 2),
-    //             };
-    //             (
-    //                 s.cos_thetax,
-    //                 s.phi_lower,
-    //                 s.phi_upper,
-    //                 bubble_int,
-    //                 status_int,
-    //             )
-    //         })
-    //         .collect();
-    //     Ok(py_segments)
-    // }
+    pub fn generate_segments(
+        &self,
+        first_bubble: PyReadonlyArray2<i32>,
+        collision_status: PyReadonlyArray2<i32>,
+    ) -> PyResult<Vec<(f64, f64, f64, i32, i32)>> {
+        let first_bubble = first_bubble.to_owned_array().mapv(|i: i32| {
+            if i == -1 {
+                BubbleIndex::None
+            } else if i >= 0 {
+                BubbleIndex::Interior(i as usize)
+            } else {
+                BubbleIndex::Exterior((-i - 2) as usize)
+            }
+        });
+        let collision_status = collision_status.to_owned_array().mapv(|s: i32| match s {
+            0 => CollisionStatus::NeverCollided,
+            1 => CollisionStatus::AlreadyCollided,
+            2 => CollisionStatus::NotYetCollided,
+            _ => panic!("Invalid collision status: {}", s),
+        });
+        let segments = self
+            .inner
+            .generate_segments(first_bubble.view(), collision_status.view())
+            .map_err(PyBulkFlowError)?;
+        let segments_py: Vec<(f64, f64, f64, i32, i32)> = segments
+            .into_iter()
+            .map(|seg| {
+                let bubble_idx = match seg.bubble_index {
+                    BubbleIndex::None => -1,
+                    BubbleIndex::Interior(i) => i as i32,
+                    BubbleIndex::Exterior(i) => -((i as i32) + 2),
+                };
+                let collision_status = seg.collision_status as i32;
+                (
+                    seg.cos_thetax,
+                    seg.phi_lower,
+                    seg.phi_upper,
+                    bubble_idx,
+                    collision_status,
+                )
+            })
+            .collect();
+        Ok(segments_py)
+    }
 
     pub fn compute_c_integrand(
         &self,
         py: Python,
         w_arr: PyReadonlyArray1<f64>,
-        t_max: f64,
+        t_begin: Option<f64>,
+        t_end: f64,
         n_t: usize,
     ) -> PyResult<Py<PyArray4<NumpyComplex64>>> {
         let w_arr = w_arr.to_owned_array();
-        let integrand = self.inner.compute_c_integrand(w_arr.view(), t_max, n_t);
+        let integrand = self
+            .inner
+            .compute_c_integrand(w_arr.view(), t_begin, t_end, n_t)
+            .map_err(PyBulkFlowError)?;
         let integrand_numpy = integrand.mapv(|c: RustComplex64| NumpyComplex64::new(c.re, c.im));
         Ok(PyArray4::from_array(py, &integrand_numpy).into())
     }
 
-    pub fn compute_c_matrix(
+    pub fn compute_c_integral(
         &mut self,
         py: Python,
         w_arr: PyReadonlyArray1<f64>,
-        t_max: f64,
-        n_t: usize,
-    ) -> PyResult<Py<PyArray3<NumpyComplex64>>> {
-        let w_arr = w_arr.to_owned_array();
-        let c_matrix = self.inner.compute_c_matrix(w_arr.view(), t_max, n_t);
-        let c_matrix_numpy = c_matrix.mapv(|c: RustComplex64| NumpyComplex64::new(c.re, c.im));
-        Ok(PyArray3::from_array(py, &c_matrix_numpy).into())
-    }
-
-    pub fn compute_c_matrix_fixed_bubble(
-        &mut self,
-        py: Python,
-        a_idx: usize,
-        w_arr: PyReadonlyArray1<f64>,
-        t_max: f64,
+        t_begin: Option<f64>,
+        t_end: f64,
         n_t: usize,
     ) -> PyResult<Py<PyArray3<NumpyComplex64>>> {
         let w_arr = w_arr.to_owned_array();
         let c_matrix = self
             .inner
-            .compute_c_matrix_fixed_bubble(a_idx, w_arr.view(), t_max, n_t);
+            .compute_c_integral(w_arr.view(), t_begin, t_end, n_t)
+            .map_err(PyBulkFlowError)?;
+        let c_matrix_numpy = c_matrix.mapv(|c: RustComplex64| NumpyComplex64::new(c.re, c.im));
+        Ok(PyArray3::from_array(py, &c_matrix_numpy).into())
+    }
+
+    pub fn compute_c_integral_fixed_bubble(
+        &mut self,
+        py: Python,
+        a_idx: usize,
+        w_arr: PyReadonlyArray1<f64>,
+        t_begin: Option<f64>,
+        t_end: f64,
+        n_t: usize,
+    ) -> PyResult<Py<PyArray3<NumpyComplex64>>> {
+        let w_arr = w_arr.to_owned_array();
+        let c_matrix = self
+            .inner
+            .compute_c_integral_fixed_bubble(a_idx, w_arr.view(), t_begin, t_end, n_t)
+            .map_err(PyBulkFlowError)?;
         let c_matrix_numpy = c_matrix.mapv(|c: RustComplex64| NumpyComplex64::new(c.re, c.im));
         Ok(PyArray3::from_array(py, &c_matrix_numpy).into())
     }
@@ -361,7 +423,8 @@ impl PyBulkFlow {
         precompute_first_bubbles: bool,
     ) -> PyResult<()> {
         self.inner
-            .set_resolution(n_cos_thetax, n_phix, precompute_first_bubbles);
+            .set_resolution(n_cos_thetax, n_phix, precompute_first_bubbles)
+            .map_err(PyBulkFlowError)?;
         Ok(())
     }
 }

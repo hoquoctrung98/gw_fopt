@@ -8,7 +8,7 @@ use std::collections::HashSet;
 /// Enum representing the reason why the simulation stopped.
 #[derive(Debug, Clone, PartialEq)]
 pub enum SimulationEndStatus {
-    /// The simulation stopped because the time exceeded the specified `t_max`.
+    /// The simulation stopped because the time exceeded the specified `t_end`.
     TimeLimitReached {
         t_end: f64,
         volume_remaining_fraction: f64,
@@ -713,7 +713,7 @@ impl<S: NucleationStrategy> BubbleFormationSimulator<S> {
     ///
     /// # Arguments
     ///
-    /// * `t_max` - An optional maximum simulation time.
+    /// * `t_end` - An optional maximum simulation time.
     /// * `min_volume_remaining_fraction` - An optional minimum fraction of the total volume.
     ///   Defaults to 0.0 if not provided. The simulation stops if the remaining volume falls below this fraction.
     /// * `max_time_iterations` - An optional maximum number of time iterations for Poisson nucleation.
@@ -721,7 +721,7 @@ impl<S: NucleationStrategy> BubbleFormationSimulator<S> {
     /// The simulation's end status is stored in the `end_status` field.
     pub fn run_simulation(
         &mut self,
-        t_max: Option<f64>,
+        t_end: Option<f64>,
         min_volume_remaining_fraction: Option<f64>,
         max_time_iterations: Option<usize>,
     ) {
@@ -732,7 +732,7 @@ impl<S: NucleationStrategy> BubbleFormationSimulator<S> {
         let mut iteration_count = 0;
 
         loop {
-            if t_max.map_or(false, |t_max_val| t >= t_max_val) {
+            if t_end.map_or(false, |t_max_val| t >= t_max_val) {
                 self.end_status = Some(SimulationEndStatus::TimeLimitReached {
                     t_end: t,
                     volume_remaining_fraction: self.params.volume_remaining
