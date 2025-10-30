@@ -45,6 +45,9 @@ impl From<PyBulkFlowError> for PyErr {
             BulkFlowError::ThreadPoolBuildError(msg) => {
                 PyValueError::new_err(format!("Building thread pool unsucessfully: {}", msg))
             }
+            BulkFlowError::BubbleFormedInsideBubble { a_idx, b_idx } => PyValueError::new_err(
+                format!("Bubble {} is formed inside bubble {}", a_idx, b_idx),
+            ),
         }
     }
 }
@@ -65,7 +68,8 @@ impl PyBulkFlow {
         let bubbles_interior = bubbles_interior.to_owned_array();
         let bubbles_exterior =
             bubbles_exterior.map_or(Array2::zeros((0, 4)), |arr| arr.to_owned_array());
-        let bulk_flow = BulkFlow::new(bubbles_interior, bubbles_exterior);
+        let bulk_flow =
+            BulkFlow::new(bubbles_interior, bubbles_exterior).map_err(PyBulkFlowError)?;
         Ok(PyBulkFlow { inner: bulk_flow })
     }
 
@@ -79,23 +83,23 @@ impl PyBulkFlow {
         Ok(PyArray2::from_array(py, self.inner.bubbles_exterior()).into())
     }
 
-    #[setter]
     pub fn set_bubbles_interior(
         &mut self,
         bubbles_interior: PyReadonlyArray2<f64>,
     ) -> PyResult<()> {
         self.inner
-            .set_bubbles_interior(bubbles_interior.to_owned_array());
+            .set_bubbles_interior(bubbles_interior.to_owned_array())
+            .map_err(PyBulkFlowError)?;
         Ok(())
     }
 
-    #[setter]
     pub fn set_bubbles_exterior(
         &mut self,
         bubbles_exterior: PyReadonlyArray2<f64>,
     ) -> PyResult<()> {
         self.inner
-            .set_bubbles_exterior(bubbles_exterior.to_owned_array());
+            .set_bubbles_exterior(bubbles_exterior.to_owned_array())
+            .map_err(PyBulkFlowError)?;
         Ok(())
     }
 
@@ -104,7 +108,11 @@ impl PyBulkFlow {
         Ok(PyArray3::from_array(py, self.inner.delta()).into())
     }
 
-    #[setter]
+    #[getter]
+    pub fn delta_squared(&self, py: Python) -> PyResult<Py<PyArray2<f64>>> {
+        Ok(PyArray2::from_array(py, self.inner.delta_squared()).into())
+    }
+
     pub fn set_delta(&mut self, delta: PyReadonlyArray3<f64>) -> PyResult<()> {
         let delta = delta.to_owned_array();
         self.inner.set_delta(delta);
@@ -116,7 +124,6 @@ impl PyBulkFlow {
         Ok(PyArray2::from_array(py, self.inner.coefficients_sets()).into())
     }
 
-    #[setter]
     pub fn set_coefficients_sets(
         &mut self,
         coefficients_sets: PyReadonlyArray2<f64>,
@@ -131,8 +138,7 @@ impl PyBulkFlow {
         Ok(PyArray2::from_array(py, self.inner.powers_sets()).into())
     }
 
-    #[setter]
-    pub fn powers_sets(&mut self, powers_sets: PyReadonlyArray2<f64>) -> PyResult<()> {
+    pub fn set_powers_sets(&mut self, powers_sets: PyReadonlyArray2<f64>) -> PyResult<()> {
         let powers_sets = powers_sets.to_owned_array();
         self.inner.set_powers_sets(powers_sets);
         Ok(())
@@ -143,7 +149,6 @@ impl PyBulkFlow {
         Ok(PyArray1::from_array(py, self.inner.active_sets()).into())
     }
 
-    #[setter]
     pub fn set_active_sets(&mut self, active_sets: PyReadonlyArray1<bool>) -> PyResult<()> {
         let active_sets = active_sets.to_owned_array();
         self.inner.set_active_sets(active_sets);

@@ -677,7 +677,7 @@ wheels = [
 
 [[package]]
 name = "psweep"
-version = "0.14.0"
+version = "0.15.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "docopt" },
@@ -688,9 +688,9 @@ dependencies = [
     { name = "pyyaml" },
     { name = "tabulate" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/8b/ac/2c5460cb3762e58ddbcfa50a3004a9688016faa64bfbf8763d42feea26b7/psweep-0.14.0.tar.gz", hash = "sha256:950dbb5434ac751250d6600d0e56932292c0bee6ef92dd1108a0fa1efc3131d7", size = 30383, upload-time = "2025-03-30T19:49:06.03Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/23/a4/5eea5b322d10aeb26579552f795e736f17daeab63c0c38ec4ade61f25154/psweep-0.15.0.tar.gz", hash = "sha256:97601b1cd0677fa5584e02553054b71e67232696d488d8927961b45d0ceac887", size = 34237, upload-time = "2025-10-01T18:27:28.184Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/6f/69/1a2e5c3c1b9f0598c1fc15e49cea493e1035a178edeffcced578e4bad8d8/psweep-0.14.0-py3-none-any.whl", hash = "sha256:4c7bdf34fadf82b9cfd5eca4182ec444d20dcc5c18ac0a4b037ce170f88a7c28", size = 19733, upload-time = "2025-03-30T19:49:04.948Z" },
+    { url = "https://files.pythonhosted.org/packages/24/0e/f31b96b5ec2ca5c9806dc0d300439a4fe33c6fde184350b0f11694544035/psweep-0.15.0-py3-none-any.whl", hash = "sha256:0359f9bfe19fbca8fbb3970bcb07fffbb77f84ce814f376e860e4e02dc2a7758", size = 21835, upload-time = "2025-10-01T18:27:24.719Z" },
 ]
 
 [[package]]
@@ -760,7 +760,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.3.3" },
     { name = "pandas", specifier = ">=2.3.3" },
     { name = "polars", specifier = ">=1.34.0" },
-    { name = "psweep", specifier = "==0.14.0" },
+    { name = "psweep", specifier = ">=0.15.0" },
     { name = "pyqt6", specifier = ">=6.9.1" },
     { name = "scipy", specifier = ">=1.16.2" },
     { name = "seaborn", specifier = ">=0.13.2" },
