@@ -1,1574 +1,3 @@
-// use ndarray::{Array1, Array2, Array3, Array4, ArrayView1, ArrayView2, Axis, Zip, azip, s, stack};
-// use num_complex::Complex64;
-// use rayon::ThreadPool;
-// use rayon::prelude::*;
-// use std::error::Error;
-//
-// /// Represents a bubble index, distinguishing between an interior index, exterior index, and no collision.
-// #[derive(Debug, Copy, Clone, PartialEq)]
-// pub enum BubbleIndex {
-//     Interior(usize),
-//     Exterior(usize),
-//     None,
-// }
-//
-// /// Stores precomputed data to optimize collision and boundary calculations.
-// /// Contains 4-vector differences (`delta`), their squared Minkowski norms (`delta_squared`),
-// /// and an optional cache of first colliding bubble data (`first_colliding_bubbles`).
-// pub struct CachedData {
-//     delta: Array3<f64>,
-//     delta_squared: Array2<f64>,
-//     first_colliding_bubbles: Option<Array3<BubbleIndex>>,
-// }
-//
-// /// Represents the collision status of a direction relative to a reference bubble.
-// /// - `NeverCollided` (0): No collision occurs.
-// /// - `AlreadyCollided` (1): Collision has occurred.
-// /// - `NotYetCollided` (2): Collision will occur in the future.
-// #[derive(Debug, Copy, Clone, PartialEq)]
-// pub enum CollisionStatus {
-//     NeverCollided = 0,
-//     AlreadyCollided = 1,
-//     NotYetCollided = 2,
-// }
-//
-// /// Represents a segment of the angular grid with collision information.
-// /// Contains the cosine of the polar angle (`cos_thetax`), azimuthal angle bounds (`phi_lower`, `phi_upper`),
-// /// the index of the colliding bubble (`bubble_index`), and the collision status (`collision_status`).
-// #[derive(Debug, Clone, PartialEq)]
-// pub struct Segment {
-//     pub cos_thetax: f64,
-//     pub phi_lower: f64,
-//     pub phi_upper: f64,
-//     pub bubble_index: BubbleIndex,
-//     pub collision_status: CollisionStatus,
-// }
-//
-// /// Custom error type for BulkFlow operations.
-// #[derive(Debug)]
-// pub enum BulkFlowError {
-//     UninitializedField(String),
-//     InvalidIndex { index: usize, max: usize },
-//     InvalidResolution(String),
-//     InvalidTimeRange { begin: f64, end: f64 },
-//     ArrayShapeMismatch(String),
-//     ThreadPoolBuildError(String),
-// }
-//
-// impl std::fmt::Display for BulkFlowError {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         match self {
-//             BulkFlowError::UninitializedField(field) => {
-//                 write!(f, "Field '{}' is not initialized", field)
-//             }
-//             BulkFlowError::InvalidIndex { index, max } => {
-//                 write!(f, "Index {} out of bounds for max {}", index, max)
-//             }
-//             BulkFlowError::InvalidResolution(msg) => {
-//                 write!(f, "Invalid resolution: {}", msg)
-//             }
-//             BulkFlowError::InvalidTimeRange { begin, end } => {
-//                 write!(f, "Invalid time range: t_begin={} > t_end={}", begin, end)
-//             }
-//             BulkFlowError::ArrayShapeMismatch(msg) => {
-//                 write!(f, "Array shape mismatch: {}", msg)
-//             }
-//             BulkFlowError::ThreadPoolBuildError(msg) => {
-//                 write!(f, "Building thread pool unsucessfully: {}", msg)
-//             }
-//         }
-//     }
-// }
-//
-// impl Error for BulkFlowError {}
-//
-// /// Manages bulk flow calculations for a set of bubbles, including their 4-vectors, collision data,
-// /// and angular grid computations. Utilizes a thread pool for parallel processing and caches
-// /// precomputed data to improve performance. Angular resolutions (`n_cos_thetax`, `n_phix`) must
-// /// be set explicitly using `set_resolution` before computations.
-// pub struct BulkFlow {
-//     bubbles_interior: Array2<f64>,
-//     bubbles_exterior: Array2<f64>,
-//     cached_data: CachedData,
-//     coefficients_sets: Array2<f64>,
-//     powers_sets: Array2<f64>,
-//     damping_width: Option<f64>,
-//     active_bubbles: Array1<bool>,
-//     thread_pool: ThreadPool,
-//     n_cos_thetax: Option<usize>,
-//     n_phix: Option<usize>,
-//     cos_thetax: Option<Array1<f64>>,
-//     phix: Option<Array1<f64>>,
-//     direction_vectors: Option<Array3<f64>>,
-// }
-//
-// impl BulkFlow {
-//     /// Creates a new `BulkFlow` instance with the given bubble 4-vectors and indices for interior and exterior sets.
-//     /// Initializes precomputed `delta` and `delta_squared` arrays (from interior to all bubbles), sets up a thread pool,
-//     /// and configures default coefficient and power sets. Angular resolutions are set to None,
-//     /// requiring a call to `set_resolution` before computations.
-//     pub fn new(bubbles_interior: Array2<f64>, bubbles_exterior: Array2<f64>) -> Self {
-//         let n_interior = bubbles_interior.shape()[0];
-//         let n_exterior = bubbles_exterior.shape()[0];
-//         let n_total = n_interior + n_exterior;
-//         let mut delta = Array3::zeros((n_interior, n_total, 4));
-//         let mut delta_squared = Array2::zeros((n_interior, n_total));
-//         for a_idx in 0..n_interior {
-//             for b_idx in 0..n_interior {
-//                 if a_idx != b_idx {
-//                     delta.slice_mut(s![a_idx, b_idx, ..]).assign(
-//                         &(bubbles_interior.slice(s![b_idx, ..]).to_owned()
-//                             - bubbles_interior.slice(s![a_idx, ..]).to_owned()),
-//                     );
-//                     let delta_ba = delta.slice(s![a_idx, b_idx, ..]);
-//                     delta_squared[[a_idx, b_idx]] = dot_minkowski_vec(delta_ba, delta_ba);
-//                 }
-//             }
-//             for b_ex in 0..n_exterior {
-//                 let b_total = n_interior + b_ex;
-//                 delta.slice_mut(s![a_idx, b_total, ..]).assign(
-//                     &(bubbles_exterior.slice(s![b_ex, ..]).to_owned()
-//                         - bubbles_interior.slice(s![a_idx, ..]).to_owned()),
-//                 );
-//                 let delta_ba = delta.slice(s![a_idx, b_total, ..]);
-//                 delta_squared[[a_idx, b_total]] = dot_minkowski_vec(delta_ba, delta_ba);
-//             }
-//         }
-//         let cached_data = CachedData {
-//             delta,
-//             delta_squared,
-//             first_colliding_bubbles: None,
-//         };
-//         let default_threads = std::thread::available_parallelism()
-//             .map(|n| n.get())
-//             .unwrap_or(4);
-//         let thread_pool = rayon::ThreadPoolBuilder::new()
-//             .num_threads(default_threads)
-//             .build()
-//             .unwrap();
-//
-//         BulkFlow {
-//             bubbles_interior,
-//             bubbles_exterior,
-//             cached_data,
-//             coefficients_sets: Array2::from_elem((1, 1), 1.0),
-//             powers_sets: Array2::from_elem((1, 1), 3.0),
-//             damping_width: None,
-//             active_bubbles: Array1::from_elem(1, true),
-//             thread_pool,
-//             n_cos_thetax: None,
-//             n_phix: None,
-//             cos_thetax: None,
-//             phix: None,
-//             direction_vectors: None,
-//         }
-//     }
-//
-//     /// Computes the first colliding bubble index for each direction in the angular grid,
-//     /// returning a matrix where `BubbleIndex::None` indicates no collision.
-//     pub fn compute_first_colliding_bubble(
-//         &self,
-//         a_idx: usize,
-//     ) -> Result<Array2<BubbleIndex>, BulkFlowError> {
-//         let n_cos_thetax = self
-//             .n_cos_thetax
-//             .ok_or_else(|| BulkFlowError::UninitializedField("n_cos_thetax".to_string()))?;
-//         let n_phix = self
-//             .n_phix
-//             .ok_or_else(|| BulkFlowError::UninitializedField("n_phix".to_string()))?;
-//         let direction_vectors = self
-//             .direction_vectors
-//             .as_ref()
-//             .ok_or_else(|| BulkFlowError::UninitializedField("direction_vectors".to_string()))?;
-//         let n_interior = self.bubbles_interior.shape()[0];
-//         let n_exterior = self.bubbles_exterior.shape()[0];
-//         let n_total = n_interior + n_exterior;
-//         let mut first_bubble = Array2::from_elem((n_cos_thetax, n_phix), BubbleIndex::None);
-//         let tolerance = 1e-10;
-//
-//         for i in 0..n_cos_thetax {
-//             for j in 0..n_phix {
-//                 let x_vec = direction_vectors.slice(s![i, j, ..]);
-//                 let mut earliest_bubble_idx = BubbleIndex::None;
-//                 let mut earliest_delta_tab = f64::INFINITY;
-//
-//                 for b_total in 0..n_total {
-//                     let skip_self = b_total < n_interior && b_total == a_idx;
-//                     if skip_self {
-//                         continue;
-//                     }
-//                     let delta_ba = self.cached_data.delta.slice(s![a_idx, b_total, ..]);
-//                     let delta_ba_squared = self.cached_data.delta_squared[[a_idx, b_total]];
-//                     let dot_ba_x = dot_minkowski_vec(delta_ba, x_vec);
-//                     if dot_ba_x <= tolerance {
-//                         continue; // No future collision
-//                     }
-//                     let delta_tab = delta_ba_squared / (2.0 * dot_ba_x);
-//                     if delta_tab <= 0.0 || delta_tab >= earliest_delta_tab {
-//                         continue; // Not the earliest collision
-//                     }
-//                     let mut is_first = true;
-//                     for c_total in 0..n_total {
-//                         let skip_self_c = c_total < n_interior && c_total == a_idx;
-//                         if skip_self_c || c_total == b_total {
-//                             continue;
-//                         }
-//                         let delta_ca = self.cached_data.delta.slice(s![a_idx, c_total, ..]);
-//                         if !check_collision_point(delta_ba, delta_ca, x_vec) {
-//                             is_first = false;
-//                             break;
-//                         }
-//                     }
-//                     if is_first {
-//                         earliest_bubble_idx = if b_total < n_interior {
-//                             BubbleIndex::Interior(b_total)
-//                         } else {
-//                             BubbleIndex::Exterior(b_total - n_interior)
-//                         };
-//                         earliest_delta_tab = delta_tab;
-//                     }
-//                 }
-//                 first_bubble[[i, j]] = earliest_bubble_idx;
-//             }
-//         }
-//         Ok(first_bubble)
-//     }
-//
-//     /// Sets the angular resolutions and updates the associated grids (`cos_thetax`, `phix`, `direction_vectors`).
-//     /// Optionally precomputes the `first_colliding_bubbles` cache if `precompute_first_bubbles` is true.
-//     pub fn set_resolution(
-//         &mut self,
-//         n_cos_thetax: usize,
-//         n_phix: usize,
-//         precompute_first_bubbles: bool,
-//     ) -> Result<(), BulkFlowError> {
-//         if n_cos_thetax < 2 || n_phix < 2 {
-//             return Err(BulkFlowError::InvalidResolution(
-//                 "Angular resolutions must be greater than one".to_string(),
-//             ));
-//         }
-//         self.n_cos_thetax = Some(n_cos_thetax);
-//         self.n_phix = Some(n_phix);
-//         self.cos_thetax = Some(Array1::linspace(-1.0, 1.0, n_cos_thetax));
-//         self.phix = Some(Array1::linspace(0.0, 2.0 * std::f64::consts::PI, n_phix));
-//         let mut direction_vectors = Array3::zeros((n_cos_thetax, n_phix, 4));
-//         let cos_thetax = self.cos_thetax.as_ref().unwrap();
-//         let phix = self.phix.as_ref().unwrap();
-//         Zip::indexed(&mut direction_vectors).for_each(|(i, j, k), val| {
-//             let cos_thetax_val = cos_thetax[i];
-//             let sin_thetax = f64::sqrt(1.0 - cos_thetax_val * cos_thetax_val).abs();
-//             let phix_val = phix[j];
-//             *val = match k {
-//                 0 => 1.0,
-//                 1 => sin_thetax * phix_val.cos(),
-//                 2 => sin_thetax * phix_val.sin(),
-//                 3 => cos_thetax_val,
-//                 _ => unreachable!(),
-//             };
-//         });
-//         self.direction_vectors = Some(direction_vectors);
-//
-//         if precompute_first_bubbles {
-//             let n_interior = self.bubbles_interior.shape()[0];
-//             let first_bubble_arrays: Vec<Array2<BubbleIndex>> = self.thread_pool.install(|| {
-//                 (0..n_interior)
-//                     .into_par_iter()
-//                     .map(|a_idx| self.compute_first_colliding_bubble(a_idx).unwrap()) // Propagate Result in calling code
-//                     .collect()
-//             });
-//             let first_bubble_cache = stack(
-//                 Axis(0),
-//                 &first_bubble_arrays
-//                     .iter()
-//                     .map(|arr| arr.view())
-//                     .collect::<Vec<_>>(),
-//             )
-//             .map_err(|e| {
-//                 BulkFlowError::ArrayShapeMismatch(format!("Failed to stack arrays: {}", e))
-//             })?;
-//             self.cached_data.first_colliding_bubbles = Some(first_bubble_cache);
-//         } else {
-//             self.cached_data.first_colliding_bubbles = None;
-//         }
-//         Ok(())
-//     }
-//
-//     /// Sets the active bubble sets array.
-//     pub fn set_active_sets(&mut self, active_sets: Array1<bool>) {
-//         self.active_bubbles = active_sets;
-//     }
-//
-//     /// Returns a reference to the 4-vector array of interior bubbles.
-//     pub fn bubbles_interior(&self) -> &Array2<f64> {
-//         &self.bubbles_interior
-//     }
-//
-//     /// Returns a reference to the 4-vector array of exterior bubbles.
-//     pub fn bubbles_exterior(&self) -> &Array2<f64> {
-//         &self.bubbles_exterior
-//     }
-//
-//     /// Updates the interior 4-vector array and invalidates the first colliding bubble cache,
-//     /// recomputing `delta` and `delta_squared`.
-//     pub fn set_bubbles_interior(&mut self, bubbles_interior: Array2<f64>) {
-//         self.bubbles_interior = bubbles_interior;
-//         self.cached_data.first_colliding_bubbles = None;
-//         let n_interior = self.bubbles_interior.shape()[0];
-//         let n_exterior = self.bubbles_exterior.shape()[0];
-//         let n_total = n_interior + n_exterior;
-//         self.cached_data.delta = Array3::zeros((n_interior, n_total, 4));
-//         self.cached_data.delta_squared = Array2::zeros((n_interior, n_total));
-//         for a_idx in 0..n_interior {
-//             for b_idx in 0..n_interior {
-//                 if a_idx != b_idx {
-//                     self.cached_data
-//                         .delta
-//                         .slice_mut(s![a_idx, b_idx, ..])
-//                         .assign(
-//                             &(self.bubbles_interior.slice(s![b_idx, ..]).to_owned()
-//                                 - self.bubbles_interior.slice(s![a_idx, ..]).to_owned()),
-//                         );
-//                     let delta_ba = self.cached_data.delta.slice(s![a_idx, b_idx, ..]);
-//                     self.cached_data.delta_squared[[a_idx, b_idx]] =
-//                         dot_minkowski_vec(delta_ba, delta_ba);
-//                 }
-//             }
-//             for b_ex in 0..n_exterior {
-//                 let b_total = n_interior + b_ex;
-//                 self.cached_data
-//                     .delta
-//                     .slice_mut(s![a_idx, b_total, ..])
-//                     .assign(
-//                         &(self.bubbles_exterior.slice(s![b_ex, ..]).to_owned()
-//                             - self.bubbles_interior.slice(s![a_idx, ..]).to_owned()),
-//                     );
-//                 let delta_ba = self.cached_data.delta.slice(s![a_idx, b_total, ..]);
-//                 self.cached_data.delta_squared[[a_idx, b_total]] =
-//                     dot_minkowski_vec(delta_ba, delta_ba);
-//             }
-//         }
-//     }
-//
-//     /// Updates the exterior 4-vector array and invalidates the first colliding bubble cache,
-//     /// recomputing `delta` and `delta_squared`.
-//     pub fn set_bubbles_exterior(&mut self, bubbles_exterior: Array2<f64>) {
-//         self.bubbles_exterior = bubbles_exterior;
-//         self.cached_data.first_colliding_bubbles = None;
-//         let n_interior = self.bubbles_interior.shape()[0];
-//         let n_exterior = self.bubbles_exterior.shape()[0];
-//         let n_total = n_interior + n_exterior;
-//         self.cached_data.delta = Array3::zeros((n_interior, n_total, 4));
-//         self.cached_data.delta_squared = Array2::zeros((n_interior, n_total));
-//         for a_idx in 0..n_interior {
-//             for b_idx in 0..n_interior {
-//                 if a_idx != b_idx {
-//                     self.cached_data
-//                         .delta
-//                         .slice_mut(s![a_idx, b_idx, ..])
-//                         .assign(
-//                             &(self.bubbles_interior.slice(s![b_idx, ..]).to_owned()
-//                                 - self.bubbles_interior.slice(s![a_idx, ..]).to_owned()),
-//                         );
-//                     let delta_ba = self.cached_data.delta.slice(s![a_idx, b_idx, ..]);
-//                     self.cached_data.delta_squared[[a_idx, b_idx]] =
-//                         dot_minkowski_vec(delta_ba, delta_ba);
-//                 }
-//             }
-//             for b_ex in 0..n_exterior {
-//                 let b_total = n_interior + b_ex;
-//                 self.cached_data
-//                     .delta
-//                     .slice_mut(s![a_idx, b_total, ..])
-//                     .assign(
-//                         &(self.bubbles_exterior.slice(s![b_ex, ..]).to_owned()
-//                             - self.bubbles_interior.slice(s![a_idx, ..]).to_owned()),
-//                     );
-//                 let delta_ba = self.cached_data.delta.slice(s![a_idx, b_total, ..]);
-//                 self.cached_data.delta_squared[[a_idx, b_total]] =
-//                     dot_minkowski_vec(delta_ba, delta_ba);
-//             }
-//         }
-//     }
-//
-//     /// Returns a reference to the precomputed 4-vector difference array.
-//     pub fn delta(&self) -> &Array3<f64> {
-//         &self.cached_data.delta
-//     }
-//
-//     pub fn delta_squared(&self) -> &Array2<f64> {
-//         &self.cached_data.delta_squared
-//     }
-//
-//     /// Updates the precomputed 4-vector difference array.
-//     pub fn set_delta(&mut self, delta: Array3<f64>) {
-//         self.cached_data.delta = delta;
-//     }
-//
-//     /// Returns a reference to the coefficient sets array.
-//     pub fn coefficients_sets(&self) -> &Array2<f64> {
-//         &self.coefficients_sets
-//     }
-//
-//     /// Updates the coefficient sets array.
-//     pub fn set_coefficients_sets(&mut self, coefficients_sets: Array2<f64>) {
-//         self.coefficients_sets = coefficients_sets;
-//     }
-//
-//     /// Returns a reference to the power sets array.
-//     pub fn powers_sets(&self) -> &Array2<f64> {
-//         &self.powers_sets
-//     }
-//
-//     /// Updates the power sets array.
-//     pub fn set_powers_sets(&mut self, powers_sets: Array2<f64>) {
-//         self.powers_sets = powers_sets;
-//     }
-//
-//     /// Returns a reference to the array indicating active bubble sets.
-//     pub fn active_sets(&self) -> &Array1<bool> {
-//         &self.active_bubbles
-//     }
-//
-//     /// Updates the active sets array and related parameters based on coefficient and power sets.
-//     pub fn set_gradient_scaling_params(
-//         &mut self,
-//         coefficients_sets: Vec<Vec<f64>>,
-//         powers_sets: Vec<Vec<f64>>,
-//         damping_width: Option<f64>,
-//     ) -> Result<(), BulkFlowError> {
-//         let n_sets = coefficients_sets.len();
-//         let n_coeffs = coefficients_sets.first().map_or(0, |v| v.len());
-//         if coefficients_sets.iter().any(|v| v.len() != n_coeffs) {
-//             return Err(BulkFlowError::ArrayShapeMismatch(
-//                 "All coefficient sets must have the same length".to_string(),
-//             ));
-//         }
-//         let coefficients_sets = Array2::from_shape_vec(
-//             (n_sets, n_coeffs),
-//             coefficients_sets.into_iter().flatten().collect(),
-//         )
-//         .map_err(|_| {
-//             BulkFlowError::ArrayShapeMismatch("Invalid shape for coefficients_sets".to_string())
-//         })?;
-//
-//         let n_powers = powers_sets.len();
-//         let n_pows = powers_sets.first().map_or(0, |v| v.len());
-//         if powers_sets.iter().any(|v| v.len() != n_pows) {
-//             return Err(BulkFlowError::ArrayShapeMismatch(
-//                 "All power sets must have the same length".to_string(),
-//             ));
-//         }
-//         let powers_sets = Array2::from_shape_vec(
-//             (n_powers, n_pows),
-//             powers_sets.into_iter().flatten().collect(),
-//         )
-//         .map_err(|_| {
-//             BulkFlowError::ArrayShapeMismatch("Invalid shape for powers_sets".to_string())
-//         })?;
-//
-//         if n_sets != n_powers {
-//             return Err(BulkFlowError::ArrayShapeMismatch(
-//                 "Number of coefficient sets and power sets must be equal".to_string(),
-//             ));
-//         }
-//
-//         let mut active_bubbles = Array1::from_elem(n_sets, false);
-//         for s in 0..n_sets {
-//             let coeff_sum = coefficients_sets.slice(s![s, ..]).sum();
-//             if coeff_sum.abs() >= 1e-10 && (coeff_sum - 1.0).abs() > 1e-10 {
-//                 return Err(BulkFlowError::ArrayShapeMismatch(format!(
-//                     "Set {}: coefficients must sum to 0 or 1",
-//                     s
-//                 )));
-//             }
-//             active_bubbles[s] = coeff_sum.abs() > 1e-10;
-//         }
-//
-//         self.coefficients_sets = coefficients_sets;
-//         self.powers_sets = powers_sets;
-//         self.damping_width = damping_width;
-//         self.active_bubbles = active_bubbles;
-//         Ok(())
-//     }
-//
-//     /// Computes the collision status for each direction relative to a reference bubble at a given time.
-//     pub fn compute_collision_status(
-//         &self,
-//         a_idx: usize,
-//         t: f64,
-//         first_bubble: ArrayView2<BubbleIndex>,
-//         delta_tab_grid: ArrayView2<f64>,
-//     ) -> Result<Array2<CollisionStatus>, BulkFlowError> {
-//         let n_cos_thetax = self
-//             .n_cos_thetax
-//             .ok_or_else(|| BulkFlowError::UninitializedField("n_cos_thetax".to_string()))?;
-//         let n_phix = self
-//             .n_phix
-//             .ok_or_else(|| BulkFlowError::UninitializedField("n_phix".to_string()))?;
-//         if first_bubble.shape() != [n_cos_thetax, n_phix]
-//             || delta_tab_grid.shape() != [n_cos_thetax, n_phix]
-//         {
-//             return Err(BulkFlowError::ArrayShapeMismatch(format!(
-//                 "Input arrays must match resolution: expected [{}, {}], got first_bubble: {:?}, delta_tab_grid: {:?}",
-//                 n_cos_thetax,
-//                 n_phix,
-//                 first_bubble.shape(),
-//                 delta_tab_grid.shape()
-//             )));
-//         }
-//         let mut collision_status =
-//             Array2::from_elem((n_cos_thetax, n_phix), CollisionStatus::NeverCollided);
-//         let ta = self.bubbles_interior[[a_idx, 0]];
-//         let delta_ta = t - ta;
-//
-//         for i in 0..n_cos_thetax {
-//             for j in 0..n_phix {
-//                 match first_bubble[[i, j]] {
-//                     BubbleIndex::None => {
-//                         collision_status[[i, j]] = CollisionStatus::NeverCollided;
-//                         continue;
-//                     }
-//                     _ => (),
-//                 }
-//                 let delta_tab_val = delta_tab_grid[[i, j]];
-//                 if delta_tab_val > 0.0 && delta_ta >= delta_tab_val {
-//                     collision_status[[i, j]] = CollisionStatus::AlreadyCollided;
-//                 } else {
-//                     collision_status[[i, j]] = CollisionStatus::NotYetCollided;
-//                 }
-//             }
-//         }
-//
-//         Ok(collision_status)
-//     }
-//
-//     /// Generates a vector of `Segment` objects by grouping contiguous regions with the same
-//     /// bubble index and collision status across the angular grid.
-//     pub fn generate_segments(
-//         &self,
-//         first_bubble: ArrayView2<BubbleIndex>,
-//         collision_status: ArrayView2<CollisionStatus>,
-//     ) -> Result<Vec<Segment>, BulkFlowError> {
-//         let n_cos_thetax = self
-//             .n_cos_thetax
-//             .ok_or_else(|| BulkFlowError::UninitializedField("n_cos_thetax".to_string()))?;
-//         let n_phix = self
-//             .n_phix
-//             .ok_or_else(|| BulkFlowError::UninitializedField("n_phix".to_string()))?;
-//         let cos_thetax = self
-//             .cos_thetax
-//             .as_ref()
-//             .ok_or_else(|| BulkFlowError::UninitializedField("cos_thetax".to_string()))?;
-//         let phix = self
-//             .phix
-//             .as_ref()
-//             .ok_or_else(|| BulkFlowError::UninitializedField("phix".to_string()))?;
-//         if first_bubble.shape() != [n_cos_thetax, n_phix]
-//             || collision_status.shape() != [n_cos_thetax, n_phix]
-//         {
-//             return Err(BulkFlowError::ArrayShapeMismatch(format!(
-//                 "Input arrays must match resolution: expected [{}, {}], got first_bubble: {:?}, collision_status: {:?}",
-//                 n_cos_thetax,
-//                 n_phix,
-//                 first_bubble.shape(),
-//                 collision_status.shape()
-//             )));
-//         }
-//         let mut segments = Vec::with_capacity(n_cos_thetax * 10);
-//
-//         for i in 0..n_cos_thetax {
-//             let first_bubble_row = first_bubble.slice(s![i, ..]);
-//             let collision_status_row = collision_status.slice(s![i, ..]);
-//             let mut phi_left = phix[0];
-//             let mut current_bubble = first_bubble_row[0];
-//             let mut current_status = collision_status_row[0];
-//
-//             for (j, ((bubble, status), &phi_right)) in first_bubble_row
-//                 .iter()
-//                 .zip(collision_status_row.iter())
-//                 .zip(phix.iter())
-//                 .enumerate()
-//                 .skip(1)
-//             {
-//                 if *bubble != current_bubble || *status != current_status || j == n_phix - 1 {
-//                     if (phi_right - phi_left).abs() > 1e-10 {
-//                         segments.push(Segment {
-//                             cos_thetax: cos_thetax[i],
-//                             phi_lower: phi_left,
-//                             phi_upper: if j == n_phix - 1
-//                                 && *bubble == current_bubble
-//                                 && *status == current_status
-//                             {
-//                                 phix[n_phix - 1]
-//                             } else {
-//                                 phi_right
-//                             },
-//                             bubble_index: current_bubble,
-//                             collision_status: current_status,
-//                         });
-//                     }
-//                     phi_left = phi_right;
-//                     current_bubble = *bubble;
-//                     current_status = *status;
-//                 }
-//             }
-//         }
-//         Ok(segments)
-//     }
-//
-//     /// Computes the time differences (`delta_tab`) for each direction relative to a reference bubble.
-//     pub fn compute_delta_tab(
-//         &self,
-//         a_idx: usize,
-//         first_bubble: ArrayView2<BubbleIndex>,
-//     ) -> Result<Array2<f64>, BulkFlowError> {
-//         let n_cos_thetax = self
-//             .n_cos_thetax
-//             .ok_or_else(|| BulkFlowError::UninitializedField("n_cos_thetax".to_string()))?;
-//         let n_phix = self
-//             .n_phix
-//             .ok_or_else(|| BulkFlowError::UninitializedField("n_phix".to_string()))?;
-//         let direction_vectors = self
-//             .direction_vectors
-//             .as_ref()
-//             .ok_or_else(|| BulkFlowError::UninitializedField("direction_vectors".to_string()))?;
-//         if first_bubble.shape() != [n_cos_thetax, n_phix] {
-//             return Err(BulkFlowError::ArrayShapeMismatch(format!(
-//                 "First bubble array must match resolution: expected [{}, {}], got {:?}",
-//                 n_cos_thetax,
-//                 n_phix,
-//                 first_bubble.shape()
-//             )));
-//         }
-//         let n_interior = self.bubbles_interior.shape()[0];
-//         let mut delta_tab_grid = Array2::zeros((n_cos_thetax, n_phix));
-//
-//         for i in 0..n_cos_thetax {
-//             for j in 0..n_phix {
-//                 let b_total = match first_bubble[[i, j]] {
-//                     BubbleIndex::None => {
-//                         continue;
-//                     }
-//                     BubbleIndex::Interior(b_idx) => b_idx,
-//                     BubbleIndex::Exterior(b_idx) => n_interior + b_idx,
-//                 };
-//                 let delta_ba = self.cached_data.delta.slice(s![a_idx, b_total, ..]);
-//                 let x_vec = direction_vectors.slice(s![i, j, ..]);
-//                 let delta_ba_squared = self.cached_data.delta_squared[[a_idx, b_total]];
-//                 let dot_ba_x = dot_minkowski_vec(delta_ba, x_vec);
-//                 if dot_ba_x.abs() < 1e-10 {
-//                     delta_tab_grid[[i, j]] = 0.0;
-//                     continue;
-//                 }
-//                 let delta_tab_val = delta_ba_squared / (2.0 * dot_ba_x);
-//                 delta_tab_grid[[i, j]] = delta_tab_val;
-//             }
-//         }
-//
-//         Ok(delta_tab_grid)
-//     }
-//
-//     /// Computes the B-matrix components (`b_plus` and `b_minus`) for a given polar angle and segments.
-//     /// Incorporates collision status and performs numerical integration where needed.
-//     pub fn compute_b_integral(
-//         &self,
-//         cos_thetax: f64,
-//         segments: &[Segment],
-//         delta_tab_grid: ArrayView2<f64>,
-//         idx: usize,
-//         delta_ta: f64,
-//     ) -> Result<(Array1<f64>, Array1<f64>), BulkFlowError> {
-//         let n_cos_thetax = self
-//             .n_cos_thetax
-//             .ok_or_else(|| BulkFlowError::UninitializedField("n_cos_thetax".to_string()))?;
-//         let n_phix = self
-//             .n_phix
-//             .ok_or_else(|| BulkFlowError::UninitializedField("n_phix".to_string()))?;
-//         let n_sets = self.coefficients_sets.shape()[0];
-//         if idx >= n_cos_thetax {
-//             return Err(BulkFlowError::InvalidIndex {
-//                 index: idx,
-//                 max: n_cos_thetax,
-//             });
-//         }
-//         if delta_tab_grid.shape()[0] != n_cos_thetax || delta_tab_grid.shape()[1] != n_phix {
-//             return Err(BulkFlowError::ArrayShapeMismatch(format!(
-//                 "Delta tab grid must match resolution: expected [{}, {}], got {:?}",
-//                 n_cos_thetax,
-//                 n_phix,
-//                 delta_tab_grid.shape()
-//             )));
-//         }
-//         let sin_squared_thetax = 1.0 - cos_thetax.powi(2);
-//         let mut b_plus_arr = Array1::zeros(n_sets);
-//         let mut b_minus_arr = Array1::zeros(n_sets);
-//         let dphi_grid = 2.0 * std::f64::consts::PI / n_phix as f64;
-//         let phi_to_idx = n_phix as f64 / (2.0 * std::f64::consts::PI);
-//         let tolerance = 1e-10;
-//
-//         let delta_ta_cubed = if delta_ta > 0.0 {
-//             delta_ta.powi(3)
-//         } else {
-//             0.0
-//         };
-//
-//         for seg in segments.iter() {
-//             if (seg.cos_thetax - cos_thetax).abs() >= tolerance {
-//                 continue;
-//             }
-//             let phi_left = seg.phi_lower;
-//             let phi_right = seg.phi_upper;
-//             if (phi_right - phi_left).abs() < 1e-10 {
-//                 continue;
-//             }
-//             let status = seg.collision_status;
-//             if status == CollisionStatus::NeverCollided || status == CollisionStatus::NotYetCollided
-//             {
-//                 let sin_term = (2.0 * phi_right).sin() - (2.0 * phi_left).sin();
-//                 let cos_term = (2.0 * phi_right).cos() - (2.0 * phi_left).cos();
-//                 let scaling_factor = 0.25 * sin_squared_thetax * delta_ta_cubed;
-//                 for s in 0..n_sets {
-//                     b_plus_arr[s] += scaling_factor * sin_term;
-//                     b_minus_arr[s] += -scaling_factor * cos_term;
-//                 }
-//                 continue;
-//             } else if status == CollisionStatus::AlreadyCollided {
-//                 let segment_width = phi_right - phi_left;
-//                 let n_integration_points = (segment_width / dphi_grid).ceil().max(2.0) as usize;
-//                 let dphi = segment_width / (n_integration_points - 1) as f64;
-//
-//                 let mut sin_terms = Array1::zeros(n_integration_points);
-//                 let mut cos_terms = Array1::zeros(n_integration_points);
-//                 let mut time_ratios = Array1::zeros(n_integration_points);
-//                 let mut integration_weights = Array1::zeros(n_integration_points);
-//
-//                 for i in 0..n_integration_points {
-//                     let phi = phi_left + i as f64 * dphi;
-//                     sin_terms[i] = (2.0 * phi).sin();
-//                     cos_terms[i] = (2.0 * phi).cos();
-//                     let j_float = phi * phi_to_idx;
-//                     let j = (j_float.round() as usize).min(n_phix - 1).max(0);
-//                     let delta_tab = delta_tab_grid[[idx, j]];
-//                     time_ratios[i] = delta_tab / delta_ta;
-//                     integration_weights[i] = if i == 0 || i == n_integration_points - 1 {
-//                         1.0
-//                     } else {
-//                         2.0
-//                     };
-//                 }
-//
-//                 let mut integral_cos = Array1::zeros(n_sets);
-//                 let mut integral_sin = Array1::zeros(n_sets);
-//                 if delta_ta > 0.0 {
-//                     let active_indices: Vec<usize> =
-//                         (0..n_sets).filter(|&s| self.active_bubbles[s]).collect();
-//                     for &s in &active_indices {
-//                         let mut scaling_factors = Array1::zeros(n_integration_points);
-//                         azip!((factor in &mut scaling_factors, &ratio in &time_ratios) {
-//                             let mut f = 0.0;
-//                             for k in 0..self.coefficients_sets.shape()[1] {
-//                                 f += self.coefficients_sets[[s, k]] * ratio.powf(self.powers_sets[[s, k]]);
-//                             }
-//                             *factor = f * delta_ta_cubed;
-//                         });
-//                         if let Some(damping_width) = self.damping_width {
-//                             let damping_factor = (-delta_ta * (1.0 - time_ratios.clone())
-//                                 / damping_width)
-//                                 .mapv(|x| x.exp());
-//                             azip!((factor in &mut scaling_factors, &damp in &damping_factor) {
-//                                 *factor *= damp;
-//                             });
-//                         }
-//
-//                         let mut cos_sum = 0.0;
-//                         let mut sin_sum = 0.0;
-//                         azip!((factor in &scaling_factors, &cos_val in &cos_terms, &sin_val in &sin_terms, &weight in &integration_weights) {
-//                             cos_sum += weight * cos_val * factor;
-//                             sin_sum += weight * sin_val * factor;
-//                         });
-//                         integral_cos[s] = cos_sum;
-//                         integral_sin[s] = sin_sum;
-//                     }
-//                 }
-//
-//                 integral_cos *= dphi / 2.0;
-//                 integral_sin *= dphi / 2.0;
-//                 for s in 0..n_sets {
-//                     b_plus_arr[s] += 0.5 * sin_squared_thetax * integral_cos[s];
-//                     b_minus_arr[s] += 0.5 * sin_squared_thetax * integral_sin[s];
-//                 }
-//             }
-//         }
-//
-//         Ok((b_plus_arr, b_minus_arr))
-//     }
-//
-//     /// Computes the B-matrix components (`b_plus` and `b_minus`) for a given cos_thetax index and segments.
-//     pub fn compute_b_integral_new(
-//         &self,
-//         cos_thetax_idx: usize,
-//         segments: &[Segment],
-//         delta_tab_grid: ArrayView2<f64>,
-//         delta_ta: f64,
-//     ) -> Result<(Array1<f64>, Array1<f64>), BulkFlowError> {
-//         let n_cos_thetax = self
-//             .n_cos_thetax
-//             .ok_or_else(|| BulkFlowError::UninitializedField("n_cos_thetax".to_string()))?;
-//         let n_phix = self
-//             .n_phix
-//             .ok_or_else(|| BulkFlowError::UninitializedField("n_phix".to_string()))?;
-//         let cos_thetax_grid = self
-//             .cos_thetax
-//             .as_ref()
-//             .ok_or_else(|| BulkFlowError::UninitializedField("cos_thetax".to_string()))?;
-//         let n_sets = self.coefficients_sets.shape()[0];
-//         if cos_thetax_idx >= n_cos_thetax {
-//             return Err(BulkFlowError::InvalidIndex {
-//                 index: cos_thetax_idx,
-//                 max: n_cos_thetax,
-//             });
-//         }
-//         if delta_tab_grid.shape()[0] != n_cos_thetax || delta_tab_grid.shape()[1] != n_phix {
-//             return Err(BulkFlowError::ArrayShapeMismatch(format!(
-//                 "Delta tab grid must match resolution: expected [{}, {}], got {:?}",
-//                 n_cos_thetax,
-//                 n_phix,
-//                 delta_tab_grid.shape()
-//             )));
-//         }
-//         let cos_thetax = cos_thetax_grid[cos_thetax_idx];
-//         let sin_squared_thetax = 1.0 - cos_thetax.powi(2);
-//         let mut b_plus_arr = Array1::zeros(n_sets);
-//         let mut b_minus_arr = Array1::zeros(n_sets);
-//         let dphi_grid = 2.0 * std::f64::consts::PI / n_phix as f64;
-//         let phi_to_idx = n_phix as f64 / (2.0 * std::f64::consts::PI);
-//
-//         let delta_ta_cubed = if delta_ta > 0.0 {
-//             delta_ta.powi(3)
-//         } else {
-//             0.0
-//         };
-//
-//         for seg in segments.iter() {
-//             let phi_left = seg.phi_lower;
-//             let phi_right = seg.phi_upper;
-//             if (phi_right - phi_left).abs() < 1e-10 {
-//                 continue;
-//             }
-//             let status = seg.collision_status;
-//             if status == CollisionStatus::NeverCollided || status == CollisionStatus::NotYetCollided
-//             {
-//                 let sin_term = (2.0 * phi_right).sin() - (2.0 * phi_left).sin();
-//                 let cos_term = (2.0 * phi_right).cos() - (2.0 * phi_left).cos();
-//                 let scaling_factor = 0.25 * sin_squared_thetax * delta_ta_cubed;
-//                 for s in 0..n_sets {
-//                     b_plus_arr[s] += scaling_factor * sin_term;
-//                     b_minus_arr[s] += -scaling_factor * cos_term;
-//                 }
-//                 continue;
-//             } else if status == CollisionStatus::AlreadyCollided {
-//                 let segment_width = phi_right - phi_left;
-//                 let n_integration_points = (segment_width / dphi_grid).ceil().max(2.0) as usize;
-//                 let dphi = segment_width / (n_integration_points - 1) as f64;
-//
-//                 let mut sin_terms = Array1::zeros(n_integration_points);
-//                 let mut cos_terms = Array1::zeros(n_integration_points);
-//                 let mut time_ratios = Array1::zeros(n_integration_points);
-//                 let mut integration_weights = Array1::zeros(n_integration_points);
-//
-//                 for i in 0..n_integration_points {
-//                     let phi = phi_left + i as f64 * dphi;
-//                     sin_terms[i] = (2.0 * phi).sin();
-//                     cos_terms[i] = (2.0 * phi).cos();
-//                     let j_float = phi * phi_to_idx;
-//                     let j = (j_float.round() as usize).min(n_phix - 1).max(0);
-//                     let delta_tab = delta_tab_grid[[cos_thetax_idx, j]];
-//                     time_ratios[i] = delta_tab / delta_ta;
-//                     integration_weights[i] = if i == 0 || i == n_integration_points - 1 {
-//                         1.0
-//                     } else {
-//                         2.0
-//                     };
-//                 }
-//
-//                 let mut integral_cos = Array1::zeros(n_sets);
-//                 let mut integral_sin = Array1::zeros(n_sets);
-//                 if delta_ta > 0.0 {
-//                     let active_indices: Vec<usize> =
-//                         (0..n_sets).filter(|&s| self.active_bubbles[s]).collect();
-//                     for &s in &active_indices {
-//                         let mut scaling_factors = Array1::zeros(n_integration_points);
-//                         azip!((factor in &mut scaling_factors, &ratio in &time_ratios) {
-//                             let mut f = 0.0;
-//                             for k in 0..self.coefficients_sets.shape()[1] {
-//                                 f += self.coefficients_sets[[s, k]] * ratio.powf(self.powers_sets[[s, k]]);
-//                             }
-//                             *factor = f * delta_ta_cubed;
-//                         });
-//                         if let Some(damping_width) = self.damping_width {
-//                             let damping_factor = (-delta_ta * (1.0 - time_ratios.clone())
-//                                 / damping_width)
-//                                 .mapv(|x| x.exp());
-//                             azip!((factor in &mut scaling_factors, &damp in &damping_factor) {
-//                                 *factor *= damp;
-//                             });
-//                         }
-//
-//                         let mut cos_sum = 0.0;
-//                         let mut sin_sum = 0.0;
-//                         azip!((factor in &scaling_factors, &cos_val in &cos_terms, &sin_val in &sin_terms, &weight in &integration_weights) {
-//                             cos_sum += weight * cos_val * factor;
-//                             sin_sum += weight * sin_val * factor;
-//                         });
-//                         integral_cos[s] = cos_sum;
-//                         integral_sin[s] = sin_sum;
-//                     }
-//                 }
-//
-//                 integral_cos *= dphi / 2.0;
-//                 integral_sin *= dphi / 2.0;
-//                 for s in 0..n_sets {
-//                     b_plus_arr[s] += 0.5 * sin_squared_thetax * integral_cos[s];
-//                     b_minus_arr[s] += 0.5 * sin_squared_thetax * integral_sin[s];
-//                 }
-//             }
-//         }
-//
-//         Ok((b_plus_arr, b_minus_arr))
-//     }
-//
-//     /// Computes the A-matrix components (`a_plus` and `a_minus`) for a reference bubble,
-//     /// using frequency array, time, and angular grid data.
-//     pub fn compute_a_integral(
-//         &self,
-//         a_idx: usize,
-//         w_arr: ArrayView1<f64>,
-//         t: f64,
-//         first_bubble: ArrayView2<BubbleIndex>,
-//         delta_tab_grid: ArrayView2<f64>,
-//     ) -> Result<(Array2<Complex64>, Array2<Complex64>), BulkFlowError> {
-//         let n_cos_thetax = self
-//             .n_cos_thetax
-//             .ok_or_else(|| BulkFlowError::UninitializedField("n_cos_thetax".to_string()))?;
-//         let cos_thetax_grid = self
-//             .cos_thetax
-//             .as_ref()
-//             .ok_or_else(|| BulkFlowError::UninitializedField("cos_thetax".to_string()))?;
-//         let n_phix = self
-//             .n_phix
-//             .ok_or_else(|| BulkFlowError::UninitializedField("n_phix".to_string()))?;
-//         if first_bubble.shape() != [n_cos_thetax, n_phix]
-//             || delta_tab_grid.shape() != [n_cos_thetax, n_phix]
-//         {
-//             return Err(BulkFlowError::ArrayShapeMismatch(format!(
-//                 "Input arrays must match resolution: expected [{}, {}], got first_bubble: {:?}, delta_tab_grid: {:?}",
-//                 n_cos_thetax,
-//                 n_phix,
-//                 first_bubble.shape(),
-//                 delta_tab_grid.shape()
-//             )));
-//         }
-//         let n_w = w_arr.len();
-//         let n_sets = self.coefficients_sets.shape()[0];
-//         let ta = self.bubbles_interior[[a_idx, 0]];
-//         let delta_ta = t - ta;
-//         let collision_status =
-//             self.compute_collision_status(a_idx, t, first_bubble, delta_tab_grid)?;
-//         let segments = self.generate_segments(first_bubble, collision_status.view())?;
-//
-//         let mut a_plus = Array2::<Complex64>::zeros((n_sets, n_w));
-//         let mut a_minus = Array2::<Complex64>::zeros((n_sets, n_w));
-//         let dcos_thetax = 2.0 / (n_cos_thetax - 1) as f64;
-//         let tolerance = 1e-10;
-//
-//         for i in 0..n_cos_thetax {
-//             let cos_thetax_val = cos_thetax_grid[i];
-//             let relevant_segments: Vec<Segment> = segments
-//                 .iter()
-//                 .filter(|seg| (seg.cos_thetax - cos_thetax_val).abs() < tolerance)
-//                 .cloned()
-//                 .collect();
-//
-//             let (b_plus, b_minus) =
-//                 self.compute_b_integral_new(i, &relevant_segments, delta_tab_grid, delta_ta)?;
-//
-//             let phase_base = Complex64::new(0.0, -delta_ta * cos_thetax_val);
-//             let mut angular_phases = Array1::zeros(n_w);
-//             for w_idx in 0..n_w {
-//                 angular_phases[w_idx] = (w_arr[w_idx] * phase_base).exp();
-//             }
-//
-//             let weight = if i == 0 || i == n_cos_thetax - 1 {
-//                 0.5
-//             } else {
-//                 1.0
-//             };
-//             let phase_factors = angular_phases.mapv(|p| p * dcos_thetax * weight);
-//
-//             for s in 0..n_sets {
-//                 let b_plus_s = Complex64::new(b_plus[s], 0.0);
-//                 let b_minus_s = Complex64::new(b_minus[s], 0.0);
-//                 azip!((a_plus_val in a_plus.slice_mut(s![s, ..]), a_minus_val in a_minus.slice_mut(s![s, ..]), &factor in &phase_factors) {
-//                     *a_plus_val += b_plus_s * factor;
-//                     *a_minus_val += b_minus_s * factor;
-//                 });
-//             }
-//         }
-//
-//         Ok((a_plus, a_minus))
-//     }
-//
-//     /// Returns an array of shape (2, n_sets, n_w, n_t) containing integrand_dt_plus and integrand_dt_minus
-//     /// stacked along the first axis (0 for plus, 1 for minus).
-//     pub fn compute_c_integrand(
-//         &self,
-//         w_arr: ArrayView1<f64>,
-//         t_begin: Option<f64>,
-//         t_end: f64,
-//         n_t: usize,
-//     ) -> Result<Array4<Complex64>, BulkFlowError> {
-//         let n_interior = self.bubbles_interior.shape()[0];
-//         let n_sets = self.coefficients_sets.shape()[0];
-//         let n_w = w_arr.len();
-//         let t_begin = t_begin.unwrap_or(0.0);
-//         if t_begin > t_end {
-//             return Err(BulkFlowError::InvalidTimeRange {
-//                 begin: t_begin,
-//                 end: t_end,
-//             });
-//         }
-//         let t_arr = Array1::linspace(t_begin, t_end, n_t);
-//         let dt = if n_t > 1 { t_arr[1] - t_arr[0] } else { 0.0 };
-//
-//         let mut integrand = Array4::zeros((2, n_sets, n_w, n_t));
-//
-//         let z_a_vec: Vec<f64> = (0..n_interior)
-//             .map(|a_idx| self.bubbles_interior[[a_idx, 3]])
-//             .collect();
-//
-//         if let Some(first_colliding_bubbles) = self.cached_data.first_colliding_bubbles.as_ref() {
-//             let delta_tab_grids: Vec<Array2<f64>> = self.thread_pool.install(|| {
-//                 (0..n_interior)
-//                     .into_par_iter()
-//                     .map(|a_idx| {
-//                         let first_bubble = first_colliding_bubbles.slice(s![a_idx, .., ..]);
-//                         self.compute_delta_tab(a_idx, first_bubble).unwrap()
-//                     })
-//                     .collect()
-//             });
-//
-//             let results: Vec<(usize, Array2<Complex64>, Array2<Complex64>)> =
-//                 self.thread_pool.install(|| {
-//                     t_arr
-//                         .iter()
-//                         .enumerate()
-//                         .par_bridge()
-//                         .map(|(t_idx, &t)| {
-//                             let mut integrand_dt_plus: Array2<Complex64> =
-//                                 Array2::zeros((n_sets, n_w));
-//                             let mut integrand_dt_minus: Array2<Complex64> =
-//                                 Array2::zeros((n_sets, n_w));
-//
-//                             for a_idx in 0..n_interior {
-//                                 let t_nucleation = self.bubbles_interior[[a_idx, 0]];
-//                                 if t_nucleation >= t {
-//                                     continue;
-//                                 }
-//
-//                                 let first_bubble = first_colliding_bubbles.slice(s![a_idx, .., ..]);
-//                                 let delta_tab = delta_tab_grids[a_idx].view();
-//                                 let z_a = z_a_vec[a_idx];
-//                                 let (a_plus, a_minus) = self
-//                                     .compute_a_integral(a_idx, w_arr, t, first_bubble, delta_tab)
-//                                     .unwrap();
-//                                 for s in 0..n_sets {
-//                                     for w_idx in 0..n_w {
-//                                         let w = w_arr[w_idx];
-//                                         let complex_phase =
-//                                             Complex64::new(0.0, w * (t - z_a)).exp();
-//                                         let weight = if t_idx == 0 || t_idx == n_t - 1 {
-//                                             0.5
-//                                         } else {
-//                                             1.0
-//                                         };
-//                                         integrand_dt_plus[[s, w_idx]] +=
-//                                             a_plus[[s, w_idx]] * complex_phase * weight;
-//                                         integrand_dt_minus[[s, w_idx]] +=
-//                                             a_minus[[s, w_idx]] * complex_phase * weight;
-//                                     }
-//                                 }
-//                             }
-//
-//                             let dt_complex = Complex64::new(dt, 0.0);
-//                             integrand_dt_plus *= dt_complex;
-//                             integrand_dt_minus *= dt_complex;
-//
-//                             (t_idx, integrand_dt_plus, integrand_dt_minus)
-//                         })
-//                         .collect()
-//                 });
-//
-//             for (t_idx, integrand_dt_plus, integrand_dt_minus) in results {
-//                 for s in 0..n_sets {
-//                     for w_idx in 0..n_w {
-//                         integrand[[0, s, w_idx, t_idx]] = integrand_dt_plus[[s, w_idx]];
-//                         integrand[[1, s, w_idx, t_idx]] = integrand_dt_minus[[s, w_idx]];
-//                     }
-//                 }
-//             }
-//         } else {
-//             let results: Vec<(usize, Array2<Complex64>, Array2<Complex64>)> =
-//                 self.thread_pool.install(|| {
-//                     t_arr
-//                         .iter()
-//                         .enumerate()
-//                         .par_bridge()
-//                         .map(|(t_idx, &t)| {
-//                             let mut integrand_dt_plus: Array2<Complex64> =
-//                                 Array2::zeros((n_sets, n_w));
-//                             let mut integrand_dt_minus: Array2<Complex64> =
-//                                 Array2::zeros((n_sets, n_w));
-//
-//                             for a_idx in 0..n_interior {
-//                                 let t_nucleation = self.bubbles_interior[[a_idx, 0]];
-//                                 if t_nucleation >= t {
-//                                     continue;
-//                                 }
-//
-//                                 let first_bubble =
-//                                     self.compute_first_colliding_bubble(a_idx).unwrap();
-//                                 let delta_tab =
-//                                     self.compute_delta_tab(a_idx, first_bubble.view()).unwrap();
-//                                 let z_a = z_a_vec[a_idx];
-//                                 let (a_plus, a_minus) = self
-//                                     .compute_a_integral(
-//                                         a_idx,
-//                                         w_arr,
-//                                         t,
-//                                         first_bubble.view(),
-//                                         delta_tab.view(),
-//                                     )
-//                                     .unwrap();
-//                                 for s in 0..n_sets {
-//                                     for w_idx in 0..n_w {
-//                                         let w = w_arr[w_idx];
-//                                         let complex_phase =
-//                                             Complex64::new(0.0, w * (t - z_a)).exp();
-//                                         let weight = if t_idx == 0 || t_idx == n_t - 1 {
-//                                             0.5
-//                                         } else {
-//                                             1.0
-//                                         };
-//                                         integrand_dt_plus[[s, w_idx]] +=
-//                                             a_plus[[s, w_idx]] * complex_phase * weight;
-//                                         integrand_dt_minus[[s, w_idx]] +=
-//                                             a_minus[[s, w_idx]] * complex_phase * weight;
-//                                     }
-//                                 }
-//                             }
-//
-//                             let dt_complex = Complex64::new(dt, 0.0);
-//                             integrand_dt_plus *= dt_complex;
-//                             integrand_dt_minus *= dt_complex;
-//
-//                             (t_idx, integrand_dt_plus, integrand_dt_minus)
-//                         })
-//                         .collect()
-//                 });
-//
-//             for (t_idx, integrand_dt_plus, integrand_dt_minus) in results {
-//                 for s in 0..n_sets {
-//                     for w_idx in 0..n_w {
-//                         integrand[[0, s, w_idx, t_idx]] = integrand_dt_plus[[s, w_idx]];
-//                         integrand[[1, s, w_idx, t_idx]] = integrand_dt_minus[[s, w_idx]];
-//                     }
-//                 }
-//             }
-//         }
-//
-//         let factor = Complex64::new(1.0 / (6.0 * std::f64::consts::PI), 0.0);
-//         integrand *= factor;
-//
-//         Ok(integrand)
-//     }
-//
-//     /// Computes the C-matrix by integrating over time and bubble indices,
-//     /// returning a stacked array of `c_plus` and `c_minus` components.
-//     pub fn compute_c_integral(
-//         &mut self,
-//         w_arr: ArrayView1<f64>,
-//         t_begin: Option<f64>,
-//         t_end: f64,
-//         n_t: usize,
-//     ) -> Result<Array3<Complex64>, BulkFlowError> {
-//         let n_interior = self.bubbles_interior.shape()[0];
-//         let n_sets = self.coefficients_sets.shape()[0];
-//         let n_w = w_arr.len();
-//         let t_begin = t_begin.unwrap_or(0.0);
-//         if t_begin > t_end {
-//             return Err(BulkFlowError::InvalidTimeRange {
-//                 begin: t_begin,
-//                 end: t_end,
-//             });
-//         }
-//         let t_arr = Array1::linspace(t_begin, t_end, n_t);
-//         let dt = if n_t > 1 { t_arr[1] - t_arr[0] } else { 0.0 };
-//
-//         let z_a_vec: Vec<f64> = (0..n_interior)
-//             .map(|a_idx| self.bubbles_interior[[a_idx, 3]])
-//             .collect();
-//
-//         if let Some(first_colliding_bubbles) = self.cached_data.first_colliding_bubbles.as_ref() {
-//             let delta_tab_grid: Vec<Array2<f64>> = self.thread_pool.install(|| {
-//                 (0..n_interior)
-//                     .into_par_iter()
-//                     .map(|a_idx| {
-//                         self.compute_delta_tab(
-//                             a_idx,
-//                             first_colliding_bubbles.slice(s![a_idx, .., ..]),
-//                         )
-//                         .unwrap()
-//                     })
-//                     .collect()
-//             });
-//
-//             let (c_plus, c_minus) = self.thread_pool.install(|| {
-//                 t_arr
-//                     .iter()
-//                     .enumerate()
-//                     .par_bridge()
-//                     .fold(
-//                         || (Array2::zeros((n_sets, n_w)), Array2::zeros((n_sets, n_w))),
-//                         |(mut integral_plus, mut integral_minus), (t_idx, &t)| {
-//                             let mut integrand_dt_plus = Array2::zeros((n_sets, n_w));
-//                             let mut integrand_dt_minus = Array2::zeros((n_sets, n_w));
-//                             for a_idx in 0..n_interior {
-//                                 let t_nucleation = self.bubbles_interior[[a_idx, 0]];
-//                                 if t_nucleation >= t {
-//                                     continue;
-//                                 }
-//
-//                                 let z_a = z_a_vec[a_idx];
-//                                 let (a_plus, a_minus) = self
-//                                     .compute_a_integral(
-//                                         a_idx,
-//                                         w_arr,
-//                                         t,
-//                                         first_colliding_bubbles.slice(s![a_idx, .., ..]),
-//                                         delta_tab_grid[a_idx].view(),
-//                                     )
-//                                     .unwrap();
-//                                 for s in 0..n_sets {
-//                                     for w_idx in 0..n_w {
-//                                         let w = w_arr[w_idx];
-//                                         let complex_phase =
-//                                             Complex64::new(0.0, w * (t - z_a)).exp();
-//                                         let weight = if t_idx == 0 || t_idx == n_t - 1 {
-//                                             0.5
-//                                         } else {
-//                                             1.0
-//                                         };
-//                                         integrand_dt_plus[[s, w_idx]] +=
-//                                             a_plus[[s, w_idx]] * complex_phase * weight;
-//                                         integrand_dt_minus[[s, w_idx]] +=
-//                                             a_minus[[s, w_idx]] * complex_phase * weight;
-//                                     }
-//                                 }
-//                             }
-//                             let dt_complex = Complex64::new(dt, 0.0);
-//                             integrand_dt_plus *= dt_complex;
-//                             integrand_dt_minus *= dt_complex;
-//                             for s in 0..n_sets {
-//                                 for w_idx in 0..n_w {
-//                                     integral_plus[[s, w_idx]] += integrand_dt_plus[[s, w_idx]];
-//                                     integral_minus[[s, w_idx]] += integrand_dt_minus[[s, w_idx]];
-//                                 }
-//                             }
-//                             (integral_plus, integral_minus)
-//                         },
-//                     )
-//                     .reduce(
-//                         || (Array2::zeros((n_sets, n_w)), Array2::zeros((n_sets, n_w))),
-//                         |(plus1, minus1), (plus2, minus2)| (plus1 + plus2, minus1 + minus2),
-//                     )
-//             });
-//             let factor = Complex64::new(1.0 / (6.0 * std::f64::consts::PI), 0.0);
-//             let c_plus = c_plus * factor;
-//             let c_minus = c_minus * factor;
-//
-//             stack(Axis(0), &[c_plus.view(), c_minus.view()]).map_err(|e| {
-//                 BulkFlowError::ArrayShapeMismatch(format!("Failed to stack arrays: {}", e))
-//             })
-//         } else {
-//             let (c_plus, c_minus) = self.thread_pool.install(|| {
-//                 (0..n_interior)
-//                     .into_par_iter()
-//                     .fold(
-//                         || (Array2::zeros((n_sets, n_w)), Array2::zeros((n_sets, n_w))),
-//                         |(mut integral_plus, mut integral_minus), a_idx| {
-//                             let first_colliding_bubbles_with_a =
-//                                 self.compute_first_colliding_bubble(a_idx).unwrap();
-//                             let delta_tab = self
-//                                 .compute_delta_tab(a_idx, first_colliding_bubbles_with_a.view())
-//                                 .unwrap();
-//
-//                             for (t_idx, &t) in t_arr.iter().enumerate() {
-//                                 let t_nucleation = self.bubbles_interior[[a_idx, 0]];
-//                                 if t_nucleation >= t {
-//                                     continue;
-//                                 }
-//
-//                                 let z_a = z_a_vec[a_idx];
-//                                 let (a_plus, a_minus) = self
-//                                     .compute_a_integral(
-//                                         a_idx,
-//                                         w_arr,
-//                                         t,
-//                                         first_colliding_bubbles_with_a.view(),
-//                                         delta_tab.view(),
-//                                     )
-//                                     .unwrap();
-//                                 for s in 0..n_sets {
-//                                     for w_idx in 0..n_w {
-//                                         let w = w_arr[w_idx];
-//                                         let complex_phase =
-//                                             Complex64::new(0.0, w * (t - z_a)).exp();
-//                                         let weight = if t_idx == 0 || t_idx == n_t - 1 {
-//                                             0.5
-//                                         } else {
-//                                             1.0
-//                                         };
-//                                         integral_plus[[s, w_idx]] +=
-//                                             a_plus[[s, w_idx]] * complex_phase * weight * dt;
-//                                         integral_minus[[s, w_idx]] +=
-//                                             a_minus[[s, w_idx]] * complex_phase * weight * dt;
-//                                     }
-//                                 }
-//                             }
-//                             (integral_plus, integral_minus)
-//                         },
-//                     )
-//                     .reduce(
-//                         || (Array2::zeros((n_sets, n_w)), Array2::zeros((n_sets, n_w))),
-//                         |(plus1, minus1), (plus2, minus2)| (plus1 + plus2, minus1 + minus2),
-//                     )
-//             });
-//
-//             let factor = Complex64::new(1.0 / (6.0 * std::f64::consts::PI), 0.0);
-//             let c_plus = c_plus * factor;
-//             let c_minus = c_minus * factor;
-//
-//             stack(Axis(0), &[c_plus.view(), c_minus.view()]).map_err(|e| {
-//                 BulkFlowError::ArrayShapeMismatch(format!("Failed to stack arrays: {}", e))
-//             })
-//         }
-//     }
-//
-//     /// Computes the C-matrix by integrating over time and bubble indices for a given bubble index a_idx,
-//     /// returning a stacked array of `c_plus` and `c_minus` components.
-//     pub fn compute_c_integral_fixed_bubble(
-//         &mut self,
-//         a_idx: usize,
-//         w_arr: ArrayView1<f64>,
-//         t_begin: Option<f64>,
-//         t_end: f64,
-//         n_t: usize,
-//     ) -> Result<Array3<Complex64>, BulkFlowError> {
-//         let n_interior = self.bubbles_interior.shape()[0];
-//         let n_sets = self.coefficients_sets.shape()[0];
-//         let n_w = w_arr.len();
-//         let t_begin = t_begin.unwrap_or(0.0);
-//         if t_begin > t_end {
-//             return Err(BulkFlowError::InvalidTimeRange {
-//                 begin: t_begin,
-//                 end: t_end,
-//             });
-//         }
-//         let t_arr = Array1::linspace(t_begin, t_end, n_t);
-//         let dt = if n_t > 1 { t_arr[1] - t_arr[0] } else { 0.0 };
-//
-//         let z_a = self.bubbles_interior[[a_idx, 3]];
-//
-//         if let Some(first_colliding_bubbles) = self.cached_data.first_colliding_bubbles.as_ref() {
-//             let delta_tab_grid: Vec<Array2<f64>> = self.thread_pool.install(|| {
-//                 (0..n_interior)
-//                     .into_par_iter()
-//                     .map(|a_idx| {
-//                         self.compute_delta_tab(
-//                             a_idx,
-//                             first_colliding_bubbles.slice(s![a_idx, .., ..]),
-//                         )
-//                         .unwrap()
-//                     })
-//                     .collect()
-//             });
-//
-//             let (c_plus, c_minus) = self.thread_pool.install(|| {
-//                 t_arr
-//                     .iter()
-//                     .enumerate()
-//                     .par_bridge()
-//                     .fold(
-//                         || (Array2::zeros((n_sets, n_w)), Array2::zeros((n_sets, n_w))),
-//                         |(mut integral_plus, mut integral_minus), (t_idx, &t)| {
-//                             let mut integrand_dt_plus = Array2::zeros((n_sets, n_w));
-//                             let mut integrand_dt_minus = Array2::zeros((n_sets, n_w));
-//                             let t_nucleation = self.bubbles_interior[[a_idx, 0]];
-//                             if t_nucleation <= t {
-//                                 let (a_plus, a_minus) = self
-//                                     .compute_a_integral(
-//                                         a_idx,
-//                                         w_arr,
-//                                         t,
-//                                         first_colliding_bubbles.slice(s![a_idx, .., ..]),
-//                                         delta_tab_grid[a_idx].view(),
-//                                     )
-//                                     .unwrap();
-//                                 for s in 0..n_sets {
-//                                     for w_idx in 0..n_w {
-//                                         let w = w_arr[w_idx];
-//                                         let complex_phase =
-//                                             Complex64::new(0.0, w * (t - z_a)).exp();
-//                                         let weight = if t_idx == 0 || t_idx == n_t - 1 {
-//                                             0.5
-//                                         } else {
-//                                             1.0
-//                                         };
-//                                         integrand_dt_plus[[s, w_idx]] +=
-//                                             a_plus[[s, w_idx]] * complex_phase * weight;
-//                                         integrand_dt_minus[[s, w_idx]] +=
-//                                             a_minus[[s, w_idx]] * complex_phase * weight;
-//                                     }
-//                                 }
-//                                 let dt_complex = Complex64::new(dt, 0.0);
-//                                 integrand_dt_plus *= dt_complex;
-//                                 integrand_dt_minus *= dt_complex;
-//                                 for s in 0..n_sets {
-//                                     for w_idx in 0..n_w {
-//                                         integral_plus[[s, w_idx]] += integrand_dt_plus[[s, w_idx]];
-//                                         integral_minus[[s, w_idx]] +=
-//                                             integrand_dt_minus[[s, w_idx]];
-//                                     }
-//                                 }
-//                             }
-//                             (integral_plus, integral_minus)
-//                         },
-//                     )
-//                     .reduce(
-//                         || (Array2::zeros((n_sets, n_w)), Array2::zeros((n_sets, n_w))),
-//                         |(plus1, minus1), (plus2, minus2)| (plus1 + plus2, minus1 + minus2),
-//                     )
-//             });
-//             let factor = Complex64::new(1.0 / (6.0 * std::f64::consts::PI), 0.0);
-//             let c_plus = c_plus * factor;
-//             let c_minus = c_minus * factor;
-//             stack(Axis(0), &[c_plus.view(), c_minus.view()]).map_err(|e| {
-//                 BulkFlowError::ArrayShapeMismatch(format!("Failed to stack arrays: {}", e))
-//             })
-//         } else {
-//             let (c_plus, c_minus) = self.thread_pool.install(|| {
-//                 (0..n_interior)
-//                     .into_par_iter()
-//                     .fold(
-//                         || (Array2::zeros((n_sets, n_w)), Array2::zeros((n_sets, n_w))),
-//                         |(mut integral_plus, mut integral_minus), a_idx| {
-//                             let first_colliding_bubbles_with_a =
-//                                 self.compute_first_colliding_bubble(a_idx).unwrap();
-//                             let delta_tab = self
-//                                 .compute_delta_tab(a_idx, first_colliding_bubbles_with_a.view())
-//                                 .unwrap();
-//
-//                             for (t_idx, &t) in t_arr.iter().enumerate() {
-//                                 let t_nucleation = self.bubbles_interior[[a_idx, 0]];
-//                                 if t_nucleation >= t {
-//                                     continue;
-//                                 }
-//
-//                                 let (a_plus, a_minus) = self
-//                                     .compute_a_integral(
-//                                         a_idx,
-//                                         w_arr,
-//                                         t,
-//                                         first_colliding_bubbles_with_a.view(),
-//                                         delta_tab.view(),
-//                                     )
-//                                     .unwrap();
-//                                 for s in 0..n_sets {
-//                                     for w_idx in 0..n_w {
-//                                         let w = w_arr[w_idx];
-//                                         let complex_phase =
-//                                             Complex64::new(0.0, w * (t - z_a)).exp();
-//                                         let weight = if t_idx == 0 || t_idx == n_t - 1 {
-//                                             0.5
-//                                         } else {
-//                                             1.0
-//                                         };
-//                                         integral_plus[[s, w_idx]] +=
-//                                             a_plus[[s, w_idx]] * complex_phase * weight * dt;
-//                                         integral_minus[[s, w_idx]] +=
-//                                             a_minus[[s, w_idx]] * complex_phase * weight * dt;
-//                                     }
-//                                 }
-//                             }
-//                             (integral_plus, integral_minus)
-//                         },
-//                     )
-//                     .reduce(
-//                         || (Array2::zeros((n_sets, n_w)), Array2::zeros((n_sets, n_w))),
-//                         |(plus1, minus1), (plus2, minus2)| (plus1 + plus2, minus1 + minus2),
-//                     )
-//             });
-//
-//             let factor = Complex64::new(1.0 / (6.0 * std::f64::consts::PI), 0.0);
-//             let c_plus = c_plus * factor;
-//             let c_minus = c_minus * factor;
-//
-//             stack(Axis(0), &[c_plus.view(), c_minus.view()]).map_err(|e| {
-//                 BulkFlowError::ArrayShapeMismatch(format!("Failed to stack arrays: {}", e))
-//             })
-//         }
-//     }
-// }
-//
-// /// Computes the Minkowski dot product of two 4-vectors using the (-, +, +, +) metric.
-// pub fn dot_minkowski_vec(v1: ArrayView1<f64>, v2: ArrayView1<f64>) -> f64 {
-//     assert!(v1.len() == 4 && v2.len() == 4, "4-vectors required");
-//     let mut sum = 0.0;
-//     unsafe {
-//         for i in 0..4 {
-//             let t1 = *v1.uget(i);
-//             let t2 = *v2.uget(i);
-//             sum += if i == 0 { -t1 * t2 } else { t1 * t2 };
-//         }
-//     }
-//     sum
-// }
-//
-// /// Determines if bubble `b` is the first to collide with a direction `x` relative to bubble `a`,
-// /// considering potential earlier collisions with other bubbles `c`.
-// pub fn check_collision_point(
-//     delta_ba: ArrayView1<f64>,
-//     delta_ca: ArrayView1<f64>,
-//     x: ArrayView1<f64>,
-// ) -> bool {
-//     let delta_ba_dot_x = dot_minkowski_vec(delta_ba, x);
-//     if delta_ba_dot_x <= 0.0 {
-//         return false;
-//     }
-//
-//     let delta_ba_norm = dot_minkowski_vec(delta_ba, delta_ba);
-//     let delta_ca_norm = dot_minkowski_vec(delta_ca, delta_ca);
-//
-//     let collision_vec = {
-//         let delta_ba_scaled = delta_ba.mapv(|v| v * delta_ca_norm);
-//         let delta_ca_scaled = delta_ca.mapv(|v| v * delta_ba_norm);
-//         delta_ba_scaled - delta_ca_scaled
-//     };
-//
-//     let dot_collision_x = dot_minkowski_vec(collision_vec.view(), x);
-//     dot_collision_x > 0.0
-// }
-
 use ndarray::{Array1, Array2, Array3, Array4, ArrayView1, ArrayView2, Axis, Zip, azip, s, stack};
 use num_complex::Complex64;
 use rayon::ThreadPool;
@@ -1598,12 +27,12 @@ pub enum CollisionStatus {
     NotYetCollided = 2,
 }
 
-/// Represents a segment of the angular grid with collision information.
+/// Represents a segment of the angular grid with collision information, using grid indices.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Segment {
-    pub cos_thetax: f64,
-    pub phi_lower: f64,
-    pub phi_upper: f64,
+    pub cos_thetax_idx: usize, // Index in cos_thetax grid
+    pub phi_lower_idx: usize,  // Index in phix grid for lower bound
+    pub phi_upper_idx: usize,  // Index in phix grid for upper bound
     pub bubble_index: BubbleIndex,
     pub collision_status: CollisionStatus,
 }
@@ -1748,7 +177,6 @@ impl BulkFlow {
     }
 
     /// Checks if any bubble is contained within another at the initial time.
-    /// Returns an error with the first pair of indices causing containment.
     fn check_bubble_containment(
         bubbles_interior: &Array2<f64>,
         bubbles_exterior: &Array2<f64>,
@@ -1818,7 +246,6 @@ impl BulkFlow {
         let mut delta = Array3::zeros((n_interior, n_total, 4));
         let mut delta_squared = Array2::zeros((n_interior, n_total));
         for a_idx in 0..n_interior {
-            // Interior to interior (upper triangular and diagonal)
             for b_idx in a_idx..n_interior {
                 if a_idx != b_idx {
                     let delta_ba = self.bubbles_interior.slice(s![b_idx, ..]).to_owned()
@@ -1826,12 +253,10 @@ impl BulkFlow {
                     delta.slice_mut(s![a_idx, b_idx, ..]).assign(&delta_ba);
                     delta_squared[[a_idx, b_idx]] =
                         dot_minkowski_vec(delta_ba.view(), delta_ba.view());
-                    // Symmetry
                     delta.slice_mut(s![b_idx, a_idx, ..]).assign(&(-&delta_ba));
                     delta_squared[[b_idx, a_idx]] = delta_squared[[a_idx, b_idx]];
                 }
             }
-            // Interior to exterior
             for b_ex in 0..n_exterior {
                 let b_total = n_interior + b_ex;
                 let delta_ba = self.bubbles_exterior.slice(s![b_ex, ..]).to_owned()
@@ -1842,7 +267,6 @@ impl BulkFlow {
             }
         }
 
-        // Check for bubble containment
         Self::check_bubble_containment(
             &self.bubbles_interior,
             &self.bubbles_exterior,
@@ -1870,11 +294,9 @@ impl BulkFlow {
         let n_exterior = self.bubbles_exterior.shape()[0];
         let n_total = n_interior + n_exterior;
 
-        // Recompute delta and delta_squared using symmetry
         let mut delta = Array3::zeros((n_interior, n_total, 4));
         let mut delta_squared = Array2::zeros((n_interior, n_total));
         for a_idx in 0..n_interior {
-            // Interior to interior (upper triangular and diagonal)
             for b_idx in a_idx..n_interior {
                 if a_idx != b_idx {
                     let delta_ba = self.bubbles_interior.slice(s![b_idx, ..]).to_owned()
@@ -1882,12 +304,10 @@ impl BulkFlow {
                     delta.slice_mut(s![a_idx, b_idx, ..]).assign(&delta_ba);
                     delta_squared[[a_idx, b_idx]] =
                         dot_minkowski_vec(delta_ba.view(), delta_ba.view());
-                    // Symmetry
                     delta.slice_mut(s![b_idx, a_idx, ..]).assign(&(-&delta_ba));
                     delta_squared[[b_idx, a_idx]] = delta_squared[[a_idx, b_idx]];
                 }
             }
-            // Interior to exterior
             for b_ex in 0..n_exterior {
                 let b_total = n_interior + b_ex;
                 let delta_ba = self.bubbles_exterior.slice(s![b_ex, ..]).to_owned()
@@ -1898,7 +318,6 @@ impl BulkFlow {
             }
         }
 
-        // Check for bubble containment
         Self::check_bubble_containment(
             &self.bubbles_interior,
             &self.bubbles_exterior,
@@ -1910,7 +329,6 @@ impl BulkFlow {
         Ok(())
     }
 
-    // Remaining methods are unchanged from the original
     pub fn compute_first_colliding_bubble(
         &self,
         a_idx: usize,
@@ -2007,13 +425,12 @@ impl BulkFlow {
                 1 => sin_thetax * phix_val.cos(),
                 2 => sin_thetax * phix_val.sin(),
                 3 => cos_thetax_val,
-                _ => 0.0, // Safety for unexpected k
+                _ => 0.0,
             };
         });
 
         self.direction_vectors = Some(direction_vectors);
 
-        // Precompute first colliding bubbles if requested
         if precompute_first_bubbles {
             let first_colliding_bubbles: Vec<Array2<BubbleIndex>> =
                 self.thread_pool.install(|| {
@@ -2038,7 +455,6 @@ impl BulkFlow {
             self.cached_data.first_colliding_bubbles = None;
         }
 
-        // Recompute delta and delta_squared to ensure consistency
         let n_interior = self.bubbles_interior.shape()[0];
         let n_exterior = self.bubbles_exterior.shape()[0];
         let n_total = n_interior + n_exterior;
@@ -2046,7 +462,6 @@ impl BulkFlow {
         let mut delta_squared = Array2::zeros((n_interior, n_total));
 
         for a_idx in 0..n_interior {
-            // Interior to interior (upper triangular and diagonal)
             for b_idx in a_idx..n_interior {
                 if a_idx != b_idx {
                     let delta_ba = self.bubbles_interior.slice(s![b_idx, ..]).to_owned()
@@ -2058,7 +473,6 @@ impl BulkFlow {
                     delta_squared[[b_idx, a_idx]] = delta_squared[[a_idx, b_idx]];
                 }
             }
-            // Interior to exterior
             for b_ex in 0..n_exterior {
                 let b_total = n_interior + b_ex;
                 let delta_ba = self.bubbles_exterior.slice(s![b_ex, ..]).to_owned()
@@ -2069,7 +483,6 @@ impl BulkFlow {
             }
         }
 
-        // Check for bubble containment
         Self::check_bubble_containment(
             &self.bubbles_interior,
             &self.bubbles_exterior,
@@ -2119,11 +532,23 @@ impl BulkFlow {
     }
 
     pub fn set_powers_sets(&mut self, powers_sets: Array2<f64>) {
-        self.powers_sets = powers_sets
+        self.powers_sets = powers_sets;
     }
 
     pub fn active_sets(&self) -> &Array1<bool> {
         &self.active_bubbles
+    }
+
+    pub fn cos_thetax(&self) -> Result<&Array1<f64>, BulkFlowError> {
+        self.cos_thetax
+            .as_ref()
+            .ok_or_else(|| BulkFlowError::UninitializedField("cos_thetax".to_string()))
+    }
+
+    pub fn phix(&self) -> Result<&Array1<f64>, BulkFlowError> {
+        self.phix
+            .as_ref()
+            .ok_or_else(|| BulkFlowError::UninitializedField("phix".to_string()))
     }
 
     pub fn set_gradient_scaling_params(
@@ -2248,14 +673,6 @@ impl BulkFlow {
         let n_phix = self
             .n_phix
             .ok_or_else(|| BulkFlowError::UninitializedField("n_phix".to_string()))?;
-        let cos_thetax = self
-            .cos_thetax
-            .as_ref()
-            .ok_or_else(|| BulkFlowError::UninitializedField("cos_thetax".to_string()))?;
-        let phix = self
-            .phix
-            .as_ref()
-            .ok_or_else(|| BulkFlowError::UninitializedField("phix".to_string()))?;
         if first_bubble.shape() != [n_cos_thetax, n_phix]
             || collision_status.shape() != [n_cos_thetax, n_phix]
         {
@@ -2272,37 +689,34 @@ impl BulkFlow {
         for i in 0..n_cos_thetax {
             let first_bubble_row = first_bubble.slice(s![i, ..]);
             let collision_status_row = collision_status.slice(s![i, ..]);
-            let mut phi_left = phix[0];
+            let mut phi_left_idx = 0;
             let mut current_bubble = first_bubble_row[0];
             let mut current_status = collision_status_row[0];
 
-            for (j, ((bubble, status), &phi_right)) in first_bubble_row
-                .iter()
-                .zip(collision_status_row.iter())
-                .zip(phix.iter())
-                .enumerate()
-                .skip(1)
-            {
-                if *bubble != current_bubble || *status != current_status || j == n_phix - 1 {
-                    if (phi_right - phi_left).abs() > 1e-10 {
+            for j in 1..n_phix {
+                let bubble = first_bubble_row[j];
+                let status = collision_status_row[j];
+                if bubble != current_bubble || status != current_status || j == n_phix - 1 {
+                    if j > phi_left_idx {
+                        let phi_upper_idx = if j == n_phix - 1
+                            && bubble == current_bubble
+                            && status == current_status
+                        {
+                            n_phix - 1
+                        } else {
+                            j
+                        };
                         segments.push(Segment {
-                            cos_thetax: cos_thetax[i],
-                            phi_lower: phi_left,
-                            phi_upper: if j == n_phix - 1
-                                && *bubble == current_bubble
-                                && *status == current_status
-                            {
-                                phix[n_phix - 1]
-                            } else {
-                                phi_right
-                            },
+                            cos_thetax_idx: i,
+                            phi_lower_idx: phi_left_idx,
+                            phi_upper_idx,
                             bubble_index: current_bubble,
                             collision_status: current_status,
                         });
                     }
-                    phi_left = phi_right;
-                    current_bubble = *bubble;
-                    current_status = *status;
+                    phi_left_idx = j;
+                    current_bubble = bubble;
+                    current_status = status;
                 }
             }
         }
@@ -2362,139 +776,6 @@ impl BulkFlow {
 
     pub fn compute_b_integral(
         &self,
-        cos_thetax: f64,
-        segments: &[Segment],
-        delta_tab_grid: ArrayView2<f64>,
-        idx: usize,
-        delta_ta: f64,
-    ) -> Result<(Array1<f64>, Array1<f64>), BulkFlowError> {
-        let n_cos_thetax = self
-            .n_cos_thetax
-            .ok_or_else(|| BulkFlowError::UninitializedField("n_cos_thetax".to_string()))?;
-        let n_phix = self
-            .n_phix
-            .ok_or_else(|| BulkFlowError::UninitializedField("n_phix".to_string()))?;
-        let n_sets = self.coefficients_sets.shape()[0];
-        if idx >= n_cos_thetax {
-            return Err(BulkFlowError::InvalidIndex {
-                index: idx,
-                max: n_cos_thetax,
-            });
-        }
-        if delta_tab_grid.shape()[0] != n_cos_thetax || delta_tab_grid.shape()[1] != n_phix {
-            return Err(BulkFlowError::ArrayShapeMismatch(format!(
-                "Delta tab grid must match resolution: expected [{}, {}], got {:?}",
-                n_cos_thetax,
-                n_phix,
-                delta_tab_grid.shape()
-            )));
-        }
-        let sin_squared_thetax = 1.0 - cos_thetax.powi(2);
-        let mut b_plus_arr = Array1::zeros(n_sets);
-        let mut b_minus_arr = Array1::zeros(n_sets);
-        let dphi_grid = 2.0 * std::f64::consts::PI / n_phix as f64;
-        let phi_to_idx = n_phix as f64 / (2.0 * std::f64::consts::PI);
-        let tolerance = 1e-10;
-
-        let delta_ta_cubed = if delta_ta > 0.0 {
-            delta_ta.powi(3)
-        } else {
-            0.0
-        };
-
-        for seg in segments.iter() {
-            if (seg.cos_thetax - cos_thetax).abs() >= tolerance {
-                continue;
-            }
-            let phi_left = seg.phi_lower;
-            let phi_right = seg.phi_upper;
-            if (phi_right - phi_left).abs() < 1e-10 {
-                continue;
-            }
-            let status = seg.collision_status;
-            if status == CollisionStatus::NeverCollided || status == CollisionStatus::NotYetCollided
-            {
-                let sin_term = (2.0 * phi_right).sin() - (2.0 * phi_left).sin();
-                let cos_term = (2.0 * phi_right).cos() - (2.0 * phi_left).cos();
-                let scaling_factor = 0.25 * sin_squared_thetax * delta_ta_cubed;
-                for s in 0..n_sets {
-                    b_plus_arr[s] += scaling_factor * sin_term;
-                    b_minus_arr[s] += -scaling_factor * cos_term;
-                }
-                continue;
-            } else if status == CollisionStatus::AlreadyCollided {
-                let segment_width = phi_right - phi_left;
-                let n_integration_points = (segment_width / dphi_grid).ceil().max(2.0) as usize;
-                let dphi = segment_width / (n_integration_points - 1) as f64;
-
-                let mut sin_terms = Array1::zeros(n_integration_points);
-                let mut cos_terms = Array1::zeros(n_integration_points);
-                let mut time_ratios = Array1::zeros(n_integration_points);
-                let mut integration_weights = Array1::zeros(n_integration_points);
-
-                for i in 0..n_integration_points {
-                    let phi = phi_left + i as f64 * dphi;
-                    sin_terms[i] = (2.0 * phi).sin();
-                    cos_terms[i] = (2.0 * phi).cos();
-                    let j_float = phi * phi_to_idx;
-                    let j = (j_float.round() as usize).min(n_phix - 1).max(0);
-                    let delta_tab = delta_tab_grid[[idx, j]];
-                    time_ratios[i] = delta_tab / delta_ta;
-                    integration_weights[i] = if i == 0 || i == n_integration_points - 1 {
-                        1.0
-                    } else {
-                        2.0
-                    };
-                }
-
-                let mut integral_cos = Array1::zeros(n_sets);
-                let mut integral_sin = Array1::zeros(n_sets);
-                if delta_ta > 0.0 {
-                    let active_indices: Vec<usize> =
-                        (0..n_sets).filter(|&s| self.active_bubbles[s]).collect();
-                    for &s in &active_indices {
-                        let mut scaling_factors = Array1::zeros(n_integration_points);
-                        azip!((factor in &mut scaling_factors, &ratio in &time_ratios) {
-                            let mut f = 0.0;
-                            for k in 0..self.coefficients_sets.shape()[1] {
-                                f += self.coefficients_sets[[s, k]] * ratio.powf(self.powers_sets[[s, k]]);
-                            }
-                            *factor = f * delta_ta_cubed;
-                        });
-                        if let Some(damping_width) = self.damping_width {
-                            let damping_factor = (-delta_ta * (1.0 - time_ratios.clone())
-                                / damping_width)
-                                .mapv(|x| x.exp());
-                            azip!((factor in &mut scaling_factors, &damp in &damping_factor) {
-                                *factor *= damp;
-                            });
-                        }
-
-                        let mut cos_sum = 0.0;
-                        let mut sin_sum = 0.0;
-                        azip!((factor in &scaling_factors, &cos_val in &cos_terms, &sin_val in &sin_terms, &weight in &integration_weights) {
-                            cos_sum += weight * cos_val * factor;
-                            sin_sum += weight * sin_val * factor;
-                        });
-                        integral_cos[s] = cos_sum;
-                        integral_sin[s] = sin_sum;
-                    }
-                }
-
-                integral_cos *= dphi / 2.0;
-                integral_sin *= dphi / 2.0;
-                for s in 0..n_sets {
-                    b_plus_arr[s] += 0.5 * sin_squared_thetax * integral_cos[s];
-                    b_minus_arr[s] += 0.5 * sin_squared_thetax * integral_sin[s];
-                }
-            }
-        }
-
-        Ok((b_plus_arr, b_minus_arr))
-    }
-
-    pub fn compute_b_integral_new(
-        &self,
         cos_thetax_idx: usize,
         segments: &[Segment],
         delta_tab_grid: ArrayView2<f64>,
@@ -2510,6 +791,10 @@ impl BulkFlow {
             .cos_thetax
             .as_ref()
             .ok_or_else(|| BulkFlowError::UninitializedField("cos_thetax".to_string()))?;
+        let phix = self
+            .phix
+            .as_ref()
+            .ok_or_else(|| BulkFlowError::UninitializedField("phix".to_string()))?;
         let n_sets = self.coefficients_sets.shape()[0];
         if cos_thetax_idx >= n_cos_thetax {
             return Err(BulkFlowError::InvalidIndex {
@@ -2517,7 +802,7 @@ impl BulkFlow {
                 max: n_cos_thetax,
             });
         }
-        if delta_tab_grid.shape()[0] != n_cos_thetax || delta_tab_grid.shape()[1] != n_phix {
+        if delta_tab_grid.shape() != [n_cos_thetax, n_phix] {
             return Err(BulkFlowError::ArrayShapeMismatch(format!(
                 "Delta tab grid must match resolution: expected [{}, {}], got {:?}",
                 n_cos_thetax,
@@ -2530,7 +815,6 @@ impl BulkFlow {
         let mut b_plus_arr = Array1::zeros(n_sets);
         let mut b_minus_arr = Array1::zeros(n_sets);
         let dphi_grid = 2.0 * std::f64::consts::PI / n_phix as f64;
-        let phi_to_idx = n_phix as f64 / (2.0 * std::f64::consts::PI);
 
         let delta_ta_cubed = if delta_ta > 0.0 {
             delta_ta.powi(3)
@@ -2539,14 +823,19 @@ impl BulkFlow {
         };
 
         for seg in segments.iter() {
-            let phi_left = seg.phi_lower;
-            let phi_right = seg.phi_upper;
-            if (phi_right - phi_left).abs() < 1e-10 {
+            if seg.cos_thetax_idx != cos_thetax_idx {
+                continue;
+            }
+            let phi_lower_idx = seg.phi_lower_idx;
+            let phi_upper_idx = seg.phi_upper_idx;
+            if phi_lower_idx >= phi_upper_idx {
                 continue;
             }
             let status = seg.collision_status;
             if status == CollisionStatus::NeverCollided || status == CollisionStatus::NotYetCollided
             {
+                let phi_left = phix[phi_lower_idx];
+                let phi_right = phix[phi_upper_idx];
                 let sin_term = (2.0 * phi_right).sin() - (2.0 * phi_left).sin();
                 let cos_term = (2.0 * phi_right).cos() - (2.0 * phi_left).cos();
                 let scaling_factor = 0.25 * sin_squared_thetax * delta_ta_cubed;
@@ -2554,29 +843,24 @@ impl BulkFlow {
                     b_plus_arr[s] += scaling_factor * sin_term;
                     b_minus_arr[s] += -scaling_factor * cos_term;
                 }
-                continue;
             } else if status == CollisionStatus::AlreadyCollided {
-                let segment_width = phi_right - phi_left;
-                let n_integration_points = (segment_width / dphi_grid).ceil().max(2.0) as usize;
-                let dphi = segment_width / (n_integration_points - 1) as f64;
-
+                let n_integration_points = (phi_upper_idx - phi_lower_idx + 1).max(2);
                 let mut sin_terms = Array1::zeros(n_integration_points);
                 let mut cos_terms = Array1::zeros(n_integration_points);
                 let mut time_ratios = Array1::zeros(n_integration_points);
                 let mut integration_weights = Array1::zeros(n_integration_points);
 
-                for i in 0..n_integration_points {
-                    let phi = phi_left + i as f64 * dphi;
+                for (i, j) in (phi_lower_idx..=phi_upper_idx).enumerate() {
+                    let phi_idx = j.min(n_phix - 1); // Ensure index is within bounds
+                    let phi = phix[phi_idx];
                     sin_terms[i] = (2.0 * phi).sin();
                     cos_terms[i] = (2.0 * phi).cos();
-                    let j_float = phi * phi_to_idx;
-                    let j = (j_float.round() as usize).min(n_phix - 1).max(0);
-                    let delta_tab = delta_tab_grid[[cos_thetax_idx, j]];
+                    let delta_tab = delta_tab_grid[[cos_thetax_idx, phi_idx]];
                     time_ratios[i] = delta_tab / delta_ta;
                     integration_weights[i] = if i == 0 || i == n_integration_points - 1 {
-                        1.0
+                        0.5
                     } else {
-                        2.0
+                        1.0
                     };
                 }
 
@@ -2614,8 +898,8 @@ impl BulkFlow {
                     }
                 }
 
-                integral_cos *= dphi / 2.0;
-                integral_sin *= dphi / 2.0;
+                integral_cos *= dphi_grid;
+                integral_sin *= dphi_grid;
                 for s in 0..n_sets {
                     b_plus_arr[s] += 0.5 * sin_squared_thetax * integral_cos[s];
                     b_minus_arr[s] += 0.5 * sin_squared_thetax * integral_sin[s];
@@ -2648,7 +932,7 @@ impl BulkFlow {
             || delta_tab_grid.shape() != [n_cos_thetax, n_phix]
         {
             return Err(BulkFlowError::ArrayShapeMismatch(format!(
-                "Input arrays must match resolution: expected [{:?}, {:?}], got first_bubble: {:?}, delta_tab_grid: [{:?}],",
+                "Input arrays must match resolution: expected [{:?}, {:?}], got first_bubble: [{:?}], delta_tab_grid: [{:?}]",
                 n_cos_thetax,
                 n_phix,
                 first_bubble.shape(),
@@ -2666,18 +950,17 @@ impl BulkFlow {
         let mut a_plus = Array2::<Complex64>::zeros((n_sets, n_w));
         let mut a_minus = Array2::<Complex64>::zeros((n_sets, n_w));
         let dcos_thetax = 2.0 / (n_cos_thetax - 1) as f64;
-        let tolerance = 1e-10;
 
         for i in 0..n_cos_thetax {
             let cos_thetax_val = cos_thetax_grid[i];
             let relevant_segments: Vec<Segment> = segments
                 .iter()
-                .filter(|seg| (seg.cos_thetax - cos_thetax_val).abs() < tolerance)
+                .filter(|seg| seg.cos_thetax_idx == i)
                 .cloned()
                 .collect();
 
             let (b_plus, b_minus) =
-                self.compute_b_integral_new(i, &relevant_segments, delta_tab_grid, delta_ta)?;
+                self.compute_b_integral(i, &relevant_segments, delta_tab_grid, delta_ta)?;
 
             let phase_base = Complex64::new(0.0, -delta_ta * cos_thetax_val);
             let mut angular_phases = Array1::zeros(n_w);

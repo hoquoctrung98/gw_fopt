@@ -2,7 +2,6 @@ use bubble_gw_rs::many_bubbles::bulk_flow::{
     BubbleIndex, BulkFlow, BulkFlowError, CollisionStatus, Segment,
 };
 use ndarray::Array2;
-use num_complex::Complex64 as RustComplex64;
 use numpy::{
     Complex64 as NumpyComplex64, PyArray1, PyArray2, PyArray3, PyArray4, PyArrayMethods,
     PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3,
@@ -155,6 +154,24 @@ impl PyBulkFlow {
         Ok(())
     }
 
+    #[getter]
+    fn cos_thetax(&self, py: Python) -> PyResult<Py<PyArray1<f64>>> {
+        let cos_thetax = self
+            .inner
+            .cos_thetax()
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(PyArray1::from_array(py, cos_thetax).into())
+    }
+
+    #[getter]
+    fn phix(&self, py: Python) -> PyResult<Py<PyArray1<f64>>> {
+        let phix = self
+            .inner
+            .phix()
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(PyArray1::from_array(py, phix).into())
+    }
+
     #[pyo3(signature = (coefficients_sets, powers_sets, damping_factor = None))]
     pub fn set_gradient_scaling_params(
         &mut self,
@@ -168,52 +185,97 @@ impl PyBulkFlow {
         Ok(())
     }
 
+    #[pyo3(signature = (cos_thetax_idx, segments, delta_tab_grid, t))]
     pub fn compute_b_integral(
         &self,
         py: Python,
-        cos_thetax: f64,
+        cos_thetax_idx: usize,
         segments: Vec<(f64, f64, f64, i32, i32)>,
-        t_nc_grid: PyReadonlyArray2<f64>,
-        idx: usize,
+        delta_tab_grid: PyReadonlyArray2<f64>,
         t: f64,
     ) -> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>)> {
-        let ta = self.inner.bubbles_interior()[[0, 0]];
-        let delta_ta = t - ta;
-        let t_nc_grid = t_nc_grid.to_owned_array();
-        let rust_segments: Vec<Segment> = segments
+        // Get cos_thetax and phix arrays for index conversion
+        let cos_thetax = self
+            .inner
+            .cos_thetax()
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let phix = self
+            .inner
+            .phix()
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let n_phix = phix.len();
+
+        // Convert floating-point segments to index-based segments
+        let segments: Vec<Segment> = segments
             .into_iter()
-            .map(|s| {
-                let collision_status = match s.4 {
-                    0 => CollisionStatus::NeverCollided,
-                    1 => CollisionStatus::AlreadyCollided,
-                    2 => CollisionStatus::NotYetCollided,
-                    _ => {
-                        return Err(PyValueError::new_err(format!(
-                            "Invalid collision status: {}",
-                            s.4
+            .map(
+                |(cos_thetax_val, phi_lower_val, phi_upper_val, bubble_idx, collision_status)| {
+                    // Find the closest cos_thetax_idx (already provided as input, but verify consistency)
+                    if cos_thetax_idx >= cos_thetax.len() {
+                        return Err(PyIndexError::new_err(format!(
+                            "cos_thetax_idx {} out of bounds for max {}",
+                            cos_thetax_idx,
+                            cos_thetax.len()
                         )));
                     }
-                };
-                let bubble_index = if s.3 == -1 {
-                    BubbleIndex::None
-                } else if s.3 >= 0 {
-                    BubbleIndex::Interior(s.3 as usize)
-                } else {
-                    BubbleIndex::Exterior((-s.3 - 2) as usize)
-                };
-                Ok(Segment {
-                    cos_thetax: s.0,
-                    phi_lower: s.1,
-                    phi_upper: s.2,
-                    bubble_index,
-                    collision_status,
-                })
-            })
+                    if (cos_thetax[cos_thetax_idx] - cos_thetax_val).abs() > 1e-10 {
+                        return Err(PyValueError::new_err(format!(
+                            "cos_thetax_idx {} does not match cos_thetax value {}",
+                            cos_thetax_idx, cos_thetax_val
+                        )));
+                    }
+
+                    // Convert phi_lower and phi_upper to indices
+                    let phi_to_idx = n_phix as f64 / (2.0 * std::f64::consts::PI);
+                    let phi_lower_idx = ((phi_lower_val * phi_to_idx).round() as usize)
+                        .min(n_phix - 1)
+                        .max(0);
+                    let phi_upper_idx = ((phi_upper_val * phi_to_idx).round() as usize)
+                        .min(n_phix - 1)
+                        .max(0);
+
+                    // Validate collision status
+                    let collision_status = match collision_status {
+                        0 => CollisionStatus::NeverCollided,
+                        1 => CollisionStatus::AlreadyCollided,
+                        2 => CollisionStatus::NotYetCollided,
+                        _ => {
+                            return Err(PyValueError::new_err(format!(
+                                "Invalid collision status: {}",
+                                collision_status
+                            )));
+                        }
+                    };
+
+                    // Convert bubble index
+                    let bubble_index = if bubble_idx == -1 {
+                        BubbleIndex::None
+                    } else if bubble_idx >= 0 {
+                        BubbleIndex::Interior(bubble_idx as usize)
+                    } else {
+                        BubbleIndex::Exterior((-bubble_idx - 2) as usize)
+                    };
+
+                    Ok(Segment {
+                        cos_thetax_idx,
+                        phi_lower_idx,
+                        phi_upper_idx,
+                        bubble_index,
+                        collision_status,
+                    })
+                },
+            )
             .collect::<PyResult<Vec<_>>>()?;
+
+        let ta = self.inner.bubbles_interior()[[0, 0]];
+        let delta_ta = t - ta;
+        let delta_tab_grid = delta_tab_grid.to_owned_array();
+
         let (b_plus_arr, b_minus_arr) = self
             .inner
-            .compute_b_integral(cos_thetax, &rust_segments, t_nc_grid.view(), idx, delta_ta)
+            .compute_b_integral(cos_thetax_idx, &segments, delta_tab_grid.view(), delta_ta)
             .map_err(PyBulkFlowError)?;
+
         Ok((
             PyArray1::from_array(py, &b_plus_arr).into(),
             PyArray1::from_array(py, &b_minus_arr).into(),
@@ -250,8 +312,8 @@ impl PyBulkFlow {
                 delta_tab_grid.view(),
             )
             .map_err(PyBulkFlowError)?;
-        let a_plus_numpy = a_plus.mapv(|c: RustComplex64| NumpyComplex64::new(c.re, c.im));
-        let a_minus_numpy = a_minus.mapv(|c: RustComplex64| NumpyComplex64::new(c.re, c.im));
+        let a_plus_numpy = a_plus.mapv(|c| NumpyComplex64::new(c.re, c.im));
+        let a_minus_numpy = a_minus.mapv(|c| NumpyComplex64::new(c.re, c.im));
         Ok((
             PyArray2::from_array(py, &a_plus_numpy).into(),
             PyArray2::from_array(py, &a_minus_numpy).into(),
@@ -325,6 +387,7 @@ impl PyBulkFlow {
 
     pub fn generate_segments(
         &self,
+        _py: Python,
         first_bubble: PyReadonlyArray2<i32>,
         collision_status: PyReadonlyArray2<i32>,
     ) -> PyResult<Vec<(f64, f64, f64, i32, i32)>> {
@@ -343,13 +406,29 @@ impl PyBulkFlow {
             2 => CollisionStatus::NotYetCollided,
             _ => panic!("Invalid collision status: {}", s),
         });
+
+        // Get cos_thetax and phix arrays for converting indices to values
+        let cos_thetax = self
+            .inner
+            .cos_thetax()
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let phix = self
+            .inner
+            .phix()
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+
         let segments = self
             .inner
             .generate_segments(first_bubble.view(), collision_status.view())
             .map_err(PyBulkFlowError)?;
+
+        // Convert index-based segments to (cos_thetax, phi_lower, phi_upper, bubble_idx, collision_status)
         let segments_py: Vec<(f64, f64, f64, i32, i32)> = segments
             .into_iter()
             .map(|seg| {
+                let cos_thetax_val = cos_thetax[seg.cos_thetax_idx];
+                let phi_lower_val = phix[seg.phi_lower_idx];
+                let phi_upper_val = phix[seg.phi_upper_idx];
                 let bubble_idx = match seg.bubble_index {
                     BubbleIndex::None => -1,
                     BubbleIndex::Interior(i) => i as i32,
@@ -357,14 +436,15 @@ impl PyBulkFlow {
                 };
                 let collision_status = seg.collision_status as i32;
                 (
-                    seg.cos_thetax,
-                    seg.phi_lower,
-                    seg.phi_upper,
+                    cos_thetax_val,
+                    phi_lower_val,
+                    phi_upper_val,
                     bubble_idx,
                     collision_status,
                 )
             })
             .collect();
+
         Ok(segments_py)
     }
 
@@ -381,7 +461,7 @@ impl PyBulkFlow {
             .inner
             .compute_c_integrand(w_arr.view(), t_begin, t_end, n_t)
             .map_err(PyBulkFlowError)?;
-        let integrand_numpy = integrand.mapv(|c: RustComplex64| NumpyComplex64::new(c.re, c.im));
+        let integrand_numpy = integrand.mapv(|c| NumpyComplex64::new(c.re, c.im));
         Ok(PyArray4::from_array(py, &integrand_numpy).into())
     }
 
@@ -398,7 +478,7 @@ impl PyBulkFlow {
             .inner
             .compute_c_integral(w_arr.view(), t_begin, t_end, n_t)
             .map_err(PyBulkFlowError)?;
-        let c_matrix_numpy = c_matrix.mapv(|c: RustComplex64| NumpyComplex64::new(c.re, c.im));
+        let c_matrix_numpy = c_matrix.mapv(|c| NumpyComplex64::new(c.re, c.im));
         Ok(PyArray3::from_array(py, &c_matrix_numpy).into())
     }
 
@@ -416,7 +496,7 @@ impl PyBulkFlow {
             .inner
             .compute_c_integral_fixed_bubble(a_idx, w_arr.view(), t_begin, t_end, n_t)
             .map_err(PyBulkFlowError)?;
-        let c_matrix_numpy = c_matrix.mapv(|c: RustComplex64| NumpyComplex64::new(c.re, c.im));
+        let c_matrix_numpy = c_matrix.mapv(|c| NumpyComplex64::new(c.re, c.im));
         Ok(PyArray3::from_array(py, &c_matrix_numpy).into())
     }
 
