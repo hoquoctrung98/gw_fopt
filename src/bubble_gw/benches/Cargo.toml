@@ -11,7 +11,12 @@ rust-version.workspace = true
 [dependencies]
 bubble_gw_rs = { path = "../bubble_gw_rs" }
 criterion = "0.7.0"
+ndarray = "0.16.1"
+num-traits = "0.2.19"
+# Benchmarking framework
+# criterion = { workspace = true, features = ["html_reports"] }
 
-# [[bench]]
-# name = "foo_bench"
-# harness = false  # Required for Criterion
+[[bench]]
+name = "integrate_1d"
+path = "integrate_1d.rs"
+harness = false

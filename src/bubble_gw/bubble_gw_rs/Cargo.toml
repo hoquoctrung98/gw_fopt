@@ -24,3 +24,7 @@ num-traits = "0.2.19"
 
 [lib]
 crate-type = ["cdylib", "lib"]
+
+# [[bench]]
+# name = "integrate_1d"
+# harness = false
