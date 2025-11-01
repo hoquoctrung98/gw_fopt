@@ -82,13 +82,11 @@ dependencies = [
  "num",
  "num-complex",
  "num-traits",
- "num_cpus",
  "peroxide",
  "puruspe",
  "rand",
  "rand_distr",
  "rayon",
- "serde",
 ]
 
 [[package]]
