@@ -1,12 +1,12 @@
 use bubble_gw_rs::many_bubbles::bubble_formation::{
-    BubbleFormationSimulator, Lattice, LatticeType, ManualNucleation, PoissonNucleation,
-    SimulationEndStatus, generate_bubbles_exterior,
+    BoundaryConditions, BubbleFormationSimulator, Lattice, LatticeType, ManualNucleation,
+    PoissonNucleation, SimulationEndStatus, generate_bubbles_exterior,
 };
 use ndarray::Array2;
 use numpy::{PyArray2, PyArrayMethods, PyReadonlyArray2};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyTuple};
+use pyo3::types::PyDict;
 
 #[pyclass(name = "Lattice")]
 pub struct PyLattice {
@@ -54,51 +54,84 @@ impl PyLattice {
     }
 }
 
-// PyO3 binding for generate_bubbles_exterior function
+// // PyO3 binding for generate_bubbles_exterior function
+// #[pyfunction]
+// #[pyo3(name = "generate_bubbles_exterior")]
+// pub fn py_generate_bubbles_exterior(
+//     py: Python,
+//     lattice_sizes: Bound<'_, PyAny>,
+//     bubbles_interior: PyReadonlyArray2<f64>,
+// ) -> PyResult<Py<PyArray2<f64>>> {
+//     // Convert lattice_sizes to [f64; 3]
+//     let sizes: [f64; 3] = {
+//         let vec: Vec<f64> = if let Ok(list) = lattice_sizes.cast::<PyList>() {
+//             list.iter()
+//                 .map(|item: Bound<PyAny>| item.extract::<f64>())
+//                 .collect::<PyResult<Vec<f64>>>()
+//         } else if let Ok(tuple) = lattice_sizes.cast::<PyTuple>() {
+//             tuple
+//                 .iter()
+//                 .map(|item: Bound<PyAny>| item.extract::<f64>())
+//                 .collect::<PyResult<Vec<f64>>>()
+//         } else {
+//             return Err(PyValueError::new_err(
+//                 "lattice_sizes must be a list or tuple",
+//             ));
+//         }?;
+//
+//         if vec.len() != 3 {
+//             return Err(PyValueError::new_err(
+//                 "lattice_sizes must contain exactly 3 elements",
+//             ));
+//         }
+//         [vec[0], vec[1], vec[2]]
+//     };
+//
+//     // Validate and convert bubbles_interior to Array2<f64>
+//     let bubbles_array = bubbles_interior.to_owned_array();
+//     if bubbles_array.shape()[1] != 4 {
+//         return Err(PyValueError::new_err(
+//             "bubbles_interior must have shape (N, 4)",
+//         ));
+//     }
+//
+//     // Call the Rust function
+//     let result = generate_bubbles_exterior(sizes, bubbles_array);
+//
+//     // Convert the result to a NumPy array
+//     Ok(PyArray2::from_array(py, &result).into())
+// }
+
 #[pyfunction]
 #[pyo3(name = "generate_bubbles_exterior")]
 pub fn py_generate_bubbles_exterior(
     py: Python,
-    lattice_sizes: Bound<'_, PyAny>,
+    lattice: &PyLattice,
     bubbles_interior: PyReadonlyArray2<f64>,
+    boundary_condition: &str, // "periodic" or "reflective"
 ) -> PyResult<Py<PyArray2<f64>>> {
-    // Convert lattice_sizes to [f64; 3]
-    let sizes: [f64; 3] = {
-        let vec: Vec<f64> = if let Ok(list) = lattice_sizes.cast::<PyList>() {
-            list.iter()
-                .map(|item: Bound<PyAny>| item.extract::<f64>())
-                .collect::<PyResult<Vec<f64>>>()
-        } else if let Ok(tuple) = lattice_sizes.cast::<PyTuple>() {
-            tuple
-                .iter()
-                .map(|item: Bound<PyAny>| item.extract::<f64>())
-                .collect::<PyResult<Vec<f64>>>()
-        } else {
+    // Parse boundary condition
+    let bc = match boundary_condition.to_lowercase().as_str() {
+        "periodic" => BoundaryConditions::Periodic,
+        "reflective" => BoundaryConditions::Reflective,
+        _ => {
             return Err(PyValueError::new_err(
-                "lattice_sizes must be a list or tuple",
-            ));
-        }?;
-
-        if vec.len() != 3 {
-            return Err(PyValueError::new_err(
-                "lattice_sizes must contain exactly 3 elements",
+                "boundary_condition must be 'periodic' or 'reflective'",
             ));
         }
-        [vec[0], vec[1], vec[2]]
     };
 
-    // Validate and convert bubbles_interior to Array2<f64>
+    // Validate bubbles
     let bubbles_array = bubbles_interior.to_owned_array();
-    if bubbles_array.shape()[1] != 4 {
+    if bubbles_array.shape().get(1) != Some(&4) {
         return Err(PyValueError::new_err(
             "bubbles_interior must have shape (N, 4)",
         ));
     }
 
-    // Call the Rust function
-    let result = generate_bubbles_exterior(sizes, bubbles_array);
+    // Call the new function
+    let result = generate_bubbles_exterior(&lattice.inner, bubbles_array, bc);
 
-    // Convert the result to a NumPy array
     Ok(PyArray2::from_array(py, &result).into())
 }
 
@@ -323,12 +356,28 @@ impl PyBubbleFormationSimulator {
         Ok(PyArray2::from_array(py, &bubbles_array).into())
     }
 
-    fn bubbles_exterior(&self, py: Python) -> PyResult<Py<PyArray2<f64>>> {
-        let exterior_bubbles = match self.get_inner() {
-            BubbleFormationSimulatorWrapper::Poisson(sim) => sim.bubbles_exterior(),
-            BubbleFormationSimulatorWrapper::Manual(sim) => sim.bubbles_exterior(),
+    #[pyo3(name = "bubbles_exterior")]
+    fn py_bubbles_exterior(
+        &self,
+        py: Python,
+        boundary_condition: &str,
+    ) -> PyResult<Py<PyArray2<f64>>> {
+        let bc = match boundary_condition.to_lowercase().as_str() {
+            "periodic" => BoundaryConditions::Periodic,
+            "reflective" => BoundaryConditions::Reflective,
+            _ => {
+                return Err(PyValueError::new_err(
+                    "boundary_condition must be 'periodic' or 'reflective'",
+                ));
+            }
         };
-        Ok(PyArray2::from_array(py, &exterior_bubbles).into())
+
+        let exterior = match self.get_inner() {
+            BubbleFormationSimulatorWrapper::Poisson(sim) => sim.bubbles_exterior(bc),
+            BubbleFormationSimulatorWrapper::Manual(sim) => sim.bubbles_exterior(bc),
+        };
+
+        Ok(PyArray2::from_array(py, &exterior).into())
     }
 
     #[getter]

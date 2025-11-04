@@ -206,65 +206,105 @@ impl Lattice {
     }
 }
 
-/// Generates exterior bubbles for periodic boundary conditions in Cartesian lattices.
+/// Enum representing boundary conditions for the simulation domain.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BoundaryConditions {
+    Periodic,
+    Reflective,
+}
+
+/// Generates exterior (image) bubbles for handling boundary conditions.
+///
+/// For **Periodic**: creates 6 translated copies (±lx, ±ly, ±lz).
+/// For **Reflective**: creates 6 mirrored copies across each face via refletions
+///
+/// Only works for `LatticeType::Cartesian`. Returns empty array otherwise.
 ///
 /// # Arguments
 ///
-/// * `lattice_sizes` - An array `[lx, ly, lz]` specifying the dimensions of the Cartesian lattice.
-/// * `bubbles_interior` - An `Array2<f64>` with shape `(N, 4)`, where each row is `[time, x, y, z]` for interior bubbles.
+/// * `lattice` - The simulation lattice.
+/// * `bubbles_interior` - Interior bubbles as `[time, x, y, z]` rows.
+/// * `boundary_condition` - Type of boundary condition to apply.
 ///
 /// # Returns
 ///
-/// An `Array2<f64>` with shape `(M, 4)`, where each row is `[time, x, y, z]` for exterior bubbles.
-/// Returns an empty array if no exterior bubbles are generated.
+/// `Array2<f64>` of shape `(M, 4)`: `[time, x, y, z]` for exterior bubbles.
 pub fn generate_bubbles_exterior(
-    lattice_sizes: [f64; 3],
+    lattice: &Lattice,
     bubbles_interior: Array2<f64>,
+    boundary_condition: BoundaryConditions,
 ) -> Array2<f64> {
-    let lx = lattice_sizes[0];
-    let ly = lattice_sizes[1];
-    let lz = lattice_sizes[2];
+    if lattice.lattice_type != LatticeType::Cartesian || bubbles_interior.is_empty() {
+        return Array2::zeros((0, 4));
+    }
 
-    let shifts: [[f64; 3]; 6] = [
-        [lx, 0.0, 0.0],
-        [-lx, 0.0, 0.0],
-        [0.0, ly, 0.0],
-        [0.0, -ly, 0.0],
-        [0.0, 0.0, lz],
-        [0.0, 0.0, -lz],
-    ];
+    let [lx, ly, lz] = lattice.sizes;
+    let mut exterior = Vec::new();
+    let mut seen = HashSet::new();
 
-    let mut exterior_bubbles = Vec::new();
-    let mut seen_centers = HashSet::new();
-
-    for bubble in bubbles_interior.outer_iter() {
-        let tn = bubble[0];
-        let center = [bubble[1], bubble[2], bubble[3]];
-
-        for shift in shifts.iter() {
-            let shifted_center = [
-                center[0] + shift[0],
-                center[1] + shift[1],
-                center[2] + shift[2],
+    match boundary_condition {
+        BoundaryConditions::Periodic => {
+            let shifts = [
+                [lx, 0.0, 0.0],
+                [-lx, 0.0, 0.0],
+                [0.0, ly, 0.0],
+                [0.0, -ly, 0.0],
+                [0.0, 0.0, lz],
+                [0.0, 0.0, -lz],
             ];
-            let q_point =
-                QuantizedPoint::new((shifted_center[0], shifted_center[1], shifted_center[2]));
 
-            if seen_centers.insert(q_point) {
-                exterior_bubbles.extend_from_slice(&[
-                    tn,
-                    shifted_center[0],
-                    shifted_center[1],
-                    shifted_center[2],
-                ]);
+            for bubble in bubbles_interior.outer_iter() {
+                let t = bubble[0];
+                let [x, y, z] = [bubble[1], bubble[2], bubble[3]];
+
+                for &[dx, dy, dz] in &shifts {
+                    let p = QuantizedPoint::new((x + dx, y + dy, z + dz));
+                    if seen.insert(p) {
+                        exterior.extend_from_slice(&[t, x + dx, y + dy, z + dz]);
+                    }
+                }
+            }
+        }
+
+        BoundaryConditions::Reflective => {
+            // 6 faces → 6 independent reflections
+            //  face          translation   flipped coordinate
+            let faces: [([f64; 3], usize); 6] = [
+                ([0.0, 0.0, 0.0], 0),      // x = 0  →  -x
+                ([2.0 * lx, 0.0, 0.0], 0), // x = lx → 2*lx-x
+                ([0.0, 0.0, 0.0], 1),      // y = 0  →  -y
+                ([0.0, 2.0 * ly, 0.0], 1), // y = ly → 2*ly-y
+                ([0.0, 0.0, 0.0], 2),      // z = 0  →  -z
+                ([0.0, 0.0, 2.0 * lz], 2), // z = lz → 2*lz-z
+            ];
+
+            for bubble in bubbles_interior.outer_iter() {
+                let t = bubble[0];
+                let mut c = [bubble[1], bubble[2], bubble[3]];
+
+                for &(trans, axis) in &faces {
+                    // flip only the chosen axis
+                    c[axis] = -c[axis];
+                    let rx = c[0] + trans[0];
+                    let ry = c[1] + trans[1];
+                    let rz = c[2] + trans[2];
+
+                    let p = QuantizedPoint::new((rx, ry, rz));
+                    if seen.insert(p) {
+                        exterior.extend_from_slice(&[t, rx, ry, rz]);
+                    }
+
+                    // restore original coordinate for the next face
+                    c[axis] = -c[axis];
+                }
             }
         }
     }
 
-    if exterior_bubbles.is_empty() {
+    if exterior.is_empty() {
         Array2::zeros((0, 4))
     } else {
-        Array2::from_shape_vec((exterior_bubbles.len() / 4, 4), exterior_bubbles).unwrap()
+        Array2::from_shape_vec((exterior.len() / 4, 4), exterior).unwrap()
     }
 }
 
@@ -965,17 +1005,28 @@ impl<S: NucleationStrategy> BubbleFormationSimulator<S> {
         boundary_bubbles
     }
 
-    /// Generates exterior bubbles for periodic boundary conditions in Cartesian lattices.
-    ///
-    /// # Returns
-    ///
-    /// An `Array2<f64>` with shape `(N, 4)`, where each row is `[time, x, y, z]` for exterior bubbles.
-    /// Returns an empty array for non-Cartesian lattices.
-    pub fn bubbles_exterior(&self) -> Array2<f64> {
+    // /// Generates exterior bubbles for periodic boundary conditions in Cartesian lattices.
+    // ///
+    // /// # Returns
+    // ///
+    // /// An `Array2<f64>` with shape `(N, 4)`, where each row is `[time, x, y, z]` for exterior bubbles.
+    // /// Returns an empty array for non-Cartesian lattices.
+    // pub fn bubbles_exterior(&self) -> Array2<f64> {
+    //     if self.lattice.lattice_type != LatticeType::Cartesian {
+    //         return Array2::zeros((0, 4));
+    //     }
+    //     generate_bubbles_exterior(self.lattice.sizes, self.bubbles_interior())
+    // }
+
+    /// Returns exterior bubbles based on current boundary condition.
+    pub fn bubbles_exterior(&self, boundary_condition: BoundaryConditions) -> Array2<f64> {
         if self.lattice.lattice_type != LatticeType::Cartesian {
             return Array2::zeros((0, 4));
         }
-        generate_bubbles_exterior(self.lattice.sizes, self.bubbles_interior())
+
+        // You need to store boundary_condition in the simulator!
+        // Let's assume you add it later — for now, default to Periodic
+        generate_bubbles_exterior(&self.lattice, self.bubbles_interior(), boundary_condition)
     }
 
     /// Returns the lattice used in the simulation.
