@@ -46,7 +46,7 @@ pub enum BulkFlowError {
     InvalidTimeRange { begin: f64, end: f64 },
     ArrayShapeMismatch(String),
     ThreadPoolBuildError(String),
-    BubbleFormedInsideBubble { a_idx: usize, b_idx: usize },
+    BubbleFormedInsideBubble { a: BubbleIndex, b: BubbleIndex },
 }
 
 impl std::fmt::Display for BulkFlowError {
@@ -70,8 +70,22 @@ impl std::fmt::Display for BulkFlowError {
             BulkFlowError::ThreadPoolBuildError(msg) => {
                 write!(f, "Building thread pool unsucessfully: {}", msg)
             }
-            BulkFlowError::BubbleFormedInsideBubble { a_idx, b_idx } => {
-                write!(f, "Bubble {} is formed inside bubble {}", a_idx, b_idx)
+            BulkFlowError::BubbleFormedInsideBubble { a, b } => {
+                let a_str = match a {
+                    BubbleIndex::Interior(i) => format!("Interior({})", i),
+                    BubbleIndex::Exterior(i) => format!("Exterior({})", i),
+                    BubbleIndex::None => "None".to_string(),
+                };
+                let b_str = match b {
+                    BubbleIndex::Interior(i) => format!("Interior({})", i),
+                    BubbleIndex::Exterior(i) => format!("Exterior({})", i),
+                    BubbleIndex::None => "None".to_string(),
+                };
+                write!(
+                    f,
+                    "Bubble {} is formed inside bubble {} at initial time (overlapping light cones)",
+                    a_str, b_str
+                )
             }
         }
     }
@@ -120,16 +134,13 @@ impl BulkFlow {
         for a_idx in 0..n_interior {
             // Interior to interior (upper triangular and diagonal)
             for b_idx in a_idx..n_interior {
-                if a_idx != b_idx {
-                    let delta_ba = bubbles_interior.slice(s![b_idx, ..]).to_owned()
-                        - bubbles_interior.slice(s![a_idx, ..]).to_owned();
-                    delta.slice_mut(s![a_idx, b_idx, ..]).assign(&delta_ba);
-                    delta_squared[[a_idx, b_idx]] =
-                        dot_minkowski_vec(delta_ba.view(), delta_ba.view());
-                    // Symmetry: delta[b_idx, a_idx, ..] = -delta[a_idx, b_idx, ..]
-                    delta.slice_mut(s![b_idx, a_idx, ..]).assign(&(-&delta_ba));
-                    delta_squared[[b_idx, a_idx]] = delta_squared[[a_idx, b_idx]];
-                }
+                let delta_ba = bubbles_interior.slice(s![b_idx, ..]).to_owned()
+                    - bubbles_interior.slice(s![a_idx, ..]).to_owned();
+                delta.slice_mut(s![a_idx, b_idx, ..]).assign(&delta_ba);
+                delta_squared[[a_idx, b_idx]] = dot_minkowski_vec(delta_ba.view(), delta_ba.view());
+                // Symmetry: delta[b_idx, a_idx, ..] = -delta[a_idx, b_idx, ..]
+                delta.slice_mut(s![b_idx, a_idx, ..]).assign(&(-&delta_ba));
+                delta_squared[[b_idx, a_idx]] = delta_squared[[a_idx, b_idx]];
             }
             // Interior to exterior
             for b_ex in 0..n_exterior {
@@ -143,7 +154,11 @@ impl BulkFlow {
         }
 
         // Check for bubble containment
-        Self::check_bubble_containment(&bubbles_interior, &bubbles_exterior, &delta_squared)?;
+        Self::check_bubble_formed_inside_bubble(
+            &bubbles_interior,
+            &bubbles_exterior,
+            &delta_squared,
+        )?;
 
         let cached_data = CachedData {
             delta,
@@ -176,8 +191,8 @@ impl BulkFlow {
         })
     }
 
-    /// Checks if any bubble is contained within another at the initial time.
-    fn check_bubble_containment(
+    // Checks if any bubble is contained within another at the initial time.
+    fn check_bubble_formed_inside_bubble(
         bubbles_interior: &Array2<f64>,
         bubbles_exterior: &Array2<f64>,
         delta_squared: &Array2<f64>,
@@ -185,39 +200,41 @@ impl BulkFlow {
         let n_interior = bubbles_interior.shape()[0];
         let n_exterior = bubbles_exterior.shape()[0];
 
-        // Check interior-interior pairs (upper triangular and diagonal)
+        // Interior-Interior
         for a_idx in 0..n_interior {
-            for b_idx in a_idx..n_interior {
+            for b_idx in a_idx + 1..n_interior {
                 if delta_squared[[a_idx, b_idx]] < 0.0 {
-                    return Err(BulkFlowError::BubbleFormedInsideBubble { a_idx, b_idx });
-                }
-            }
-        }
-
-        // Check interior-exterior and exterior-exterior pairs
-        for a_idx in 0..n_interior {
-            for b_ex in 0..n_exterior {
-                let b_total = n_interior + b_ex;
-                if delta_squared[[a_idx, b_total]] < 0.0 {
                     return Err(BulkFlowError::BubbleFormedInsideBubble {
-                        a_idx,
-                        b_idx: b_total,
+                        a: BubbleIndex::Interior(a_idx),
+                        b: BubbleIndex::Interior(b_idx),
                     });
                 }
             }
         }
 
-        for a_ex in 0..n_exterior {
-            let a_total = n_interior + a_ex;
-            for b_ex in a_ex..n_exterior {
+        // Interior-Exterior
+        for a_idx in 0..n_interior {
+            for b_ex in 0..n_exterior {
                 let b_total = n_interior + b_ex;
+                if delta_squared[[a_idx, b_total]] < 0.0 {
+                    return Err(BulkFlowError::BubbleFormedInsideBubble {
+                        a: BubbleIndex::Interior(a_idx),
+                        b: BubbleIndex::Exterior(b_ex),
+                    });
+                }
+            }
+        }
+
+        // Exterior-Exterior
+        for a_ex in 0..n_exterior {
+            for b_ex in (a_ex + 1)..n_exterior {
                 let delta_ba = bubbles_exterior.slice(s![b_ex, ..]).to_owned()
                     - bubbles_exterior.slice(s![a_ex, ..]).to_owned();
                 let delta_ba_squared = dot_minkowski_vec(delta_ba.view(), delta_ba.view());
                 if delta_ba_squared < 0.0 {
                     return Err(BulkFlowError::BubbleFormedInsideBubble {
-                        a_idx: a_total,
-                        b_idx: b_total,
+                        a: BubbleIndex::Exterior(a_ex),
+                        b: BubbleIndex::Exterior(b_ex),
                     });
                 }
             }
@@ -271,7 +288,7 @@ impl BulkFlow {
             }
         }
 
-        Self::check_bubble_containment(
+        Self::check_bubble_formed_inside_bubble(
             &self.bubbles_interior,
             &self.bubbles_exterior,
             &delta_squared,
@@ -322,7 +339,7 @@ impl BulkFlow {
             }
         }
 
-        Self::check_bubble_containment(
+        Self::check_bubble_formed_inside_bubble(
             &self.bubbles_interior,
             &self.bubbles_exterior,
             &delta_squared,
@@ -487,7 +504,7 @@ impl BulkFlow {
             }
         }
 
-        Self::check_bubble_containment(
+        Self::check_bubble_formed_inside_bubble(
             &self.bubbles_interior,
             &self.bubbles_exterior,
             &delta_squared,

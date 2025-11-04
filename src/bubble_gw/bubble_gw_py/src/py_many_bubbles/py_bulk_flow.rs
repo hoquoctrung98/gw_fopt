@@ -42,9 +42,22 @@ impl From<PyBulkFlowError> for PyErr {
             BulkFlowError::ThreadPoolBuildError(msg) => {
                 PyValueError::new_err(format!("Building thread pool unsucessfully: {}", msg))
             }
-            BulkFlowError::BubbleFormedInsideBubble { a_idx, b_idx } => PyValueError::new_err(
-                format!("Bubble {} is formed inside bubble {}", a_idx, b_idx),
-            ),
+            BulkFlowError::BubbleFormedInsideBubble { a, b } => {
+                let a_str = match a {
+                    BubbleIndex::Interior(i) => format!("Interior({})", i),
+                    BubbleIndex::Exterior(i) => format!("Exterior({})", i),
+                    BubbleIndex::None => "None".to_string(),
+                };
+                let b_str = match b {
+                    BubbleIndex::Interior(i) => format!("Interior({})", i),
+                    BubbleIndex::Exterior(i) => format!("Exterior({})", i),
+                    BubbleIndex::None => "None".to_string(),
+                };
+                PyValueError::new_err(format!(
+                    "Bubble {} is formed inside bubble {} at initial time (overlapping light cones)",
+                    a_str, b_str
+                ))
+            }
         }
     }
 }
