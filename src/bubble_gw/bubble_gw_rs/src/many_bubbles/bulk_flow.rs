@@ -2635,6 +2635,7 @@ impl BulkFlow {
         let dt = if n_t > 1 { t_arr[1] - t_arr[0] } else { 0.0 };
         let z_a = self.bubbles_interior[[a_idx, 3]];
 
+        // Owned first_bubble
         let first_bubble_owned: Array2<BubbleIndex> =
             if let Some(cache) = self.cached_data.first_colliding_bubbles.as_ref() {
                 cache.slice(s![a_idx, .., ..]).to_owned()
@@ -2645,6 +2646,7 @@ impl BulkFlow {
 
         let delta_tab_grid = self.compute_delta_tab(a_idx, first_bubble)?;
 
+        // Final result
         let mut integrand = Array4::<Complex64>::zeros((2, n_sets, n_w, n_t));
 
         let time_results: Vec<
@@ -2655,7 +2657,6 @@ impl BulkFlow {
                 .enumerate()
                 .par_bridge()
                 .map(|(t_idx, &t)| {
-                    // Early skip
                     if t <= t_nucleation {
                         let zero_p = Array2::zeros((n_sets, n_w));
                         let zero_m = Array2::zeros((n_sets, n_w));
@@ -2892,17 +2893,22 @@ impl BulkFlow {
             });
         }
         if n_t < 2 {
-            return Err(BulkFlowError::InvalidResolution(
-                "n_t must be >= 2 for integration".to_string(),
-            ));
+            return Err(BulkFlowError::InvalidResolution("n_t must be >= 2".into()));
         }
 
-        let mut total = Array4::<Complex64>::zeros((2, n_sets, n_w, n_t));
+        let bubble_results: Vec<Result<Array4<Complex64>, BulkFlowError>> =
+            self.thread_pool.install(|| {
+                (0..n_interior)
+                    .into_par_iter()
+                    .map(|a_idx| {
+                        self.compute_c_integrand_fixed_bubble(a_idx, w_arr, t_begin, t_end, n_t)
+                    })
+                    .collect()
+            });
 
-        for a_idx in 0..n_interior {
-            let contrib =
-                self.compute_c_integrand_fixed_bubble(a_idx, w_arr, t_begin, t_end, n_t)?;
-            total += &contrib;
+        let mut total = Array4::zeros((2, n_sets, n_w, n_t));
+        for result in bubble_results {
+            total += &result?;
         }
 
         Ok(total)
@@ -2932,10 +2938,8 @@ impl BulkFlow {
             ));
         }
 
-        // Initialize zero accumulator: [2, n_sets, n_w]
         let mut c_total = Array3::<Complex64>::zeros((2, n_sets, n_w));
 
-        // Serial over bubbles: each call is internally parallel over time
         for a_idx in 0..n_interior {
             let c_a =
                 self.compute_c_integral_fixed_bubble(a_idx, w_arr, Some(t_begin), t_end, n_t)?;
