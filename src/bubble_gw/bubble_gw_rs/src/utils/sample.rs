@@ -1,5 +1,6 @@
 use num::Float;
-use std::fmt::Debug;
+use num::traits::{FromPrimitive, ToPrimitive};
+use std::{f64, fmt::Debug};
 
 #[derive(Debug)]
 pub enum SampleError {
@@ -52,13 +53,19 @@ impl<T: Float + PartialEq> PartialEq for SampleType<T> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct SampleParams<T: Float> {
+pub struct SampleParams<T: Float>
+where
+    T: FromPrimitive + ToPrimitive,
+{
     start: T,
     stop: T,
     sample_type: SampleType<T>,
 }
 
-impl<T: Float + Debug + 'static> SampleParams<T> {
+impl<T> SampleParams<T>
+where
+    T: Float + Debug + FromPrimitive + ToPrimitive + 'static,
+{
     pub fn new(start: T, stop: T, sample_type: SampleType<T>) -> Result<Self, SampleError> {
         if start >= stop {
             return Err(SampleError::InvalidRange {
@@ -117,11 +124,9 @@ impl<T: Float + Debug + 'static> SampleParams<T> {
         n_iter: usize,
     ) -> Result<Vec<T>, SampleError> {
         if n_sample == 0 {
-            return Err(SampleError::InvalidParameter {
-                param: "n_sample",
-                value: 0.0,
-            });
+            return Ok(vec![self.start]);
         }
+
         if n_iter > 0 && n_grid < 2 {
             return Err(SampleError::InvalidParameter {
                 param: "n_grid",
@@ -129,25 +134,21 @@ impl<T: Float + Debug + 'static> SampleParams<T> {
             });
         }
 
-        Ok(match &self.sample_type {
+        match &self.sample_type {
             SampleType::Uniform => {
                 let dist = |x: T| x;
                 if n_iter == 0 {
                     self.distribution_sample_simple(n_sample, &dist, &dist)
-                        .collect()
                 } else {
                     self.distribution_sample_grid(n_sample, n_grid, n_iter, &dist, &dist)
-                        .collect()
                 }
             }
             SampleType::Linear => {
                 let dist = |x: T| x;
                 if n_iter == 0 {
                     self.distribution_sample_simple(n_sample, &dist, &dist)
-                        .collect()
                 } else {
                     self.distribution_sample_grid(n_sample, n_grid, n_iter, &dist, &dist)
-                        .collect()
                 }
             }
             SampleType::Logarithmic { base } => {
@@ -155,10 +156,8 @@ impl<T: Float + Debug + 'static> SampleParams<T> {
                 let dist_inv = |x: T| base.powf(x);
                 if n_iter == 0 {
                     self.distribution_sample_simple(n_sample, &dist, &dist_inv)
-                        .collect()
                 } else {
                     self.distribution_sample_grid(n_sample, n_grid, n_iter, &dist, &dist_inv)
-                        .collect()
                 }
             }
             SampleType::Exponential { base } => {
@@ -166,22 +165,18 @@ impl<T: Float + Debug + 'static> SampleParams<T> {
                 let dist_inv = |x: T| base.powf(x);
                 if n_iter == 0 {
                     self.distribution_sample_simple(n_sample, &dist, &dist_inv)
-                        .collect()
                 } else {
                     self.distribution_sample_grid(n_sample, n_grid, n_iter, &dist, &dist_inv)
-                        .collect()
                 }
             }
             SampleType::Distribution { dist, dist_inv } => {
                 if n_iter == 0 {
                     self.distribution_sample_simple(n_sample, dist, dist_inv)
-                        .collect()
                 } else {
                     self.distribution_sample_grid(n_sample, n_grid, n_iter, dist, dist_inv)
-                        .collect()
                 }
             }
-        })
+        }
     }
 
     pub fn sample_arr(
@@ -190,49 +185,77 @@ impl<T: Float + Debug + 'static> SampleParams<T> {
         n_grid: usize,
         n_iter: usize,
     ) -> Result<Vec<T>, SampleError> {
-        let samples: Result<Vec<Vec<T>>, SampleError> = (0..=n_iter)
-            .map(|iter| self.sample(n_sample, n_grid, iter))
-            .collect();
-        samples.map(|v| v.into_iter().flatten().collect())
+        let mut out: Vec<T> = Vec::new();
+        for iter in 0..=n_iter {
+            let mut s = self.sample(n_sample, n_grid, iter)?;
+            out.append(&mut s);
+        }
+        Ok(out)
     }
 
-    fn distribution_sample_simple<'a>(
+    fn distribution_sample_simple(
         &self,
         n_sample: usize,
         dist: &impl Fn(T) -> T,
-        dist_inv: &'a impl Fn(T) -> T,
-    ) -> impl Iterator<Item = T> + 'a {
+        dist_inv: &impl Fn(T) -> T,
+    ) -> Result<Vec<T>, SampleError> {
+        // precompute conversions and validate
+        let n_sample_t = T::from_usize(n_sample).ok_or(SampleError::ConversionError)?;
         let transformed_start = dist(self.start);
         let transformed_stop = dist(self.stop);
         let transformed_range = transformed_stop - transformed_start;
 
-        (0..=n_sample).map(move |i| {
-            let t = T::from(i).unwrap() / T::from(n_sample).unwrap();
-            dist_inv(transformed_start + t * transformed_range)
-        })
+        let mut v = Vec::with_capacity(n_sample + 1);
+        for i in 0..=n_sample {
+            let i_t = T::from_usize(i).ok_or(SampleError::ConversionError)?;
+            let t = i_t / n_sample_t;
+            v.push(dist_inv(transformed_start + t * transformed_range));
+        }
+        Ok(v)
     }
 
-    fn distribution_sample_grid<'a>(
+    fn distribution_sample_grid(
         &self,
         n_sample: usize,
         n_grid: usize,
         n_iter: usize,
         dist: &impl Fn(T) -> T,
-        dist_inv: &'a impl Fn(T) -> T,
-    ) -> impl Iterator<Item = T> + 'a {
+        dist_inv: &impl Fn(T) -> T,
+    ) -> Result<Vec<T>, SampleError> {
+        // Validate and precompute numeric conversions
+        let n_grid_t = T::from_usize(n_grid).ok_or(SampleError::ConversionError)?;
+        let factor = n_grid_t.powi(n_iter as i32);
+        let sub_factor = if n_iter > 0 {
+            n_grid_t.powi((n_iter - 1) as i32)
+        } else {
+            T::one()
+        };
+
+        let sub_factor_usize = sub_factor.to_usize().ok_or(SampleError::ConversionError)?;
+
+        // guard against overflow when computing total iterations
+        let total_outer = n_sample
+            .checked_mul(sub_factor_usize)
+            .ok_or(SampleError::ConversionError)?;
+
         let transformed_start = dist(self.start);
         let transformed_stop = dist(self.stop);
         let transformed_range = transformed_stop - transformed_start;
 
-        let factor = T::from(n_grid).unwrap().powi(n_iter as i32);
-        let sub_factor = T::from(n_grid).unwrap().powi((n_iter - 1) as i32);
+        let n_sample_t = T::from_usize(n_sample).ok_or(SampleError::ConversionError)?;
 
-        (0..n_sample * sub_factor.to_usize().unwrap()).flat_map(move |i2| {
-            (0..n_grid).map(move |i1| {
-                let t = (T::from(i1).unwrap() / factor + T::from(i2).unwrap() / sub_factor)
-                    / T::from(n_sample).unwrap();
-                dist_inv(transformed_start + t * transformed_range)
-            })
-        })
+        let mut out: Vec<T> = Vec::with_capacity(total_outer * n_grid);
+
+        for i2 in 0..total_outer {
+            for i1 in 0..n_grid {
+                let i1_t = T::from_usize(i1).ok_or(SampleError::ConversionError)?;
+                let i2_t = T::from_usize(i2).ok_or(SampleError::ConversionError)?;
+
+                let t = (i1_t / factor + i2_t / sub_factor) / n_sample_t;
+                out.push(dist_inv(transformed_start + t * transformed_range));
+            }
+        }
+
+        Ok(out)
     }
 }
