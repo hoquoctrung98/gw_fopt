@@ -225,20 +225,21 @@ impl BulkFlow {
             }
         }
 
-        // Exterior-Exterior
-        for a_ex in 0..n_exterior {
-            for b_ex in (a_ex + 1)..n_exterior {
-                let delta_ba = bubbles_exterior.slice(s![b_ex, ..]).to_owned()
-                    - bubbles_exterior.slice(s![a_ex, ..]).to_owned();
-                let delta_ba_squared = dot_minkowski_vec(delta_ba.view(), delta_ba.view());
-                if delta_ba_squared < 0.0 {
-                    return Err(BulkFlowError::BubbleFormedInsideBubble {
-                        a: BubbleIndex::Exterior(a_ex),
-                        b: BubbleIndex::Exterior(b_ex),
-                    });
-                }
-            }
-        }
+        // FIXME: temporarily ignore so that the periodic boundary condition works
+        // // Exterior-Exterior
+        // for a_ex in 0..n_exterior {
+        //     for b_ex in (a_ex + 1)..n_exterior {
+        //         let delta_ba = bubbles_exterior.slice(s![b_ex, ..]).to_owned()
+        //             - bubbles_exterior.slice(s![a_ex, ..]).to_owned();
+        //         let delta_ba_squared = dot_minkowski_vec(delta_ba.view(), delta_ba.view());
+        //         if delta_ba_squared < 0.0 {
+        //             return Err(BulkFlowError::BubbleFormedInsideBubble {
+        //                 a: BubbleIndex::Exterior(a_ex),
+        //                 b: BubbleIndex::Exterior(b_ex),
+        //             });
+        //         }
+        //     }
+        // }
 
         Ok(())
     }
@@ -1382,19 +1383,9 @@ impl BulkFlow {
             return Err(BulkFlowError::InvalidResolution("n_t must be >= 2".into()));
         }
 
-        let bubble_results: Vec<Result<Array4<Complex64>, BulkFlowError>> =
-            self.thread_pool.install(|| {
-                (0..n_interior)
-                    .into_par_iter()
-                    .map(|a_idx| {
-                        self.compute_c_integrand_fixed_bubble(a_idx, w_arr, t_begin, t_end, n_t)
-                    })
-                    .collect()
-            });
-
         let mut total = Array4::zeros((2, n_sets, n_w, n_t));
-        for result in bubble_results {
-            total += &result?;
+        for a_idx in 0..n_interior {
+            total += &self.compute_c_integrand_fixed_bubble(a_idx, w_arr, t_begin, t_end, n_t)?;
         }
 
         Ok(total)
@@ -1425,12 +1416,9 @@ impl BulkFlow {
         }
 
         let mut c_total = Array3::<Complex64>::zeros((2, n_sets, n_w));
-
         for a_idx in 0..n_interior {
-            let c_a =
-                self.compute_c_integral_fixed_bubble(a_idx, w_arr, Some(t_begin), t_end, n_t)?;
-
-            c_total += &c_a;
+            c_total +=
+                &self.compute_c_integral_fixed_bubble(a_idx, w_arr, Some(t_begin), t_end, n_t)?;
         }
 
         Ok(c_total)
