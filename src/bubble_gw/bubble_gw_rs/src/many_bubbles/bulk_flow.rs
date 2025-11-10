@@ -2,7 +2,7 @@ use ndarray::{Array1, Array2, Array3, Array4, ArrayView1, ArrayView2, Axis, Zip,
 use num_complex::Complex64;
 use rayon::ThreadPool;
 use rayon::prelude::*;
-use std::error::Error;
+use thiserror::Error;
 
 /// Represents a bubble index, distinguishing between an interior index, exterior index, and no collision.
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -38,60 +38,43 @@ pub struct Segment {
 }
 
 /// Custom error type for BulkFlow operations.
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum BulkFlowError {
+    #[error("Field '{0}' is not initialized")]
     UninitializedField(String),
+
+    #[error("Index {index} out of bounds for max {max}")]
     InvalidIndex { index: usize, max: usize },
+
+    #[error("Invalid resolution: {0}")]
     InvalidResolution(String),
+
+    #[error("Invalid time range: t_begin={begin} > t_end={end}")]
     InvalidTimeRange { begin: f64, end: f64 },
+
+    #[error("Array shape mismatch: {0}")]
     ArrayShapeMismatch(String),
-    ThreadPoolBuildError(String),
+
+    #[error("Failed to build thread pool")]
+    ThreadPoolBuildError(
+        #[from]
+        #[source]
+        rayon::ThreadPoolBuildError,
+    ),
+
+    #[error("Bubble {a} is formed inside bubble {b} at initial time (overlapping light cones)")]
     BubbleFormedInsideBubble { a: BubbleIndex, b: BubbleIndex },
 }
-
-impl std::fmt::Display for BulkFlowError {
+// Helper Display implementation for BubbleIndex used in the error message
+impl std::fmt::Display for BubbleIndex {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            BulkFlowError::UninitializedField(field) => {
-                write!(f, "Field '{}' is not initialized", field)
-            }
-            BulkFlowError::InvalidIndex { index, max } => {
-                write!(f, "Index {} out of bounds for max {}", index, max)
-            }
-            BulkFlowError::InvalidResolution(msg) => {
-                write!(f, "Invalid resolution: {}", msg)
-            }
-            BulkFlowError::InvalidTimeRange { begin, end } => {
-                write!(f, "Invalid time range: t_begin={} > t_end={}", begin, end)
-            }
-            BulkFlowError::ArrayShapeMismatch(msg) => {
-                write!(f, "Array shape mismatch: {}", msg)
-            }
-            BulkFlowError::ThreadPoolBuildError(msg) => {
-                write!(f, "Building thread pool unsucessfully: {}", msg)
-            }
-            BulkFlowError::BubbleFormedInsideBubble { a, b } => {
-                let a_str = match a {
-                    BubbleIndex::Interior(i) => format!("Interior({})", i),
-                    BubbleIndex::Exterior(i) => format!("Exterior({})", i),
-                    BubbleIndex::None => "None".to_string(),
-                };
-                let b_str = match b {
-                    BubbleIndex::Interior(i) => format!("Interior({})", i),
-                    BubbleIndex::Exterior(i) => format!("Exterior({})", i),
-                    BubbleIndex::None => "None".to_string(),
-                };
-                write!(
-                    f,
-                    "Bubble {} is formed inside bubble {} at initial time (overlapping light cones)",
-                    a_str, b_str
-                )
-            }
+            BubbleIndex::Interior(i) => write!(f, "Interior({i})"),
+            BubbleIndex::Exterior(i) => write!(f, "Exterior({i})"),
+            BubbleIndex::None => write!(f, "None"),
         }
     }
 }
-
-impl Error for BulkFlowError {}
 
 pub struct BulkFlow {
     bubbles_interior: Array2<f64>,
@@ -171,8 +154,7 @@ impl BulkFlow {
             .unwrap_or(4);
         let thread_pool = rayon::ThreadPoolBuilder::new()
             .num_threads(default_threads)
-            .build()
-            .map_err(|e| BulkFlowError::ThreadPoolBuildError(e.to_string()))?;
+            .build()?;
 
         Ok(BulkFlow {
             bubbles_interior,

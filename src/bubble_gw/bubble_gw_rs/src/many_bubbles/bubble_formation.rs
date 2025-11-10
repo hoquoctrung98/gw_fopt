@@ -863,7 +863,7 @@ impl<S: NucleationStrategy> BubbleFormationSimulator<S> {
     /// An `Array2<f64>` with shape `(N, 3)`, where each row is a valid point `[x, y, z]`.
     pub fn get_valid_points(&mut self, t: f64) -> Array2<f64> {
         let last_t = self.params.last_update_time;
-        let mut valid_coords = Vec::new();
+        let valid_coords: Vec<[f64; 3]>;
         if t > last_t {
             // Single-pass collection of remove indices and valid coordinates
             let (points_to_remove, valid_coords_temp): (Vec<usize>, Vec<[f64; 3]>) = self

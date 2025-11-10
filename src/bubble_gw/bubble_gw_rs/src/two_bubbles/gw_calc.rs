@@ -1,9 +1,36 @@
 use ndarray::prelude::*;
 use num_complex::Complex64;
-use peroxide::numerical::integral::{gauss_kronrod_quadrature, Integral::G30K61};
+use peroxide::numerical::integral::{Integral::G30K61, gauss_kronrod_quadrature};
 use rayon::prelude::*;
 
-use super::integrand::{IntegrandCalculator, IntegrandType};
+use super::gw_integrand::{IntegrandCalculator, IntegrandType};
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum GWCalcError {
+    #[error("phi1 and phi2 must have the same shape: got phi1={phi1:?}, phi2={phi2:?}")]
+    ShapeMismatch { phi1: Vec<usize>, phi2: Vec<usize> },
+
+    #[error(
+        "Input arrays must have the same length: w_arr.len()={w_len}, cos_thetak_arr.len()={k_len}"
+    )]
+    LengthMismatch { w_len: usize, k_len: usize },
+
+    #[error("Tolerance must be positive: got {0}")]
+    InvalidTolerance(f64),
+
+    #[error("Maximum iterations must be > 0: got {0}")]
+    InvalidMaxIter(u32),
+
+    #[error("Failed to build thread pool: {0}")]
+    ThreadPoolBuild(#[from] rayon::ThreadPoolBuildError),
+
+    #[error("Integration failed: {0}")]
+    IntegrationFailed(String),
+
+    #[error("Invalid cutoff configuration: t_cut={t_cut}, t_0={t_0}, smax={smax}")]
+    InvalidCutoff { t_cut: f64, t_0: f64, smax: f64 },
+}
 
 /// Configuration for cutoff parameters in the gravitational wave calculator.
 #[derive(Debug, Clone)]
@@ -80,7 +107,7 @@ impl GravitationalWaveCalculator {
         ds: f64,
         ratio_t_cut: Option<f64>,
         ratio_t_0: Option<f64>,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, GWCalcError> {
         let n_fields = phi1.shape()[0];
         let n_s = phi1.shape()[1];
         let n_z = phi1.shape()[2];
@@ -89,7 +116,10 @@ impl GravitationalWaveCalculator {
         let smax = s_grid[n_s - 1];
 
         if phi2.shape() != phi1.shape() {
-            return Err("phi2_history must have the same shape as phi_history".to_string());
+            return Err(GWCalcError::ShapeMismatch {
+                phi1: phi1.shape().to_vec(),
+                phi2: phi2.shape().to_vec(),
+            });
         }
 
         let lattice = LatticeConfig {
@@ -119,12 +149,12 @@ impl GravitationalWaveCalculator {
         })
     }
 
-    pub fn set_integral_params(&mut self, tol: f64, max_iter: u32) -> Result<(), String> {
+    pub fn set_integral_params(&mut self, tol: f64, max_iter: u32) -> Result<(), GWCalcError> {
         if tol <= 0.0 {
-            return Err("Tolerance must be positive".to_string());
+            return Err(GWCalcError::InvalidTolerance(tol));
         }
         if max_iter == 0 {
-            return Err("Max iterations must be greater than zero".to_string());
+            return Err(GWCalcError::InvalidMaxIter(max_iter));
         }
         self.tol = tol;
         self.max_iter = max_iter;
@@ -448,14 +478,13 @@ impl GravitationalWaveCalculator {
         w_arr: &[f64],
         cos_thetak_arr: &[f64],
         num_threads: Option<usize>,
-    ) -> Result<Vec<(Complex64, Complex64, Complex64, Complex64)>, String> {
+    ) -> Result<Vec<(Complex64, Complex64, Complex64, Complex64)>, GWCalcError> {
         // Check that w_arr and cos_thetak_arr have the same length
         if w_arr.len() != cos_thetak_arr.len() {
-            return Err(format!(
-                "w_arr and cos_thetak_arr must have the same length: got {} and {}",
-                w_arr.len(),
-                cos_thetak_arr.len()
-            ));
+            return Err(GWCalcError::LengthMismatch {
+                w_len: w_arr.len(),
+                k_len: cos_thetak_arr.len(),
+            });
         }
 
         // Filter out invalid cos_thetak values (cos_thetak = ±1)
@@ -471,8 +500,7 @@ impl GravitationalWaveCalculator {
             match num_threads {
                 Some(n) if n > 0 => rayon::ThreadPoolBuilder::new()
                     .num_threads(n)
-                    .build()
-                    .map_err(|e| format!("Failed to build thread pool: {}", e))?
+                    .build()?
                     .install(|| {
                         valid_wk_pairs
                             .par_iter()
@@ -528,7 +556,7 @@ impl GravitationalWaveCalculator {
         let results: Vec<(Complex64, Complex64, Complex64, Complex64)> = results
             .into_iter()
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| format!("Integration error: {}", e))?;
+            .map_err(|e| GWCalcError::IntegrationFailed(e.to_string()))?;
 
         // Create an output vector matching the input w_arr/cos_thetak_arr size, with zeros for invalid cos_thetak
         let mut t_tensor = vec![
@@ -558,14 +586,13 @@ impl GravitationalWaveCalculator {
         w_arr: &[f64],
         cos_thetak_arr: &[f64],
         num_threads: Option<usize>,
-    ) -> Result<Vec<f64>, String> {
+    ) -> Result<Vec<f64>, GWCalcError> {
         // Check that w_arr and k_arr have the same length
         if w_arr.len() != cos_thetak_arr.len() {
-            return Err(format!(
-                "w_arr and k_arr must have the same length: got {} and {}",
-                w_arr.len(),
-                cos_thetak_arr.len()
-            ));
+            return Err(GWCalcError::LengthMismatch {
+                w_len: w_arr.len(),
+                k_len: cos_thetak_arr.len(),
+            });
         }
 
         // Filter out invalid k values (k = ±1)
@@ -577,11 +604,10 @@ impl GravitationalWaveCalculator {
             .collect();
 
         // Compute the spectrum for each valid (w, k) pair in parallel
-        let results: Vec<Result<f64, String>> = match num_threads {
+        let results: Vec<Result<f64, GWCalcError>> = match num_threads {
             Some(n) if n > 0 => rayon::ThreadPoolBuilder::new()
                 .num_threads(n)
-                .build()
-                .map_err(|e| format!("Failed to build thread pool: {}", e))?
+                .build()?
                 .install(|| {
                     valid_wk_pairs
                         .par_iter()
@@ -661,7 +687,7 @@ impl GravitationalWaveCalculator {
         let results: Vec<f64> = results
             .into_iter()
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| format!("Integration error: {}", e))?;
+            .map_err(|e| GWCalcError::IntegrationFailed(e.to_string()))?;
 
         // Create an output vector matching the input w_arr/k_arr size, with 0.0 for invalid cos_thetak
         let mut de_dlogw_dcos_thetak = vec![0.0; w_arr.len()];
@@ -682,7 +708,7 @@ impl GravitationalWaveCalculator {
         w_arr: &[f64],
         n_k: usize,
         num_threads: Option<usize>,
-    ) -> Result<Vec<f64>, String> {
+    ) -> Result<Vec<f64>, GWCalcError> {
         let cos_thetak_arr: Vec<f64> = (0..n_k).map(|i| i as f64 / (n_k - 1) as f64).collect();
         let dcos_thetak = cos_thetak_arr[1] - cos_thetak_arr[0];
 

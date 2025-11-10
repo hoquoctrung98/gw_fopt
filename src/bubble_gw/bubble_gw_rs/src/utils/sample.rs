@@ -1,24 +1,34 @@
-use num::Float;
-use num::traits::{FromPrimitive, ToPrimitive};
+// use num::Float as NumFloat;
+use num::traits::{Float, FromPrimitive, ToPrimitive};
 use std::{f64, fmt::Debug};
+use thiserror::Error;
 
-#[derive(Debug)]
+/// Errors that can occur during sampling parameter validation or numeric conversion.
+#[derive(Error, Debug)]
 pub enum SampleError {
-    InvalidRange {
-        start: f64,
-        stop: f64,
-    },
+    #[error("Invalid range: start ({start}) >= stop ({stop})")]
+    InvalidRange { start: f64, stop: f64 },
+
+    #[error("Invalid base for {sample_type} sampling: base = {base} (must be > 0)")]
     InvalidBase {
         base: f64,
         sample_type: &'static str,
     },
-    InvalidParameter {
-        param: &'static str,
-        value: f64,
-    },
+
+    #[error("Invalid parameter '{param}': {value}")]
+    InvalidParameter { param: &'static str, value: f64 },
+
+    #[error("Failed to convert integer to float type (overflow or unsupported)")]
     ConversionError,
 }
 
+/// Type of sampling distribution to use when generating points between `start` and `stop`.
+///
+/// This enum defines how points are distributed in the output space:
+/// - `Uniform` and `Linear`: identical behavior (linear spacing in value space)
+/// - `Logarithmic`: logarithmic spacing (base > 0 required)
+/// - `Exponential`: exponential spacing (base > 0 required)
+/// - `Distribution`: arbitrary monotonic mapping via closure pair
 #[derive(Clone, Debug)]
 pub enum SampleType<T> {
     Uniform,
@@ -30,7 +40,9 @@ pub enum SampleType<T> {
         base: T,
     },
     Distribution {
+        /// Monotonic increasing function: `value → transformed`
         dist: fn(T) -> T,
+        /// Inverse of `dist`: `transformed → value`
         dist_inv: fn(T) -> T,
     },
 }
@@ -38,12 +50,10 @@ pub enum SampleType<T> {
 impl<T: Float + PartialEq> PartialEq for SampleType<T> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (SampleType::Uniform, SampleType::Uniform) => true,
-            (SampleType::Linear, SampleType::Linear) => true,
-            (SampleType::Logarithmic { base: b1 }, SampleType::Logarithmic { base: b2 }) => {
-                b1 == b2
-            }
-            (SampleType::Exponential { base: b1 }, SampleType::Exponential { base: b2 }) => {
+            (SampleType::Uniform, SampleType::Uniform)
+            | (SampleType::Linear, SampleType::Linear) => true,
+            (SampleType::Logarithmic { base: b1 }, SampleType::Logarithmic { base: b2 })
+            | (SampleType::Exponential { base: b1 }, SampleType::Exponential { base: b2 }) => {
                 b1 == b2
             }
             (SampleType::Distribution { .. }, SampleType::Distribution { .. }) => false,
@@ -52,6 +62,15 @@ impl<T: Float + PartialEq> PartialEq for SampleType<T> {
     }
 }
 
+/// Parameters defining a 1D sampling strategy.
+///
+/// This struct holds the full specification for generating samples
+/// from `start` to `stop` using a given `sample_type`.
+///
+/// # Constraints
+/// - `start < stop`
+/// - For `Logarithmic` and `Exponential`: `base > 0` and `start > 0`, `stop > 0`
+/// - `start` and `stop` must not be NaN
 #[derive(Clone, Debug, PartialEq)]
 pub struct SampleParams<T: Float>
 where
@@ -66,11 +85,30 @@ impl<T> SampleParams<T>
 where
     T: Float + Debug + FromPrimitive + ToPrimitive + 'static,
 {
+    /// Create a new `SampleParams` instance with validation.
+    ///
+    /// # Errors
+    /// Returns `SampleError` if:
+    /// - `start >= stop`
+    /// - `start` or `stop` is NaN
+    /// - Logarithmic/Exponential used with invalid base or non-positive range
+    ///
+    /// # Example
+    /// ```rust
+    /// use bubble_gw_rs::utils::sample::{SampleParams, SampleType};
+    /// fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let params = SampleParams::new(1.0, 100.0, SampleType::Logarithmic { base: 10.0 })?;
+    /// Ok(())
+    /// }
+    /// ```
     pub fn new(start: T, stop: T, sample_type: SampleType<T>) -> Result<Self, SampleError> {
+        let start_f64 = start.to_f64().unwrap_or(f64::NAN);
+        let stop_f64 = stop.to_f64().unwrap_or(f64::NAN);
+
         if start >= stop {
             return Err(SampleError::InvalidRange {
-                start: start.to_f64().unwrap_or(f64::NAN),
-                stop: stop.to_f64().unwrap_or(f64::NAN),
+                start: start_f64,
+                stop: stop_f64,
             });
         }
         if start.is_nan() || stop.is_nan() {
@@ -79,37 +117,30 @@ where
                 value: f64::NAN,
             });
         }
+
         match &sample_type {
-            SampleType::Logarithmic { base } => {
+            SampleType::Logarithmic { base } | SampleType::Exponential { base } => {
+                let base_f64 = base.to_f64().unwrap_or(f64::NAN);
                 if *base <= T::zero() {
                     return Err(SampleError::InvalidBase {
-                        base: base.to_f64().unwrap_or(f64::NAN),
-                        sample_type: "Logarithmic",
+                        base: base_f64,
+                        sample_type: if matches!(sample_type, SampleType::Logarithmic { .. }) {
+                            "Logarithmic"
+                        } else {
+                            "Exponential"
+                        },
                     });
                 }
                 if start <= T::zero() || stop <= T::zero() {
                     return Err(SampleError::InvalidRange {
-                        start: start.to_f64().unwrap_or(f64::NAN),
-                        stop: stop.to_f64().unwrap_or(f64::NAN),
-                    });
-                }
-            }
-            SampleType::Exponential { base } => {
-                if *base <= T::zero() {
-                    return Err(SampleError::InvalidBase {
-                        base: base.to_f64().unwrap_or(f64::NAN),
-                        sample_type: "Exponential",
-                    });
-                }
-                if start <= T::zero() || stop <= T::zero() {
-                    return Err(SampleError::InvalidRange {
-                        start: start.to_f64().unwrap_or(f64::NAN),
-                        stop: stop.to_f64().unwrap_or(f64::NAN),
+                        start: start_f64,
+                        stop: stop_f64,
                     });
                 }
             }
             _ => {}
         }
+
         Ok(Self {
             start,
             stop,
@@ -117,6 +148,21 @@ where
         })
     }
 
+    /// Generate `n_sample + 1` points (inclusive) using the configured sampling strategy.
+    ///
+    /// If `n_iter > 0`, uses adaptive grid refinement with `n_grid` subdivisions per iteration.
+    ///
+    /// # Parameters
+    /// - `n_sample`: Number of intervals (result has `n_sample + 1` points)
+    /// - `n_grid`: Number of sub-grid points per refinement level (must be ≥ 2 if `n_iter > 0`)
+    /// - `n_iter`: Number of refinement iterations (0 = simple uniform sampling)
+    ///
+    /// # Returns
+    /// A `Vec<T>` of sampled points, always including `start` and `stop`.
+    ///
+    /// # Errors
+    /// - `ConversionError` if integer → float conversion fails
+    /// - `InvalidParameter` if `n_grid < 2` when `n_iter > 0`
     pub fn sample(
         &self,
         n_sample: usize,
@@ -135,15 +181,7 @@ where
         }
 
         match &self.sample_type {
-            SampleType::Uniform => {
-                let dist = |x: T| x;
-                if n_iter == 0 {
-                    self.distribution_sample_simple(n_sample, &dist, &dist)
-                } else {
-                    self.distribution_sample_grid(n_sample, n_grid, n_iter, &dist, &dist)
-                }
-            }
-            SampleType::Linear => {
+            SampleType::Uniform | SampleType::Linear => {
                 let dist = |x: T| x;
                 if n_iter == 0 {
                     self.distribution_sample_simple(n_sample, &dist, &dist)
@@ -179,6 +217,10 @@ where
         }
     }
 
+    /// Generate samples across multiple refinement iterations.
+    ///
+    /// Calls `sample()` for `iter = 0..=n_iter` and concatenates results.
+    /// Useful for creating nested or multi-resolution datasets.
     pub fn sample_arr(
         &self,
         n_sample: usize,
@@ -193,13 +235,13 @@ where
         Ok(out)
     }
 
+    /// Simple uniform sampling in transformed space (no refinement).
     fn distribution_sample_simple(
         &self,
         n_sample: usize,
         dist: &impl Fn(T) -> T,
         dist_inv: &impl Fn(T) -> T,
     ) -> Result<Vec<T>, SampleError> {
-        // precompute conversions and validate
         let n_sample_t = T::from_usize(n_sample).ok_or(SampleError::ConversionError)?;
         let transformed_start = dist(self.start);
         let transformed_stop = dist(self.stop);
@@ -214,6 +256,10 @@ where
         Ok(v)
     }
 
+    /// Adaptive grid sampling with `n_iter` levels of refinement.
+    ///
+    /// Produces denser sampling in regions covered by higher iterations.
+    /// Total points ≈ `n_sample × n_grid^iter`
     fn distribution_sample_grid(
         &self,
         n_sample: usize,
@@ -222,7 +268,6 @@ where
         dist: &impl Fn(T) -> T,
         dist_inv: &impl Fn(T) -> T,
     ) -> Result<Vec<T>, SampleError> {
-        // Validate and precompute numeric conversions
         let n_grid_t = T::from_usize(n_grid).ok_or(SampleError::ConversionError)?;
         let factor = n_grid_t.powi(n_iter as i32);
         let sub_factor = if n_iter > 0 {
@@ -232,8 +277,6 @@ where
         };
 
         let sub_factor_usize = sub_factor.to_usize().ok_or(SampleError::ConversionError)?;
-
-        // guard against overflow when computing total iterations
         let total_outer = n_sample
             .checked_mul(sub_factor_usize)
             .ok_or(SampleError::ConversionError)?;
@@ -241,20 +284,18 @@ where
         let transformed_start = dist(self.start);
         let transformed_stop = dist(self.stop);
         let transformed_range = transformed_stop - transformed_start;
-
         let n_sample_t = T::from_usize(n_sample).ok_or(SampleError::ConversionError)?;
 
         let mut out: Vec<T> = Vec::with_capacity(total_outer * n_grid);
 
-        for i2 in 0..total_outer {
-            for i1 in 0..n_grid {
-                let i1_t = T::from_usize(i1).ok_or(SampleError::ConversionError)?;
-                let i2_t = T::from_usize(i2).ok_or(SampleError::ConversionError)?;
-
+        (0..total_outer)
+            .flat_map(|i2| (0..n_grid).map(move |i1| (i1, i2)))
+            .for_each(|(i1, i2)| {
+                let i1_t = T::from_usize(i1).unwrap_or(T::zero());
+                let i2_t = T::from_usize(i2).unwrap_or(T::zero());
                 let t = (i1_t / factor + i2_t / sub_factor) / n_sample_t;
                 out.push(dist_inv(transformed_start + t * transformed_range));
-            }
-        }
+            });
 
         Ok(out)
     }

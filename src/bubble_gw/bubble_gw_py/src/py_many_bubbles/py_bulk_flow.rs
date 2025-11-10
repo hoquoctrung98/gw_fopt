@@ -4,63 +4,67 @@ use numpy::{
     Complex64 as NumpyComplex64, PyArray1, PyArray2, PyArray3, PyArray4, PyArrayMethods,
     PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3,
 };
-use pyo3::Python;
 use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
+use thiserror::Error;
 
-// Newtype wrapper for BulkFlowError to satisfy orphan rules
-#[derive(Debug)]
-struct PyBulkFlowError(BulkFlowError);
+/// Local Python-facing error — 100% owned by this crate
+#[derive(Error, Debug)]
+pub enum PyBulkFlowError {
+    #[error("Index {index} out of bounds (max: {max})")]
+    InvalidIndex { index: usize, max: usize },
 
-// Convert BulkFlowError to PyBulkFlowError
-impl From<BulkFlowError> for PyBulkFlowError {
-    fn from(err: BulkFlowError) -> Self {
-        PyBulkFlowError(err)
-    }
+    #[error("Field '{0}' is not initialized")]
+    UninitializedField(String),
+
+    #[error("Invalid resolution: {0}")]
+    InvalidResolution(String),
+
+    #[error("Invalid time range: t_begin={begin} > t_end={end}")]
+    InvalidTimeRange { begin: f64, end: f64 },
+
+    #[error("Array shape mismatch: {0}")]
+    ArrayShapeMismatch(String),
+
+    #[error("Failed to build thread pool: {0}")]
+    ThreadPoolBuildError(String),
+
+    #[error("Bubble {a} is formed inside bubble {b} at initial time (overlapping light cones)")]
+    BubbleFormedInsideBubble { a: BubbleIndex, b: BubbleIndex },
 }
 
-// Convert PyBulkFlowError to PyErr for Python exception handling
-impl From<PyBulkFlowError> for PyErr {
-    fn from(err: PyBulkFlowError) -> PyErr {
-        match err.0 {
+impl From<BulkFlowError> for PyBulkFlowError {
+    fn from(err: BulkFlowError) -> Self {
+        match err {
             BulkFlowError::InvalidIndex { index, max } => {
-                PyIndexError::new_err(format!("Index {} out of bounds for max {}", index, max))
+                PyBulkFlowError::InvalidIndex { index, max }
             }
-            BulkFlowError::UninitializedField(field) => {
-                PyValueError::new_err(format!("Field '{}' is not initialized", field))
+            BulkFlowError::UninitializedField(field) => PyBulkFlowError::UninitializedField(field),
+            BulkFlowError::InvalidResolution(msg) => PyBulkFlowError::InvalidResolution(msg),
+            BulkFlowError::InvalidTimeRange { begin, end } => {
+                PyBulkFlowError::InvalidTimeRange { begin, end }
             }
-            BulkFlowError::InvalidResolution(msg) => {
-                PyValueError::new_err(format!("Invalid resolution: {}", msg))
-            }
-            BulkFlowError::InvalidTimeRange { begin, end } => PyValueError::new_err(format!(
-                "Invalid time range: t_begin={} > t_end={}",
-                begin, end
-            )),
-            BulkFlowError::ArrayShapeMismatch(msg) => {
-                PyValueError::new_err(format!("Array shape mismatch: {}", msg))
-            }
-            BulkFlowError::ThreadPoolBuildError(msg) => {
-                PyValueError::new_err(format!("Building thread pool unsucessfully: {}", msg))
+            BulkFlowError::ArrayShapeMismatch(msg) => PyBulkFlowError::ArrayShapeMismatch(msg),
+            BulkFlowError::ThreadPoolBuildError(e) => {
+                PyBulkFlowError::ThreadPoolBuildError(e.to_string())
             }
             BulkFlowError::BubbleFormedInsideBubble { a, b } => {
-                let a_str = match a {
-                    BubbleIndex::Interior(i) => format!("Interior({})", i),
-                    BubbleIndex::Exterior(i) => format!("Exterior({})", i),
-                    BubbleIndex::None => "None".to_string(),
-                };
-                let b_str = match b {
-                    BubbleIndex::Interior(i) => format!("Interior({})", i),
-                    BubbleIndex::Exterior(i) => format!("Exterior({})", i),
-                    BubbleIndex::None => "None".to_string(),
-                };
-                PyValueError::new_err(format!(
-                    "Bubble {} is formed inside bubble {} at initial time (overlapping light cones)",
-                    a_str, b_str
-                ))
+                PyBulkFlowError::BubbleFormedInsideBubble { a, b }
             }
         }
     }
 }
+
+impl From<PyBulkFlowError> for PyErr {
+    fn from(err: PyBulkFlowError) -> Self {
+        match err {
+            PyBulkFlowError::InvalidIndex { .. } => PyIndexError::new_err(err.to_string()),
+            _ => PyValueError::new_err(err.to_string()),
+        }
+    }
+}
+
+type PyResult<T> = Result<T, PyBulkFlowError>;
 
 #[pyclass(name = "BulkFlow")]
 pub struct PyBulkFlow {
@@ -76,21 +80,22 @@ impl PyBulkFlow {
         bubbles_exterior: Option<PyReadonlyArray2<f64>>,
     ) -> PyResult<Self> {
         let bubbles_interior = bubbles_interior.to_owned_array();
-        let bubbles_exterior =
-            bubbles_exterior.map_or(Array2::zeros((0, 4)), |arr| arr.to_owned_array());
-        let bulk_flow =
-            BulkFlow::new(bubbles_interior, bubbles_exterior).map_err(PyBulkFlowError)?;
+        let bubbles_exterior = bubbles_exterior
+            .map(|arr| arr.to_owned_array())
+            .unwrap_or_else(|| Array2::zeros((0, 4)));
+
+        let bulk_flow = BulkFlow::new(bubbles_interior, bubbles_exterior)?;
         Ok(PyBulkFlow { inner: bulk_flow })
     }
 
     #[getter]
-    pub fn bubbles_interior(&self, py: Python) -> PyResult<Py<PyArray2<f64>>> {
-        Ok(PyArray2::from_array(py, self.inner.bubbles_interior()).into())
+    pub fn bubbles_interior(&self, py: Python) -> Py<PyArray2<f64>> {
+        PyArray2::from_array(py, self.inner.bubbles_interior()).into()
     }
 
     #[getter]
-    pub fn bubbles_exterior(&self, py: Python) -> PyResult<Py<PyArray2<f64>>> {
-        Ok(PyArray2::from_array(py, self.inner.bubbles_exterior()).into())
+    pub fn bubbles_exterior(&self, py: Python) -> Py<PyArray2<f64>> {
+        PyArray2::from_array(py, self.inner.bubbles_exterior()).into()
     }
 
     pub fn set_bubbles_interior(
@@ -98,8 +103,7 @@ impl PyBulkFlow {
         bubbles_interior: PyReadonlyArray2<f64>,
     ) -> PyResult<()> {
         self.inner
-            .set_bubbles_interior(bubbles_interior.to_owned_array())
-            .map_err(PyBulkFlowError)?;
+            .set_bubbles_interior(bubbles_interior.to_owned_array())?;
         Ok(())
     }
 
@@ -108,78 +112,61 @@ impl PyBulkFlow {
         bubbles_exterior: PyReadonlyArray2<f64>,
     ) -> PyResult<()> {
         self.inner
-            .set_bubbles_exterior(bubbles_exterior.to_owned_array())
-            .map_err(PyBulkFlowError)?;
+            .set_bubbles_exterior(bubbles_exterior.to_owned_array())?;
         Ok(())
     }
 
     #[getter]
-    pub fn delta(&self, py: Python) -> PyResult<Py<PyArray3<f64>>> {
-        Ok(PyArray3::from_array(py, self.inner.delta()).into())
+    pub fn delta(&self, py: Python) -> Py<PyArray3<f64>> {
+        PyArray3::from_array(py, self.inner.delta()).into()
     }
 
     #[getter]
-    pub fn delta_squared(&self, py: Python) -> PyResult<Py<PyArray2<f64>>> {
-        Ok(PyArray2::from_array(py, self.inner.delta_squared()).into())
+    pub fn delta_squared(&self, py: Python) -> Py<PyArray2<f64>> {
+        PyArray2::from_array(py, self.inner.delta_squared()).into()
     }
 
-    pub fn set_delta(&mut self, delta: PyReadonlyArray3<f64>) -> PyResult<()> {
-        let delta = delta.to_owned_array();
-        self.inner.set_delta(delta);
-        Ok(())
-    }
-
-    #[getter]
-    pub fn coefficients_sets(&self, py: Python) -> PyResult<Py<PyArray2<f64>>> {
-        Ok(PyArray2::from_array(py, self.inner.coefficients_sets()).into())
-    }
-
-    pub fn set_coefficients_sets(
-        &mut self,
-        coefficients_sets: PyReadonlyArray2<f64>,
-    ) -> PyResult<()> {
-        let coefficients_sets = coefficients_sets.to_owned_array();
-        self.inner.set_coefficients_sets(coefficients_sets);
-        Ok(())
+    pub fn set_delta(&mut self, delta: PyReadonlyArray3<f64>) {
+        self.inner.set_delta(delta.to_owned_array());
     }
 
     #[getter]
-    pub fn get_powers_sets(&self, py: Python) -> PyResult<Py<PyArray2<f64>>> {
-        Ok(PyArray2::from_array(py, self.inner.powers_sets()).into())
+    pub fn coefficients_sets(&self, py: Python) -> Py<PyArray2<f64>> {
+        PyArray2::from_array(py, self.inner.coefficients_sets()).into()
     }
 
-    pub fn set_powers_sets(&mut self, powers_sets: PyReadonlyArray2<f64>) -> PyResult<()> {
-        let powers_sets = powers_sets.to_owned_array();
-        self.inner.set_powers_sets(powers_sets);
-        Ok(())
+    pub fn set_coefficients_sets(&mut self, coefficients_sets: PyReadonlyArray2<f64>) {
+        self.inner
+            .set_coefficients_sets(coefficients_sets.to_owned_array());
     }
 
     #[getter]
-    pub fn active_sets(&self, py: Python) -> PyResult<Py<PyArray1<bool>>> {
-        Ok(PyArray1::from_array(py, self.inner.active_sets()).into())
+    pub fn get_powers_sets(&self, py: Python) -> Py<PyArray2<f64>> {
+        PyArray2::from_array(py, self.inner.powers_sets()).into()
     }
 
-    pub fn set_active_sets(&mut self, active_sets: PyReadonlyArray1<bool>) -> PyResult<()> {
-        let active_sets = active_sets.to_owned_array();
-        self.inner.set_active_sets(active_sets);
-        Ok(())
+    pub fn set_powers_sets(&mut self, powers_sets: PyReadonlyArray2<f64>) {
+        self.inner.set_powers_sets(powers_sets.to_owned_array());
+    }
+
+    #[getter]
+    pub fn active_sets(&self, py: Python) -> Py<PyArray1<bool>> {
+        PyArray1::from_array(py, self.inner.active_sets()).into()
+    }
+
+    pub fn set_active_sets(&mut self, active_sets: PyReadonlyArray1<bool>) {
+        self.inner.set_active_sets(active_sets.to_owned_array());
     }
 
     #[getter]
     fn cos_thetax(&self, py: Python) -> PyResult<Py<PyArray1<f64>>> {
-        let cos_thetax = self
-            .inner
-            .cos_thetax()
-            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let cos_thetax = self.inner.cos_thetax()?;
         Ok(PyArray1::from_array(py, cos_thetax).into())
     }
 
     #[getter]
     fn phix(&self, py: Python) -> PyResult<Py<PyArray1<f64>>> {
-        let phix = self
-            .inner
-            .phix()
-            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let phix = self.inner.phix()?;
         Ok(PyArray1::from_array(py, phix).into())
     }
 
@@ -191,8 +178,7 @@ impl PyBulkFlow {
         damping_factor: Option<f64>,
     ) -> PyResult<()> {
         self.inner
-            .set_gradient_scaling_params(coefficients_sets, powers_sets, damping_factor)
-            .map_err(PyBulkFlowError)?;
+            .set_gradient_scaling_params(coefficients_sets, powers_sets, damping_factor)?;
         Ok(())
     }
 
@@ -201,12 +187,9 @@ impl PyBulkFlow {
         py: Python,
         a_idx: usize,
     ) -> PyResult<Py<PyArray2<i32>>> {
-        let first_bubble = self
-            .inner
-            .compute_first_colliding_bubble(a_idx)
-            .map_err(PyBulkFlowError)?;
+        let first_bubble = self.inner.compute_first_colliding_bubble(a_idx)?;
         let first_bubble_int = first_bubble.mapv(|bi| match bi {
-            BubbleIndex::None => -1i32,
+            BubbleIndex::None => -1,
             BubbleIndex::Interior(i) => i as i32,
             BubbleIndex::Exterior(i) => -((i as i32) + 2),
         });
@@ -228,10 +211,7 @@ impl PyBulkFlow {
                 BubbleIndex::Exterior((-i - 2) as usize)
             }
         });
-        let delta_tab_grid = self
-            .inner
-            .compute_delta_tab(a_idx, first_bubble.view())
-            .map_err(PyBulkFlowError)?;
+        let delta_tab_grid = self.inner.compute_delta_tab(a_idx, first_bubble.view())?;
         Ok(PyArray2::from_array(py, &delta_tab_grid).into())
     }
 
@@ -253,10 +233,12 @@ impl PyBulkFlow {
             }
         });
         let delta_tab_grid = delta_tab_grid.to_owned_array();
-        let collision_status = self
-            .inner
-            .compute_collision_status(a_idx, t, first_bubble.view(), delta_tab_grid.view())
-            .map_err(PyBulkFlowError)?;
+        let collision_status = self.inner.compute_collision_status(
+            a_idx,
+            t,
+            first_bubble.view(),
+            delta_tab_grid.view(),
+        )?;
         let collision_status_int = collision_status.mapv(|s| s as i32);
         Ok(PyArray2::from_array(py, &collision_status_int).into())
     }
@@ -271,28 +253,30 @@ impl PyBulkFlow {
         n_t: usize,
     ) -> PyResult<Py<PyArray3<NumpyComplex64>>> {
         let w_arr = w_arr.to_owned_array();
-        let c_matrix = self
-            .inner
-            .compute_c_integral_fixed_bubble(a_idx, w_arr.view(), t_begin, t_end, n_t)
-            .map_err(PyBulkFlowError)?;
+        let c_matrix =
+            self.inner
+                .compute_c_integral_fixed_bubble(a_idx, w_arr.view(), t_begin, t_end, n_t)?;
         let c_matrix_numpy = c_matrix.mapv(|c| NumpyComplex64::new(c.re, c.im));
         Ok(PyArray3::from_array(py, &c_matrix_numpy).into())
     }
 
     pub fn compute_c_integrand_fixed_bubble(
         &self,
-        a_idx: usize,
         py: Python,
+        a_idx: usize,
         w_arr: PyReadonlyArray1<f64>,
         t_begin: Option<f64>,
         t_end: f64,
         n_t: usize,
     ) -> PyResult<Py<PyArray4<NumpyComplex64>>> {
         let w_arr = w_arr.to_owned_array();
-        let integrand = self
-            .inner
-            .compute_c_integrand_fixed_bubble(a_idx, w_arr.view(), t_begin, t_end, n_t)
-            .map_err(PyBulkFlowError)?;
+        let integrand = self.inner.compute_c_integrand_fixed_bubble(
+            a_idx,
+            w_arr.view(),
+            t_begin,
+            t_end,
+            n_t,
+        )?;
         let integrand_numpy = integrand.mapv(|c| NumpyComplex64::new(c.re, c.im));
         Ok(PyArray4::from_array(py, &integrand_numpy).into())
     }
@@ -308,8 +292,7 @@ impl PyBulkFlow {
         let w_arr = w_arr.to_owned_array();
         let integrand = self
             .inner
-            .compute_c_integrand(w_arr.view(), t_begin, t_end, n_t)
-            .map_err(PyBulkFlowError)?;
+            .compute_c_integrand(w_arr.view(), t_begin, t_end, n_t)?;
         let integrand_numpy = integrand.mapv(|c| NumpyComplex64::new(c.re, c.im));
         Ok(PyArray4::from_array(py, &integrand_numpy).into())
     }
@@ -325,8 +308,7 @@ impl PyBulkFlow {
         let w_arr = w_arr.to_owned_array();
         let c_matrix = self
             .inner
-            .compute_c_integral(w_arr.view(), t_begin, t_end, n_t)
-            .map_err(PyBulkFlowError)?;
+            .compute_c_integral(w_arr.view(), t_begin, t_end, n_t)?;
         let c_matrix_numpy = c_matrix.mapv(|c| NumpyComplex64::new(c.re, c.im));
         Ok(PyArray3::from_array(py, &c_matrix_numpy).into())
     }
@@ -339,8 +321,7 @@ impl PyBulkFlow {
         precompute_first_bubbles: bool,
     ) -> PyResult<()> {
         self.inner
-            .set_resolution(n_cos_thetax, n_phix, precompute_first_bubbles)
-            .map_err(PyBulkFlowError)?;
+            .set_resolution(n_cos_thetax, n_phix, precompute_first_bubbles)?;
         Ok(())
     }
 }

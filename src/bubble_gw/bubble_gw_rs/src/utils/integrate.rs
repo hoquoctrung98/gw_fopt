@@ -1,47 +1,24 @@
 use ndarray::{ArrayBase, Axis, Data, Dimension, OwnedRepr, RemoveAxis};
 use num_traits::Num;
-use std::fmt;
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum IntegrationError {
+    #[error("At least 2 points required for integration, got {len}")]
     InsufficientPoints { len: usize },
+
+    #[error("x and y must have the same length, got x: {x_len}, y: {y_len}")]
     MismatchedLengths { x_len: usize, y_len: usize },
+
+    #[error("Axis {axis} out of bounds for array with {ndim} dimensions")]
     InvalidAxis { axis: usize, ndim: usize },
+
+    #[error("Cannot get contiguous slice from array")]
     NonContiguousSlice,
+
+    #[error("Failed to create output array")]
     OutputArrayCreationFailed,
 }
-
-impl fmt::Display for IntegrationError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            IntegrationError::InsufficientPoints { len } => {
-                write!(f, "At least 2 points required for integration, got {}", len)
-            }
-            IntegrationError::MismatchedLengths { x_len, y_len } => {
-                write!(
-                    f,
-                    "x and y must have the same length, got x: {}, y: {}",
-                    x_len, y_len
-                )
-            }
-            IntegrationError::InvalidAxis { axis, ndim } => {
-                write!(
-                    f,
-                    "Axis {} out of bounds for array with {} dimensions",
-                    axis, ndim
-                )
-            }
-            IntegrationError::NonContiguousSlice => {
-                write!(f, "Cannot get contiguous slice from array")
-            }
-            IntegrationError::OutputArrayCreationFailed => {
-                write!(f, "Failed to create output array")
-            }
-        }
-    }
-}
-
-impl std::error::Error for IntegrationError {}
 
 pub trait Integrate<X: PartialOrd> {
     type Output;

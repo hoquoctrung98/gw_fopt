@@ -1,2 +1,2 @@
 pub mod gw_calc;
-mod integrand;
+mod gw_integrand;
