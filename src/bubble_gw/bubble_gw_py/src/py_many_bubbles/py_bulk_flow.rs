@@ -77,17 +77,18 @@ pub struct PyBulkFlow {
 #[pymethods]
 impl PyBulkFlow {
     #[new]
-    #[pyo3(signature = (bubbles_interior, bubbles_exterior = None))]
+    #[pyo3(signature = (bubbles_interior, bubbles_exterior = None, sort_by_time = false))]
     pub fn new(
         bubbles_interior: PyReadonlyArray2<f64>,
         bubbles_exterior: Option<PyReadonlyArray2<f64>>,
+        sort_by_time: bool,
     ) -> PyResult<Self> {
         let bubbles_interior = bubbles_interior.to_owned_array();
         let bubbles_exterior = bubbles_exterior
             .map(|arr| arr.to_owned_array())
             .unwrap_or_else(|| Array2::zeros((0, 4)));
 
-        let bulk_flow = BulkFlow::new(bubbles_interior, bubbles_exterior)?;
+        let bulk_flow = BulkFlow::new(bubbles_interior, bubbles_exterior, sort_by_time)?;
         Ok(PyBulkFlow { inner: bulk_flow })
     }
 
