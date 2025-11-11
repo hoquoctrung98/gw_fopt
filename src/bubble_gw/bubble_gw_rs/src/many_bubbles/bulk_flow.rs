@@ -1298,6 +1298,7 @@ impl BulkFlow {
         t_begin: Option<f64>,
         t_end: f64,
         n_t: usize,
+        selected_bubbles: Option<&[usize]>,
     ) -> Result<Array4<Complex64>, BulkFlowError> {
         let n_interior = self.bubbles_interior.shape()[0];
         let n_sets = self.coefficients_sets.shape()[0];
@@ -1307,8 +1308,27 @@ impl BulkFlow {
             return Err(BulkFlowError::InvalidResolution("n_t must be >= 2".into()));
         }
 
+        // Validate and collect bubble indices
+        let bubble_ids: Vec<usize> = match selected_bubbles {
+            Some(ids) => {
+                if ids.is_empty() {
+                    return Ok(Array4::zeros((2, n_sets, n_w, n_t)));
+                }
+                for &a in ids {
+                    if a >= n_interior {
+                        return Err(BulkFlowError::InvalidIndex {
+                            index: a,
+                            max: n_interior,
+                        });
+                    }
+                }
+                ids.to_vec()
+            }
+            None => (0..n_interior).collect(),
+        };
+
         let mut total = Array4::zeros((2, n_sets, n_w, n_t));
-        for a_idx in 0..n_interior {
+        for &a_idx in &bubble_ids {
             total += &self.compute_c_integrand_fixed_bubble(a_idx, w_arr, t_begin, t_end, n_t)?;
         }
 
@@ -1321,6 +1341,7 @@ impl BulkFlow {
         t_begin: Option<f64>,
         t_end: f64,
         n_t: usize,
+        selected_bubbles: Option<&[usize]>,
     ) -> Result<Array3<Complex64>, BulkFlowError> {
         let n_interior = self.bubbles_interior.shape()[0];
         let n_sets = self.coefficients_sets.shape()[0];
@@ -1332,13 +1353,80 @@ impl BulkFlow {
             ));
         }
 
+        // Validate and collect bubble indices
+        let bubble_ids: Vec<usize> = match selected_bubbles {
+            Some(ids) => {
+                if ids.is_empty() {
+                    return Ok(Array3::zeros((2, n_sets, n_w)));
+                }
+                for &a in ids {
+                    if a >= n_interior {
+                        return Err(BulkFlowError::InvalidIndex {
+                            index: a,
+                            max: n_interior,
+                        });
+                    }
+                }
+                ids.to_vec()
+            }
+            None => (0..n_interior).collect(),
+        };
+
         let mut c_total = Array3::<Complex64>::zeros((2, n_sets, n_w));
-        for a_idx in 0..n_interior {
+        for &a_idx in &bubble_ids {
             c_total += &self.compute_c_integral_fixed_bubble(a_idx, w_arr, t_begin, t_end, n_t)?;
         }
 
         Ok(c_total)
     }
+
+    // pub fn compute_c_integrand(
+    //     &self,
+    //     w_arr: ArrayView1<f64>,
+    //     t_begin: Option<f64>,
+    //     t_end: f64,
+    //     n_t: usize,
+    // ) -> Result<Array4<Complex64>, BulkFlowError> {
+    //     let n_interior = self.bubbles_interior.shape()[0];
+    //     let n_sets = self.coefficients_sets.shape()[0];
+    //     let n_w = w_arr.len();
+    //
+    //     if n_t < 2 {
+    //         return Err(BulkFlowError::InvalidResolution("n_t must be >= 2".into()));
+    //     }
+    //
+    //     let mut total = Array4::zeros((2, n_sets, n_w, n_t));
+    //     for a_idx in 0..n_interior {
+    //         total += &self.compute_c_integrand_fixed_bubble(a_idx, w_arr, t_begin, t_end, n_t)?;
+    //     }
+    //
+    //     Ok(total)
+    // }
+    //
+    // pub fn compute_c_integral(
+    //     &mut self,
+    //     w_arr: ArrayView1<f64>,
+    //     t_begin: Option<f64>,
+    //     t_end: f64,
+    //     n_t: usize,
+    // ) -> Result<Array3<Complex64>, BulkFlowError> {
+    //     let n_interior = self.bubbles_interior.shape()[0];
+    //     let n_sets = self.coefficients_sets.shape()[0];
+    //     let n_w = w_arr.len();
+    //
+    //     if n_t < 2 {
+    //         return Err(BulkFlowError::InvalidResolution(
+    //             "n_t must be >= 2 for integration".to_string(),
+    //         ));
+    //     }
+    //
+    //     let mut c_total = Array3::<Complex64>::zeros((2, n_sets, n_w));
+    //     for a_idx in 0..n_interior {
+    //         c_total += &self.compute_c_integral_fixed_bubble(a_idx, w_arr, t_begin, t_end, n_t)?;
+    //     }
+    //
+    //     Ok(c_total)
+    // }
 }
 
 pub fn dot_minkowski_vec(v1: ArrayView1<f64>, v2: ArrayView1<f64>) -> f64 {

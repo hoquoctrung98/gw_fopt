@@ -48,7 +48,7 @@ fn main() -> Result<(), BulkFlowError> {
     println!("a_plus[1, 50]: {}", a_plus[[1, 50]]);
     println!("a_minus[1, 50]: {}", a_minus[[1, 50]]);
 
-    let c_matrix = bulk_flow.compute_c_integral(w_arr.view(), Some(0.0), 8.0, 1000)?;
+    let c_matrix = bulk_flow.compute_c_integral(w_arr.view(), Some(0.0), 8.0, 1000, None)?;
     println!("c_matrix[0, 0, 0]: {}", c_matrix[[0, 0, 0]]);
     println!("c_matrix[1, 0, 0]: {}", c_matrix[[1, 0, 0]]);
     println!("c_matrix[0, 1, 0]: {}", c_matrix[[0, 1, 0]]);

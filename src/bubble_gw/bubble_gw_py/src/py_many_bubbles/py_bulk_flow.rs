@@ -8,7 +8,7 @@ use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
 use thiserror::Error;
 
-/// Local Python-facing error — 100% owned by this crate
+/// Python-facing error
 #[derive(Error, Debug)]
 pub enum PyBulkFlowError {
     #[error("Index {index} out of bounds (max: {max})")]
@@ -31,6 +31,9 @@ pub enum PyBulkFlowError {
 
     #[error("Bubble {a} is formed inside bubble {b} at initial time (overlapping light cones)")]
     BubbleFormedInsideBubble { a: BubbleIndex, b: BubbleIndex },
+
+    #[error(transparent)]
+    PyErr(#[from] pyo3::PyErr),
 }
 
 impl From<BulkFlowError> for PyBulkFlowError {
@@ -243,44 +246,7 @@ impl PyBulkFlow {
         Ok(PyArray2::from_array(py, &collision_status_int).into())
     }
 
-    pub fn compute_c_integral_fixed_bubble(
-        &mut self,
-        py: Python,
-        a_idx: usize,
-        w_arr: PyReadonlyArray1<f64>,
-        t_begin: Option<f64>,
-        t_end: f64,
-        n_t: usize,
-    ) -> PyResult<Py<PyArray3<NumpyComplex64>>> {
-        let w_arr = w_arr.to_owned_array();
-        let c_matrix =
-            self.inner
-                .compute_c_integral_fixed_bubble(a_idx, w_arr.view(), t_begin, t_end, n_t)?;
-        let c_matrix_numpy = c_matrix.mapv(|c| NumpyComplex64::new(c.re, c.im));
-        Ok(PyArray3::from_array(py, &c_matrix_numpy).into())
-    }
-
-    pub fn compute_c_integrand_fixed_bubble(
-        &self,
-        py: Python,
-        a_idx: usize,
-        w_arr: PyReadonlyArray1<f64>,
-        t_begin: Option<f64>,
-        t_end: f64,
-        n_t: usize,
-    ) -> PyResult<Py<PyArray4<NumpyComplex64>>> {
-        let w_arr = w_arr.to_owned_array();
-        let integrand = self.inner.compute_c_integrand_fixed_bubble(
-            a_idx,
-            w_arr.view(),
-            t_begin,
-            t_end,
-            n_t,
-        )?;
-        let integrand_numpy = integrand.mapv(|c| NumpyComplex64::new(c.re, c.im));
-        Ok(PyArray4::from_array(py, &integrand_numpy).into())
-    }
-
+    #[pyo3(signature = (w_arr, *, t_begin=None, t_end, n_t, selected_bubbles=None))]
     pub fn compute_c_integrand(
         &self,
         py: Python,
@@ -288,15 +254,39 @@ impl PyBulkFlow {
         t_begin: Option<f64>,
         t_end: f64,
         n_t: usize,
+        selected_bubbles: Option<PyReadonlyArray1<usize>>,
     ) -> PyResult<Py<PyArray4<NumpyComplex64>>> {
         let w_arr = w_arr.to_owned_array();
+
+        let selected_vec: Option<Vec<usize>> = selected_bubbles
+            .map(|arr| {
+                let array = arr.to_owned_array();
+                if !array.is_standard_layout() {
+                    return Err(PyValueError::new_err(
+                        "selected_bubbles must be a contiguous 1-D array in C order",
+                    ));
+                }
+                Ok(array.to_vec())
+            })
+            .transpose()?;
+
+        let selected_slice: Option<&[usize]> = selected_vec.as_deref();
+
         let integrand = self
             .inner
-            .compute_c_integrand(w_arr.view(), t_begin, t_end, n_t)?;
+            .compute_c_integrand(w_arr.view(), t_begin, t_end, n_t, selected_slice)
+            .map_err(|e| match e {
+                BulkFlowError::InvalidIndex { index, max } => {
+                    PyBulkFlowError::InvalidIndex { index, max }
+                }
+                _ => PyBulkFlowError::from(e),
+            })?;
+
         let integrand_numpy = integrand.mapv(|c| NumpyComplex64::new(c.re, c.im));
-        Ok(PyArray4::from_array(py, &integrand_numpy).into())
+        Ok(PyArray4::from_owned_array(py, integrand_numpy).into())
     }
 
+    #[pyo3(signature = (w_arr, *, t_begin=None, t_end, n_t, selected_bubbles=None))]
     pub fn compute_c_integral(
         &mut self,
         py: Python,
@@ -304,24 +294,35 @@ impl PyBulkFlow {
         t_begin: Option<f64>,
         t_end: f64,
         n_t: usize,
+        selected_bubbles: Option<PyReadonlyArray1<usize>>,
     ) -> PyResult<Py<PyArray3<NumpyComplex64>>> {
         let w_arr = w_arr.to_owned_array();
+
+        let selected_vec: Option<Vec<usize>> = selected_bubbles
+            .map(|arr| {
+                let array = arr.to_owned_array();
+                if !array.is_standard_layout() {
+                    return Err(PyValueError::new_err(
+                        "selected_bubbles must be a contiguous 1-D array in C order",
+                    ));
+                }
+                Ok(array.to_vec())
+            })
+            .transpose()?;
+
+        let selected_slice: Option<&[usize]> = selected_vec.as_deref();
+
         let c_matrix = self
             .inner
-            .compute_c_integral(w_arr.view(), t_begin, t_end, n_t)?;
-        let c_matrix_numpy = c_matrix.mapv(|c| NumpyComplex64::new(c.re, c.im));
-        Ok(PyArray3::from_array(py, &c_matrix_numpy).into())
-    }
+            .compute_c_integral(w_arr.view(), t_begin, t_end, n_t, selected_slice)
+            .map_err(|e| match e {
+                BulkFlowError::InvalidIndex { index, max } => {
+                    PyBulkFlowError::InvalidIndex { index, max }
+                }
+                _ => PyBulkFlowError::from(e),
+            })?;
 
-    #[pyo3(signature = (n_cos_thetax, n_phix, precompute_first_bubbles = true))]
-    pub fn set_resolution(
-        &mut self,
-        n_cos_thetax: usize,
-        n_phix: usize,
-        precompute_first_bubbles: bool,
-    ) -> PyResult<()> {
-        self.inner
-            .set_resolution(n_cos_thetax, n_phix, precompute_first_bubbles)?;
-        Ok(())
+        let c_matrix_numpy = c_matrix.mapv(|c| NumpyComplex64::new(c.re, c.im));
+        Ok(PyArray3::from_owned_array(py, c_matrix_numpy).into())
     }
 }
