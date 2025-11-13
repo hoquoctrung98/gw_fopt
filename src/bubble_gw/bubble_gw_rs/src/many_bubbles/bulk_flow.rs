@@ -93,86 +93,6 @@ pub struct BulkFlow {
 }
 
 impl BulkFlow {
-    // pub fn new(
-    //     bubbles_interior: Array2<f64>,
-    //     bubbles_exterior: Array2<f64>,
-    // ) -> Result<Self, BulkFlowError> {
-    //     let n_interior = bubbles_interior.shape()[0];
-    //     let n_exterior = bubbles_exterior.shape()[0];
-    //     let n_total = n_interior + n_exterior;
-    //
-    //     if bubbles_interior.ncols() != 4 || bubbles_exterior.ncols() != 4 {
-    //         return Err(BulkFlowError::ArrayShapeMismatch(format!(
-    //             "Expected 4 columns, got {} for interior, {} for exterior",
-    //             bubbles_interior.ncols(),
-    //             bubbles_exterior.ncols()
-    //         )));
-    //     }
-    //
-    //     // Initialize delta and delta_squared
-    //     let mut delta = Array3::zeros((n_interior, n_total, 4));
-    //     let mut delta_squared = Array2::zeros((n_interior, n_total));
-    //
-    //     // Compute delta and delta_squared using symmetry for interior-interior
-    //     for a_idx in 0..n_interior {
-    //         // Interior to interior (upper triangular and diagonal)
-    //         for b_idx in a_idx..n_interior {
-    //             let delta_ba = bubbles_interior.slice(s![b_idx, ..]).to_owned()
-    //                 - bubbles_interior.slice(s![a_idx, ..]).to_owned();
-    //             delta.slice_mut(s![a_idx, b_idx, ..]).assign(&delta_ba);
-    //             delta_squared[[a_idx, b_idx]] = dot_minkowski_vec(delta_ba.view(), delta_ba.view());
-    //             // Symmetry: delta[b_idx, a_idx, ..] = -delta[a_idx, b_idx, ..]
-    //             delta.slice_mut(s![b_idx, a_idx, ..]).assign(&(-&delta_ba));
-    //             delta_squared[[b_idx, a_idx]] = delta_squared[[a_idx, b_idx]];
-    //         }
-    //         // Interior to exterior
-    //         for b_ex in 0..n_exterior {
-    //             let b_total = n_interior + b_ex;
-    //             let delta_ba = bubbles_exterior.slice(s![b_ex, ..]).to_owned()
-    //                 - bubbles_interior.slice(s![a_idx, ..]).to_owned();
-    //             delta.slice_mut(s![a_idx, b_total, ..]).assign(&delta_ba);
-    //             delta_squared[[a_idx, b_total]] =
-    //                 dot_minkowski_vec(delta_ba.view(), delta_ba.view());
-    //         }
-    //     }
-    //
-    //     // Check for bubble containment
-    //     Self::check_bubble_formed_inside_bubble(
-    //         &bubbles_interior,
-    //         &bubbles_exterior,
-    //         &delta_squared,
-    //     )?;
-    //
-    //     let cached_data = CachedData {
-    //         delta,
-    //         delta_squared,
-    //         first_colliding_bubbles: None,
-    //     };
-    //
-    //     let default_threads = std::thread::available_parallelism()
-    //         .map(|n| n.get())
-    //         .unwrap_or(4);
-    //     let thread_pool = rayon::ThreadPoolBuilder::new()
-    //         .num_threads(default_threads)
-    //         .build()?;
-    //
-    //     Ok(BulkFlow {
-    //         bubbles_interior,
-    //         bubbles_exterior,
-    //         cached_data,
-    //         coefficients_sets: Array2::from_elem((1, 1), 1.0),
-    //         powers_sets: Array2::from_elem((1, 1), 3.0),
-    //         damping_width: None,
-    //         active_bubbles: Array1::from_elem(1, true),
-    //         thread_pool,
-    //         n_cos_thetax: None,
-    //         n_phix: None,
-    //         cos_thetax: None,
-    //         phix: None,
-    //         direction_vectors: None,
-    //     })
-    // }
-
     /// Create a new `BulkFlow`.
     ///
     /// * `bubbles_interior` – `(N_int, 4)` array `[x, y, z, t]`
@@ -183,9 +103,7 @@ impl BulkFlow {
         mut bubbles_exterior: Array2<f64>,
         sort_by_time: bool,
     ) -> Result<Self, BulkFlowError> {
-        // --------------------------------------------------------------
-        // 1. shape validation
-        // --------------------------------------------------------------
+        // shape validation
         if bubbles_interior.ncols() != 4 || bubbles_exterior.ncols() != 4 {
             return Err(BulkFlowError::ArrayShapeMismatch(format!(
                 "Expected 4 columns, got {} for interior, {} for exterior",
@@ -194,11 +112,9 @@ impl BulkFlow {
             )));
         }
 
-        // --------------------------------------------------------------
-        // 2. optional sorting by formation time (column 3)
-        // --------------------------------------------------------------
+        // optional sorting by formation time (column 3)
         if sort_by_time {
-            // ---- interior ------------------------------------------------
+            // sort interior bubbles
             let mut rows: Vec<(usize, Array1<f64>)> = bubbles_interior
                 .rows()
                 .into_iter()
@@ -216,7 +132,7 @@ impl BulkFlow {
                 bubbles_interior.row_mut(i).assign(&row);
             }
 
-            // ---- exterior ------------------------------------------------
+            // sort exterior bubbles
             if !bubbles_exterior.is_empty() {
                 let mut rows: Vec<(usize, Array1<f64>)> = bubbles_exterior
                     .rows()
@@ -237,11 +153,8 @@ impl BulkFlow {
             }
         }
 
-        // --------------------------------------------------------------
-        // 3. everything that was in the original `new`
-        // --------------------------------------------------------------
-        let n_interior = bubbles_interior.shape()[0];
-        let n_exterior = bubbles_exterior.shape()[0];
+        let n_interior = bubbles_interior.nrows();
+        let n_exterior = bubbles_exterior.nrows();
         let n_total = n_interior + n_exterior;
 
         // Initialize delta and delta_squared
@@ -307,14 +220,15 @@ impl BulkFlow {
             direction_vectors: None,
         })
     }
+
     // Checks if any bubble is contained within another at the initial time.
     fn check_bubble_formed_inside_bubble(
         bubbles_interior: &Array2<f64>,
         bubbles_exterior: &Array2<f64>,
         delta_squared: &Array2<f64>,
     ) -> Result<(), BulkFlowError> {
-        let n_interior = bubbles_interior.shape()[0];
-        let n_exterior = bubbles_exterior.shape()[0];
+        let n_interior = bubbles_interior.nrows();
+        let n_exterior = bubbles_exterior.nrows();
 
         // Interior-Interior
         for a_idx in 0..n_interior {
@@ -376,8 +290,8 @@ impl BulkFlow {
         }
         self.bubbles_interior = bubbles_interior;
         self.cached_data.first_colliding_bubbles = None;
-        let n_interior = self.bubbles_interior.shape()[0];
-        let n_exterior = self.bubbles_exterior.shape()[0];
+        let n_interior = self.bubbles_interior.nrows();
+        let n_exterior = self.bubbles_exterior.nrows();
         let n_total = n_interior + n_exterior;
 
         // Recompute delta and delta_squared using symmetry
@@ -428,8 +342,8 @@ impl BulkFlow {
         }
         self.bubbles_exterior = bubbles_exterior;
         self.cached_data.first_colliding_bubbles = None;
-        let n_interior = self.bubbles_interior.shape()[0];
-        let n_exterior = self.bubbles_exterior.shape()[0];
+        let n_interior = self.bubbles_interior.nrows();
+        let n_exterior = self.bubbles_exterior.nrows();
         let n_total = n_interior + n_exterior;
 
         let mut delta = Array3::zeros((n_interior, n_total, 4));
@@ -481,8 +395,8 @@ impl BulkFlow {
             .direction_vectors
             .as_ref()
             .ok_or_else(|| BulkFlowError::UninitializedField("direction_vectors".to_string()))?;
-        let n_interior = self.bubbles_interior.shape()[0];
-        let n_exterior = self.bubbles_exterior.shape()[0];
+        let n_interior = self.bubbles_interior.nrows();
+        let n_exterior = self.bubbles_exterior.nrows();
         let n_total = n_interior + n_exterior;
         let tolerance = 1e-10;
 
@@ -585,7 +499,7 @@ impl BulkFlow {
 
         if precompute_first_bubbles {
             let first_colliding_bubbles: Vec<Array2<BubbleIndex>> =
-                (0..self.bubbles_interior.shape()[0])
+                (0..self.bubbles_interior.nrows())
                     .into_par_iter()
                     .map(|a_idx| self.compute_first_colliding_bubble(a_idx).unwrap())
                     .collect();
@@ -605,8 +519,8 @@ impl BulkFlow {
             self.cached_data.first_colliding_bubbles = None;
         }
 
-        let n_interior = self.bubbles_interior.shape()[0];
-        let n_exterior = self.bubbles_exterior.shape()[0];
+        let n_interior = self.bubbles_interior.nrows();
+        let n_exterior = self.bubbles_exterior.nrows();
         let n_total = n_interior + n_exterior;
         let mut delta = Array3::zeros((n_interior, n_total, 4));
         let mut delta_squared = Array2::zeros((n_interior, n_total));
@@ -896,7 +810,7 @@ impl BulkFlow {
                 first_bubble.shape()
             )));
         }
-        let n_interior = self.bubbles_interior.shape()[0];
+        let n_interior = self.bubbles_interior.nrows();
         let mut delta_tab_grid = Array2::zeros((n_cos_thetax, n_phix));
 
         for i in 0..n_cos_thetax {
@@ -924,128 +838,6 @@ impl BulkFlow {
         Ok(delta_tab_grid)
     }
 
-    // // Use implementation from utils/integrate.rs
-    // pub fn compute_b_integral(
-    //     &self,
-    //     cos_thetax_idx: usize,
-    //     collision_status_grid: ArrayView2<CollisionStatus>,
-    //     delta_tab_grid: ArrayView2<f64>,
-    //     delta_ta: f64,
-    // ) -> Result<(Array1<f64>, Array1<f64>), BulkFlowError> {
-    //     let n_cos_thetax = self
-    //         .n_cos_thetax
-    //         .ok_or_else(|| BulkFlowError::UninitializedField("n_cos_thetax".to_string()))?;
-    //     let n_phix = self
-    //         .n_phix
-    //         .ok_or_else(|| BulkFlowError::UninitializedField("n_phix".to_string()))?;
-    //     let cos_thetax_grid = self
-    //         .cos_thetax
-    //         .as_ref()
-    //         .ok_or_else(|| BulkFlowError::UninitializedField("cos_thetax".to_string()))?;
-    //     let phix = self
-    //         .phix
-    //         .as_ref()
-    //         .ok_or_else(|| BulkFlowError::UninitializedField("phix".to_string()))?;
-    //     let n_sets = self.coefficients_sets.shape()[0];
-    //
-    //     if cos_thetax_idx >= n_cos_thetax {
-    //         return Err(BulkFlowError::InvalidIndex {
-    //             index: cos_thetax_idx,
-    //             max: n_cos_thetax,
-    //         });
-    //     }
-    //     if collision_status_grid.shape() != [n_cos_thetax, n_phix]
-    //         || delta_tab_grid.shape() != [n_cos_thetax, n_phix]
-    //     {
-    //         return Err(BulkFlowError::ArrayShapeMismatch(format!(
-    //             "Grids must be [{}, {}], got status: {:?}, delta_tab: {:?}",
-    //             n_cos_thetax,
-    //             n_phix,
-    //             collision_status_grid.shape(),
-    //             delta_tab_grid.shape()
-    //         )));
-    //     }
-    //
-    //     if delta_ta <= 0.0 {
-    //         return Ok((Array1::zeros(n_sets), Array1::zeros(n_sets)));
-    //     }
-    //
-    //     let delta_ta_cubed = delta_ta.powi(3);
-    //     let cos_thetax = cos_thetax_grid[cos_thetax_idx];
-    //     let sin_squared_thetax = 1.0 - cos_thetax * cos_thetax;
-    //
-    //     let status_row = collision_status_grid.row(cos_thetax_idx);
-    //     let delta_tab_row = delta_tab_grid.row(cos_thetax_idx);
-    //     let phi_row = phix.view();
-    //
-    //     // Convert to &[f64] for integrate.rs
-    //     let phi_slice: &[f64] = phi_row.as_slice().ok_or_else(|| {
-    //         BulkFlowError::ArrayShapeMismatch("phix must be contiguous".to_string())
-    //     })?;
-    //
-    //     // Precompute sin(2φ) and cos(2φ) — your original logic
-    //     let sin_2phi: Array1<f64> = phi_row.map(|&p| (2.0 * p).sin());
-    //     let cos_2phi: Array1<f64> = phi_row.map(|&p| (2.0 * p).cos());
-    //
-    //     let mut b_plus_arr = Array1::zeros(n_sets);
-    //     let mut b_minus_arr = Array1::zeros(n_sets);
-    //
-    //     for s in 0..n_sets {
-    //         // Build factor exactly as you had it
-    //         let factors: Array1<f64> = status_row
-    //             .iter()
-    //             .zip(delta_tab_row.iter())
-    //             .map(|(&status, &delta_tab)| match status {
-    //                 CollisionStatus::NeverCollided | CollisionStatus::NotYetCollided => 1.0,
-    //                 CollisionStatus::AlreadyCollided => {
-    //                     let ratio = delta_tab / delta_ta;
-    //                     let mut f = 0.0;
-    //                     for k in 0..self.coefficients_sets.shape()[1] {
-    //                         let coeff = self.coefficients_sets[[s, k]];
-    //                         let power = self.powers_sets[[s, k]];
-    //                         f += coeff * ratio.powf(power);
-    //                     }
-    //                     if let Some(damping_width) = self.damping_width {
-    //                         f *= (-delta_ta * (1.0 - ratio) / damping_width).exp();
-    //                     }
-    //                     f
-    //                 }
-    //             })
-    //             .collect();
-    //
-    //         // Build integrands
-    //         let integrand_sin = factors
-    //             .iter()
-    //             .zip(&sin_2phi)
-    //             .map(|(f, s2)| f * s2)
-    //             .collect::<Array1<_>>();
-    //         let integrand_cos = factors
-    //             .iter()
-    //             .zip(&cos_2phi)
-    //             .map(|(f, c2)| f * c2)
-    //             .collect::<Array1<_>>();
-    //
-    //         // Use Simpson (or trapezoid) — integrates over φ
-    //         let integral_sin = integrand_sin
-    //             .simpson(Some(phi_slice), None, Some(0))
-    //             .map_err(|e| BulkFlowError::ArrayShapeMismatch(e.to_string()))?;
-    //
-    //         let integral_cos = integrand_cos
-    //             .simpson(Some(phi_slice), None, Some(0))
-    //             .map_err(|e| BulkFlowError::ArrayShapeMismatch(e.to_string()))?;
-    //
-    //         // Extract scalar: Array0<f64> → f64
-    //         let integral_sin: f64 = integral_sin.into_scalar();
-    //         let integral_cos: f64 = integral_cos.into_scalar();
-    //
-    //         // Final scaling — no dphi! integrate.rs already did it
-    //         b_plus_arr[s] += 0.5 * sin_squared_thetax * integral_cos * delta_ta_cubed;
-    //         b_minus_arr[s] += 0.5 * sin_squared_thetax * integral_sin * delta_ta_cubed;
-    //     }
-    //
-    //     Ok((b_plus_arr, b_minus_arr))
-    // }
-
     pub fn compute_b_integral(
         &self,
         cos_thetax_idx: usize,
@@ -1067,7 +859,7 @@ impl BulkFlow {
             .phix
             .as_ref()
             .ok_or_else(|| BulkFlowError::UninitializedField("phix".to_string()))?;
-        let n_sets = self.coefficients_sets.shape()[0];
+        let n_sets = self.coefficients_sets.nrows();
 
         if cos_thetax_idx >= n_cos_thetax {
             return Err(BulkFlowError::InvalidIndex {
@@ -1187,7 +979,7 @@ impl BulkFlow {
         }
 
         let n_w = w_arr.len();
-        let n_sets = self.coefficients_sets.shape()[0];
+        let n_sets = self.coefficients_sets.nrows();
         let ta = self.bubbles_interior[[a_idx, 0]];
         let delta_ta = t - ta;
 
@@ -1238,7 +1030,7 @@ impl BulkFlow {
         t_end: f64,
         n_t: usize,
     ) -> Result<Array4<Complex64>, BulkFlowError> {
-        let n_sets = self.coefficients_sets.shape()[0];
+        let n_sets = self.coefficients_sets.nrows();
         let n_w = w_arr.len();
 
         let t_nucleation = self.bubbles_interior[[a_idx, 0]];
@@ -1340,7 +1132,7 @@ impl BulkFlow {
         t_end: f64,
         n_t: usize,
     ) -> Result<Array3<Complex64>, BulkFlowError> {
-        let n_sets = self.coefficients_sets.shape()[0];
+        let n_sets = self.coefficients_sets.nrows();
         let n_w = w_arr.len();
         let t_begin = t_begin.unwrap_or(0.0);
         if t_begin > t_end {
@@ -1434,8 +1226,8 @@ impl BulkFlow {
         n_t: usize,
         selected_bubbles: Option<&[usize]>,
     ) -> Result<Array4<Complex64>, BulkFlowError> {
-        let n_interior = self.bubbles_interior.shape()[0];
-        let n_sets = self.coefficients_sets.shape()[0];
+        let n_interior = self.bubbles_interior.nrows();
+        let n_sets = self.coefficients_sets.nrows();
         let n_w = w_arr.len();
 
         if n_t < 2 {
@@ -1477,8 +1269,8 @@ impl BulkFlow {
         n_t: usize,
         selected_bubbles: Option<&[usize]>,
     ) -> Result<Array3<Complex64>, BulkFlowError> {
-        let n_interior = self.bubbles_interior.shape()[0];
-        let n_sets = self.coefficients_sets.shape()[0];
+        let n_interior = self.bubbles_interior.nrows();
+        let n_sets = self.coefficients_sets.nrows();
         let n_w = w_arr.len();
 
         if n_t < 2 {
@@ -1513,54 +1305,6 @@ impl BulkFlow {
 
         Ok(c_total)
     }
-
-    // pub fn compute_c_integrand(
-    //     &self,
-    //     w_arr: ArrayView1<f64>,
-    //     t_begin: Option<f64>,
-    //     t_end: f64,
-    //     n_t: usize,
-    // ) -> Result<Array4<Complex64>, BulkFlowError> {
-    //     let n_interior = self.bubbles_interior.shape()[0];
-    //     let n_sets = self.coefficients_sets.shape()[0];
-    //     let n_w = w_arr.len();
-    //
-    //     if n_t < 2 {
-    //         return Err(BulkFlowError::InvalidResolution("n_t must be >= 2".into()));
-    //     }
-    //
-    //     let mut total = Array4::zeros((2, n_sets, n_w, n_t));
-    //     for a_idx in 0..n_interior {
-    //         total += &self.compute_c_integrand_fixed_bubble(a_idx, w_arr, t_begin, t_end, n_t)?;
-    //     }
-    //
-    //     Ok(total)
-    // }
-    //
-    // pub fn compute_c_integral(
-    //     &mut self,
-    //     w_arr: ArrayView1<f64>,
-    //     t_begin: Option<f64>,
-    //     t_end: f64,
-    //     n_t: usize,
-    // ) -> Result<Array3<Complex64>, BulkFlowError> {
-    //     let n_interior = self.bubbles_interior.shape()[0];
-    //     let n_sets = self.coefficients_sets.shape()[0];
-    //     let n_w = w_arr.len();
-    //
-    //     if n_t < 2 {
-    //         return Err(BulkFlowError::InvalidResolution(
-    //             "n_t must be >= 2 for integration".to_string(),
-    //         ));
-    //     }
-    //
-    //     let mut c_total = Array3::<Complex64>::zeros((2, n_sets, n_w));
-    //     for a_idx in 0..n_interior {
-    //         c_total += &self.compute_c_integral_fixed_bubble(a_idx, w_arr, t_begin, t_end, n_t)?;
-    //     }
-    //
-    //     Ok(c_total)
-    // }
 }
 
 pub fn dot_minkowski_vec(v1: ArrayView1<f64>, v2: ArrayView1<f64>) -> f64 {

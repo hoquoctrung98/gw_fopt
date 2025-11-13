@@ -247,6 +247,44 @@ impl PyBulkFlow {
         Ok(PyArray2::from_array(py, &collision_status_int).into())
     }
 
+    pub fn compute_c_integral_fixed_bubble(
+        &mut self,
+        py: Python,
+        a_idx: usize,
+        w_arr: PyReadonlyArray1<f64>,
+        t_begin: Option<f64>,
+        t_end: f64,
+        n_t: usize,
+    ) -> PyResult<Py<PyArray3<NumpyComplex64>>> {
+        let w_arr = w_arr.to_owned_array();
+        let c_matrix =
+            self.inner
+                .compute_c_integral_fixed_bubble(a_idx, w_arr.view(), t_begin, t_end, n_t)?;
+        let c_matrix_numpy = c_matrix.mapv(|c| NumpyComplex64::new(c.re, c.im));
+        Ok(PyArray3::from_array(py, &c_matrix_numpy).into())
+    }
+
+    pub fn compute_c_integrand_fixed_bubble(
+        &self,
+        py: Python,
+        a_idx: usize,
+        w_arr: PyReadonlyArray1<f64>,
+        t_begin: Option<f64>,
+        t_end: f64,
+        n_t: usize,
+    ) -> PyResult<Py<PyArray4<NumpyComplex64>>> {
+        let w_arr = w_arr.to_owned_array();
+        let integrand = self.inner.compute_c_integrand_fixed_bubble(
+            a_idx,
+            w_arr.view(),
+            t_begin,
+            t_end,
+            n_t,
+        )?;
+        let integrand_numpy = integrand.mapv(|c| NumpyComplex64::new(c.re, c.im));
+        Ok(PyArray4::from_array(py, &integrand_numpy).into())
+    }
+
     #[pyo3(signature = (w_arr, *, t_begin=None, t_end, n_t, selected_bubbles=None))]
     pub fn compute_c_integrand(
         &self,
@@ -325,5 +363,17 @@ impl PyBulkFlow {
 
         let c_matrix_numpy = c_matrix.mapv(|c| NumpyComplex64::new(c.re, c.im));
         Ok(PyArray3::from_owned_array(py, c_matrix_numpy).into())
+    }
+
+    #[pyo3(signature = (n_cos_thetax, n_phix, precompute_first_bubbles = true))]
+    pub fn set_resolution(
+        &mut self,
+        n_cos_thetax: usize,
+        n_phix: usize,
+        precompute_first_bubbles: bool,
+    ) -> PyResult<()> {
+        self.inner
+            .set_resolution(n_cos_thetax, n_phix, precompute_first_bubbles)?;
+        Ok(())
     }
 }
