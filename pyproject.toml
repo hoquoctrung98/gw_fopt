@@ -20,6 +20,7 @@ dependencies = [
     "ipympl>=0.9.7",
     "h5py>=3.15.1",
     "pyyaml>=6.0.3",
+    "cffi>=2.0.0",
 ]
 classifiers = [
     "Programming Language :: Rust",
