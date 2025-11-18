@@ -20,7 +20,6 @@ dependencies = [
     "ipympl>=0.9.7",
     "h5py>=3.15.1",
     "pyyaml>=6.0.3",
-    "cffi>=2.0.0",
 ]
 classifiers = [
     "Programming Language :: Rust",
@@ -39,4 +38,4 @@ features = ["pyo3/extension-module"]
 manifest-path = "src/bubble_gw/bubble_gw_py/Cargo.toml"
 
 [tool.uv]
-cache-keys = [{file = "src/bubble_gw/Cargo.toml"}, {file = "src/bubble_gw/**/*.rs"}]
+cache-keys = [{file = "src/bubble_gw/**/*.toml"}, {file = "src/bubble_gw/**/*.rs"}]
