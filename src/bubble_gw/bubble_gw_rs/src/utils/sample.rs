@@ -1,4 +1,3 @@
-// use num::Float as NumFloat;
 use num::traits::{Float, FromPrimitive, ToPrimitive};
 use std::{f64, fmt::Debug};
 use thiserror::Error;
@@ -256,10 +255,10 @@ where
         Ok(v)
     }
 
-    /// Adaptive grid sampling with `n_iter` levels of refinement.
+    /// Adaptive grid sampling — returns **only the new interior points** at refinement level `n_iter`
     ///
-    /// Produces denser sampling in regions covered by higher iterations.
-    /// Total points ≈ `n_sample × n_grid^iter`
+    /// This produces points that fill in the gaps between the grid at iteration `n_iter - 1`.
+    /// The full nested grid is obtained by concatenating results from `iter = 0..=n_iter` via `sample_arr`.
     fn distribution_sample_grid(
         &self,
         n_sample: usize,
@@ -268,34 +267,42 @@ where
         dist: &impl Fn(T) -> T,
         dist_inv: &impl Fn(T) -> T,
     ) -> Result<Vec<T>, SampleError> {
-        let n_grid_t = T::from_usize(n_grid).ok_or(SampleError::ConversionError)?;
-        let factor = n_grid_t.powi(n_iter as i32);
-        let sub_factor = if n_iter > 0 {
-            n_grid_t.powi((n_iter - 1) as i32)
-        } else {
-            T::one()
-        };
+        if n_iter == 0 {
+            return self.distribution_sample_simple(n_sample, dist, dist_inv);
+        }
 
-        let sub_factor_usize = sub_factor.to_usize().ok_or(SampleError::ConversionError)?;
-        let total_outer = n_sample
-            .checked_mul(sub_factor_usize)
-            .ok_or(SampleError::ConversionError)?;
+        let n_grid_t = T::from_usize(n_grid).ok_or(SampleError::ConversionError)?;
+        let factor = n_grid_t.powi(n_iter as i32); // grid spacing at current level
+        let sub_factor = n_grid_t.powi((n_iter - 1) as i32); // spacing of parent level
+
+        let n_parent_cells = n_sample
+            .checked_mul(sub_factor.to_usize().ok_or(SampleError::ConversionError)?)
+            .ok_or(SampleError::ConversionError)?; // # of parent intervals
 
         let transformed_start = dist(self.start);
         let transformed_stop = dist(self.stop);
         let transformed_range = transformed_stop - transformed_start;
-        let n_sample_t = T::from_usize(n_sample).ok_or(SampleError::ConversionError)?;
 
-        let mut out: Vec<T> = Vec::with_capacity(total_outer * n_grid);
+        // Number of new points per parent interval: (n_grid - 1)
+        // We skip the first point in each subinterval (it belongs to coarser grid)
+        let points_per_cell = n_grid - 1;
+        let total_points = n_parent_cells * points_per_cell;
 
-        (0..total_outer)
-            .flat_map(|i2| (0..n_grid).map(move |i1| (i1, i2)))
-            .for_each(|(i1, i2)| {
-                let i1_t = T::from_usize(i1).unwrap_or(T::zero());
-                let i2_t = T::from_usize(i2).unwrap_or(T::zero());
-                let t = (i1_t / factor + i2_t / sub_factor) / n_sample_t;
-                out.push(dist_inv(transformed_start + t * transformed_range));
-            });
+        let mut out = Vec::with_capacity(total_points);
+
+        for i2 in 0..n_parent_cells {
+            for i1 in 1..n_grid {
+                // Start from 1 → skip left endpoint (already exists)
+                let i1_t = T::from_usize(i1).ok_or(SampleError::ConversionError)?;
+                let i2_t = T::from_usize(i2).ok_or(SampleError::ConversionError)?;
+
+                // Position: i2 * (coarse_step) + i1 * (fine_step)
+                let t = (i1_t / factor + i2_t / sub_factor)
+                    / T::from_usize(n_sample).ok_or(SampleError::ConversionError)?;
+                let value = dist_inv(transformed_start + t * transformed_range);
+                out.push(value);
+            }
+        }
 
         Ok(out)
     }

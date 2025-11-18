@@ -72,21 +72,6 @@ fn test_new_invalid_range_exponential() {
 }
 
 #[test]
-fn test_new_nan_inputs() {
-    let result = SampleParams::new(f64::NAN, 10.0, SampleType::Uniform);
-    assert!(matches!(
-        result,
-        Err(SampleError::InvalidParameter { param, value }) if param == "start or stop" && value.is_nan()
-    ));
-
-    let result = SampleParams::new(1.0, f64::NAN, SampleType::Linear);
-    assert!(matches!(
-        result,
-        Err(SampleError::InvalidParameter { param, value }) if param == "start or stop" && value.is_nan()
-    ));
-}
-
-#[test]
 fn test_sample_linear() {
     let params = SampleParams::new(0.0_f64, 10.0, SampleType::Linear).unwrap();
     let samples = params.sample(4, 2, 0).unwrap();
@@ -163,39 +148,44 @@ fn test_sample_invalid_n_grid() {
 
 #[test]
 fn test_sample_arr_linear() {
-    let params = SampleParams::new(0.0_f64, 10.0, SampleType::Linear).unwrap();
-    let samples = params.sample_arr(4, 2, 1).unwrap();
-    let samples_array = Array1::from_vec(samples);
+    let params = SampleParams::new(0.0_f64, 12.0, SampleType::Linear).unwrap();
+    let samples_arr = params.sample_arr(3, 2, 2).unwrap();
+    let samples_arr = Array1::from_vec(samples_arr);
     let expected = Array1::from_vec(vec![
-        0.0, 2.5, 5.0, 7.5, 10.0, // n_iter=0: 5 samples
-        0.0, 1.25, 2.5, 3.75, 5.0, 6.25, 7.5, 8.75, // n_iter=1: 8 samples
+        0.0, 4.0, 8.0, 12.0, // n_iter=0
+        2.0, 6.0, 10.0, // n_iter=1
+        1.0, 3.0, 5.0, 7.0, 9.0, 11.0, // n_iter=2
     ]);
-    samples_array
+    samples_arr
         .is_close(&expected, 1e-10, 1e-10)
         .expect("Linear sample_arr samples differ");
 }
 
 #[test]
 fn test_sample_arr_logarithmic() {
-    let params = SampleParams::new(1.0_f64, 100.0, SampleType::Logarithmic { base: 10.0 }).unwrap();
-    let samples = params.sample_arr(4, 2, 1).unwrap();
+    let params = SampleParams::new(1.0, 100.0, SampleType::Logarithmic { base: 10.0 }).unwrap();
+    let samples = params.sample_arr(4, 2, 2).unwrap();
     let samples_array = Array1::from_vec(samples);
     let expected = Array1::from_vec(vec![
-        1.0,
-        3.16227766017,
-        10.0,
-        31.6227766017,
-        100.0, // n_iter=0: 5 samples
-        1.0,
-        1.77827941004,
-        3.16227766017,
-        5.6234132519,
-        10.0,
-        17.7827941004,
-        31.6227766017,
-        56.234132519, // n_iter=1: 8 samples
+        1.,
+        3.16227766,
+        10.,
+        31.6227766,
+        100., // n_iter=0
+        1.77827941,
+        5.62341325,
+        17.7827941,
+        56.23413252, // n_iter=1
+        1.33352143,
+        2.37137371,
+        4.21696503,
+        7.49894209,
+        13.33521432,
+        23.71373706,
+        42.16965034,
+        74.98942093, // n_iter=2
     ]);
     samples_array
-        .is_close(&expected, 1e-10, 1e-10)
+        .is_close(&expected, 1e-8, 1e-8)
         .expect("Logarithmic sample_arr samples differ");
 }

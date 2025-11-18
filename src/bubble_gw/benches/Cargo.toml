@@ -11,7 +11,7 @@ rust-version.workspace = true
 [dependencies]
 bubble_gw_rs = { path = "../bubble_gw_rs" }
 criterion = "0.7.0"
-ndarray = "0.16.1"
+ndarray = "0.17.1"
 num-traits = "0.2.19"
 # Benchmarking framework
 # criterion = { workspace = true, features = ["html_reports"] }

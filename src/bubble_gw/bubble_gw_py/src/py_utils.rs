@@ -18,17 +18,19 @@ use pyo3::prelude::*;
 /// * `base` (float, optional): Base for logarithmic or exponential sampling (must be positive). Defaults to 10.0.
 ///
 /// # Returns
-/// A NumPy array (`np.ndarray`) containing the generated samples for a single iteration.
+/// A NumPy array (`np.ndarray`) containing the generated samples.
 ///
-/// # Raises
-/// * `ValueError`: If `start >= stop`, `base <= 0` for logarithmic/exponential sampling,
-///   `n_sample == 0`, `n_grid < 2` for `n_iter > 0`, or if `sample_type` is invalid.
+/// For `n_iter == 0`: includes endpoints, linearly spaced in transformed space.
+/// For `n_iter > 0`: returns **only the new interior points** introduced at this refinement level
+/// (i.e., excludes points from coarser grids).
+///
+/// Use `sample_arr` to get the full concatenated hierarchical grid.
 ///
 /// # Examples
 /// ```python
-/// import utils_bindings
-/// samples = utils_bindings.sample(1.0, 10.0, 4, 2, 0, "linear")
-/// # Returns: np.array([1.0, 3.25, 5.5, 7.75, 10.0])
+/// sample(0, 5, 5, 2, 0, "uniform")   # → [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+/// sample(0, 5, 5, 2, 1, "uniform")   # → [0.5, 1.5, 2.5, 3.5, 4.5]           # only new points
+/// sample(0, 5, 5, 2, 2, "uniform")   # → [0.25, 0.75, ..., 4.75]           # only newest level
 /// ```
 #[pyfunction]
 #[pyo3(signature = (start, stop, n_sample, n_grid, n_iter, sample_type, base=10.0))]
@@ -114,16 +116,16 @@ pub fn sample(
 /// * `base` (float, optional): Base for logarithmic or exponential sampling (must be positive). Defaults to 10.0.
 ///
 /// # Returns
-/// A NumPy array (`np.ndarray`) containing the concatenated samples across all iterations.
-///
+/// Concatenates samples from `n_iter = 0..=n_iter`, producing a full nested dyadic grid
+/// with no duplicate points. Ideal for hierarchical training or multi-resolution analysis.
 /// # Raises
 /// * `ValueError`: If `start >= stop`, `base <= 0` for logarithmic/exponential sampling,
 ///   `n_sample == 0`, `n_grid < 2` for `n_iter > 0`, or if `sample_type` is invalid.
 ///
 /// # Examples
 /// ```python
-/// import utils_bindings
-/// samples = utils_bindings.sample_arr(1.0, 10.0, 4, 2, 1, "uniform")
+/// from bubble_gw.utils import sample_arr
+/// samples = sample_arr(1.0, 10.0, 4, 2, 1, "uniform")
 /// # Returns: np.array([...]) # Concatenated samples for n_iter=0 and n_iter=1
 /// ```
 #[pyfunction]
