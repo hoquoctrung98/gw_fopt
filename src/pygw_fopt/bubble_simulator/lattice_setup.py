@@ -143,14 +143,13 @@ class LatticeSetup:
                            color=colors[n], alpha=0.3, interpolate=True)
         
         # # Set xlim and ylim based on profile range
-        # ax.set_xlim(0, r[-1])
+        ax.set_xlim(left=0, right=r[-1])
         # ax.set_ylim(0, max(phi.max(), phi.min()) * 1.1)  # Extend slightly beyond max/min phi
         
         # Labels and legend
         ax.set_xlabel('r')
         ax.set_ylabel('Field profiles')
         ax.set_title('Field profiles with inner and outer radii')
-        ax.legend()
         ax.grid(True)
         
         return fig, ax

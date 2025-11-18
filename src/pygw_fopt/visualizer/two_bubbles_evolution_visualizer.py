@@ -133,7 +133,7 @@ class TwoBubblesEvolutionVisualizer:
             if len(arr) < max_length else arr[:max_length]
             for arr in integrand
         ])
-        self.sigma = np.trapz(integrand, dx=self.dz, axis=1)
+        self.sigma = np.trapezoid(integrand, dx=self.dz, axis=1)
 
     def export_surface_tension(self, file_path):
         """

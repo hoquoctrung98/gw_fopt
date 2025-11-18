@@ -21,6 +21,8 @@ dependencies = [
     "bubble_gw_py @ file:///${PROJECT_ROOT}/src/bubble_gw",
     "pyqt6>=6.9.1",
     "ipympl>=0.9.7",
+    "h5py>=3.15.1",
+    "pyyaml>=6.0.3",
 ]
 
 [build-system]
