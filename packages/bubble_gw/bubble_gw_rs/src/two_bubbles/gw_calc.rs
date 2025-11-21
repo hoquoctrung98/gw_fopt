@@ -579,179 +579,134 @@ impl GravitationalWaveCalculator {
         Ok(t_tensor)
     }
 
-    /// Computes the gravitational wave spectrum for given arrays of frequencies (w) and wavenumbers (k) in parallel.
+    /// Computes the gravitational wave spectrum on a full (w × cosθ_k) grid.
+    /// Returns an Array2<f64> of shape (n_cos_thetak, n_w) where:
+    ///   result[i_k, i_w] = dE/(dlogω dcosθ_k) at cos_thetak_arr[i_k] and w_arr[i_w]
     #[inline]
     pub fn compute_angular_gw_spectrum(
         &self,
         w_arr: &[f64],
         cos_thetak_arr: &[f64],
         num_threads: Option<usize>,
-    ) -> Result<Vec<f64>, GWCalcError> {
-        // Check that w_arr and k_arr have the same length
-        if w_arr.len() != cos_thetak_arr.len() {
-            return Err(GWCalcError::LengthMismatch {
-                w_len: w_arr.len(),
-                k_len: cos_thetak_arr.len(),
-            });
-        }
+    ) -> Result<Array2<f64>, GWCalcError> {
+        let n_w = w_arr.len();
+        let n_k = cos_thetak_arr.len();
 
-        // Filter out invalid k values (k = ±1)
-        let valid_wk_pairs: Vec<(f64, f64)> = w_arr
-            .iter()
-            .zip(cos_thetak_arr.iter())
-            .filter(|&(_w, &cos_thetak)| cos_thetak != 1.0 && cos_thetak != -1.0)
-            .map(|(&w, &cos_thetak)| (w, cos_thetak))
-            .collect();
+        // Build full mesh of valid (w, cosθ_k) pairs
+        let mut wk_pairs = Vec::with_capacity(n_w * n_k);
+        let mut row_indices = Vec::with_capacity(n_w * n_k); // (i_k, i_w) → flat index mapping
 
-        // Compute the spectrum for each valid (w, k) pair in parallel
-        let results: Vec<Result<f64, GWCalcError>> = match num_threads {
-            Some(n) if n > 0 => rayon::ThreadPoolBuilder::new()
-                .num_threads(n)
-                .build()?
-                .install(|| {
-                    valid_wk_pairs
-                        .par_iter()
-                        .map(|&(w, cos_thetak)| {
-                            let cos_thetak_sq = cos_thetak.powi(2);
-                            let sin_thetak_sq = 1.0 - cos_thetak_sq;
-
-                            let exp_wkz: Array1<Complex64> = self
-                                .lattice
-                                .z_grid
-                                .clone()
-                                .mapv(|z| Complex64::new(0.0, -w * cos_thetak * z).exp());
-                            let wkz_shifted: Array1<f64> = self
-                                .lattice
-                                .z_grid
-                                .slice(s![1..])
-                                .mapv(|z| w * cos_thetak * (z - 0.5 * self.lattice.dz));
-                            let exp_wkz_shifted: Array1<Complex64> =
-                                wkz_shifted.mapv(|x| Complex64::new(0.0, -x).exp());
-
-                            let t_zz = self.compute_t_zz(w, cos_thetak, &exp_wkz_shifted);
-                            let t_xx = self.compute_t_xx(w, cos_thetak, &exp_wkz);
-                            let t_yy = self.compute_t_yy(w, cos_thetak, &exp_wkz);
-                            let t_xz = self.compute_t_xz(w, cos_thetak, &exp_wkz_shifted);
-
-                            let t_rr = t_xx * cos_thetak_sq - t_yy;
-
-                            let w_cubed = w.powi(3);
-                            let two_pi = 2.0 * std::f64::consts::PI;
-                            let t_total_squared = (t_rr + sin_thetak_sq * t_zz
-                                - 2.0 * cos_thetak * sin_thetak_sq.sqrt() * t_xz)
-                                .norm_sqr();
-                            let total_integrand_value = t_total_squared * w_cubed * two_pi;
-
-                            Ok(total_integrand_value)
-                        })
-                        .collect::<Vec<_>>()
-                }),
-            _ => valid_wk_pairs
-                .par_iter()
-                .map(|&(w, cos_thetak)| {
-                    let cos_thetak_sq = cos_thetak.powi(2);
-                    let sin_thetak_sq = 1.0 - cos_thetak_sq;
-
-                    let exp_wkz: Array1<Complex64> = self
-                        .lattice
-                        .z_grid
-                        .clone()
-                        .mapv(|z| Complex64::new(0.0, -w * cos_thetak * z).exp());
-                    let wkz_shifted: Array1<f64> = self
-                        .lattice
-                        .z_grid
-                        .slice(s![1..])
-                        .mapv(|z| w * cos_thetak * (z - 0.5 * self.lattice.dz));
-                    let exp_wkz_shifted: Array1<Complex64> =
-                        wkz_shifted.mapv(|x| Complex64::new(0.0, -x).exp());
-
-                    let t_zz = self.compute_t_zz(w, cos_thetak, &exp_wkz_shifted);
-                    let t_xx = self.compute_t_xx(w, cos_thetak, &exp_wkz);
-                    let t_yy = self.compute_t_yy(w, cos_thetak, &exp_wkz);
-                    let t_xz = self.compute_t_xz(w, cos_thetak, &exp_wkz_shifted);
-
-                    let t_rr = t_xx * cos_thetak_sq - t_yy;
-
-                    let w_cubed = w.powi(3);
-                    let two_pi = 2.0 * std::f64::consts::PI;
-                    let t_total_squared = (t_rr + sin_thetak_sq * t_zz
-                        - 2.0 * cos_thetak * sin_thetak_sq.sqrt() * t_xz)
-                        .norm_sqr();
-                    let total_integrand_value = t_total_squared * w_cubed * two_pi;
-
-                    Ok(total_integrand_value)
-                })
-                .collect::<Vec<_>>(),
-        };
-
-        let results: Vec<f64> = results
-            .into_iter()
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| GWCalcError::IntegrationFailed(e.to_string()))?;
-
-        // Create an output vector matching the input w_arr/k_arr size, with 0.0 for invalid cos_thetak
-        let mut de_dlogw_dcos_thetak = vec![0.0; w_arr.len()];
-        let mut valid_idx = 0;
-        for (i, &cos_thetak) in cos_thetak_arr.iter().enumerate() {
-            if cos_thetak != 1.0 && cos_thetak != -1.0 {
-                de_dlogw_dcos_thetak[i] = results[valid_idx];
-                valid_idx += 1;
+        for (i_w, &w) in w_arr.iter().enumerate() {
+            for (i_k, &cos_thetak) in cos_thetak_arr.iter().enumerate() {
+                if cos_thetak == 1.0 || cos_thetak == -1.0 {
+                    continue; // skip poles
+                }
+                wk_pairs.push((w, cos_thetak));
+                row_indices.push((i_k, i_w));
             }
         }
 
-        Ok(de_dlogw_dcos_thetak)
+        // Parallel computation over all valid pairs
+        let results: Vec<f64> = match num_threads {
+            Some(n) if n > 0 => {
+                let pool = rayon::ThreadPoolBuilder::new()
+                    .num_threads(n)
+                    .build()
+                    .map_err(GWCalcError::ThreadPoolBuild)?;
+                pool.install(|| {
+                    wk_pairs
+                        .par_iter()
+                        .map(|&(w, cos_thetak)| self.compute_single_angular_point(w, cos_thetak))
+                        .collect()
+                })
+            }
+            _ => wk_pairs
+                .par_iter()
+                .map(|&(w, cos_thetak)| self.compute_single_angular_point(w, cos_thetak))
+                .collect(),
+        };
+
+        // Fill output Array2, zeros where cosθ_k = ±1
+        let mut spectrum = Array2::<f64>::zeros((n_k, n_w));
+
+        for (&(i_k, i_w), val) in row_indices.iter().zip(results.iter()) {
+            spectrum[[i_k, i_w]] = *val;
+        }
+
+        Ok(spectrum)
     }
 
-    /// Computes the gravitational wave spectrum averaged over all directions, returning only dE/dlogw.
+    // Helper: extracted computation for a single (w, cosθ_k) point
+    // (avoids duplicating the long body in two branches)
+    #[inline]
+    fn compute_single_angular_point(&self, w: f64, cos_thetak: f64) -> f64 {
+        let cos_thetak_sq = cos_thetak.powi(2);
+        let sin_thetak_sq = 1.0 - cos_thetak_sq;
+
+        let exp_wkz: Array1<Complex64> = self
+            .lattice
+            .z_grid
+            .mapv(|z| Complex64::new(0.0, -w * cos_thetak * z).exp());
+
+        let wkz_shifted: Array1<f64> = self
+            .lattice
+            .z_grid
+            .slice(s![1..])
+            .mapv(|z| w * cos_thetak * (z - 0.5 * self.lattice.dz));
+        let exp_wkz_shifted: Array1<Complex64> =
+            wkz_shifted.mapv(|x| Complex64::new(0.0, -x).exp());
+
+        let t_zz = self.compute_t_zz(w, cos_thetak, &exp_wkz_shifted);
+        let t_xx = self.compute_t_xx(w, cos_thetak, &exp_wkz);
+        let t_yy = self.compute_t_yy(w, cos_thetak, &exp_wkz);
+        let t_xz = self.compute_t_xz(w, cos_thetak, &exp_wkz_shifted);
+
+        let t_rr = t_xx * cos_thetak_sq - t_yy;
+        let w_cubed = w.powi(3);
+        let two_pi = 2.0 * std::f64::consts::PI;
+
+        let t_total_squared = (t_rr + sin_thetak_sq * t_zz
+            - 2.0 * cos_thetak * sin_thetak_sq.sqrt() * t_xz)
+            .norm_sqr();
+
+        t_total_squared * w_cubed * two_pi
+    }
+
+    /// Computes the direction-averaged GW spectrum dE/dlogω
     pub fn compute_averaged_gw_spectrum(
         &self,
         w_arr: &[f64],
-        n_k: usize,
+        cos_thetak_grid: &[f64], // grid in cosθ_k, e.g. uniformly spaced in [−1,1] or [0,1]
         num_threads: Option<usize>,
     ) -> Result<Vec<f64>, GWCalcError> {
-        let cos_thetak_arr: Vec<f64> = (0..n_k).map(|i| i as f64 / (n_k - 1) as f64).collect();
-        let dcos_thetak = cos_thetak_arr[1] - cos_thetak_arr[0];
+        let angular_spectrum =
+            self.compute_angular_gw_spectrum(w_arr, cos_thetak_grid, num_threads)?; // shape (n_k, n_w)
 
-        // Create (w, k) pairs
-        let wk_pairs: Vec<(f64, f64)> = w_arr
-            .iter()
-            .flat_map(|&w| {
-                cos_thetak_arr
-                    .iter()
-                    .map(move |&cos_thetak| (w, cos_thetak))
-            })
-            .collect();
+        let dcos = if cos_thetak_grid.len() > 1 {
+            cos_thetak_grid[1] - cos_thetak_grid[0]
+        } else {
+            return Err(GWCalcError::LengthMismatch {
+                w_len: w_arr.len(),
+                k_len: cos_thetak_grid.len(),
+            });
+        };
 
-        // Compute spectrum for all (w, k) pairs
-        let results = self.compute_angular_gw_spectrum(
-            &wk_pairs.iter().map(|&(w, _)| w).collect::<Vec<_>>(),
-            &wk_pairs.iter().map(|&(_, k)| k).collect::<Vec<_>>(),
-            num_threads,
-        )?;
+        let n_w = w_arr.len();
+        let mut de_dlogw = vec![0.0; n_w];
 
-        // Organize results into integrand_dict
-        let mut integrand_dict: Vec<Vec<f64>> = vec![vec![0.0; n_k]; w_arr.len()];
-        for (i, &(w, _)) in wk_pairs.iter().enumerate() {
-            let i_w = w_arr.iter().position(|&x| x == w).unwrap();
-            let i_k = i % n_k;
-            integrand_dict[i_w][i_k] = results[i];
+        for i_w in 0..n_w {
+            let column = angular_spectrum.column(i_w);
+            let mut integral = 0.0;
+            for (i_k, &val) in column.iter().enumerate() {
+                let weight = if i_k == 0 || i_k == column.len() - 1 {
+                    1.0
+                } else {
+                    2.0
+                };
+                integral += weight * val;
+            }
+            de_dlogw[i_w] = integral * dcos; // trapezoidal rule (Simpson-like)
         }
-
-        // Compute dE/dlogw for each w by integrating over k
-        let de_dlogw: Vec<f64> = w_arr
-            .iter()
-            .enumerate()
-            .map(|(i, _)| {
-                let integrand_values = &integrand_dict[i];
-                integrand_values
-                    .iter()
-                    .enumerate()
-                    .fold(0.0, |acc, (i_k, &val)| {
-                        let weight = if i_k == 0 || i_k == n_k - 1 { 1.0 } else { 2.0 };
-                        acc + weight * val * dcos_thetak
-                    })
-            })
-            .collect();
 
         Ok(de_dlogw)
     }

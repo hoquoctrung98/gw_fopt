@@ -122,17 +122,18 @@ impl PyGravitationalWaveCalculator {
         Ok(())
     }
 
-    #[pyo3(signature = (w_arr, n_k, num_threads = None))]
+    #[pyo3(signature = (w_arr, cos_thetak_arr, num_threads = None))]
     fn compute_averaged_gw_spectrum(
         &self,
         py: Python,
         w_arr: Vec<f64>,
-        n_k: usize,
+        cos_thetak_arr: Vec<f64>,
         num_threads: Option<usize>,
     ) -> PyResult<Py<PyArray1<f64>>> {
-        let results = self
-            .inner
-            .compute_averaged_gw_spectrum(&w_arr, n_k, num_threads)?;
+        let results =
+            self.inner
+                .compute_averaged_gw_spectrum(&w_arr, &cos_thetak_arr, num_threads)?;
+
         Ok(PyArray1::from_vec(py, results).into())
     }
 
@@ -143,11 +144,13 @@ impl PyGravitationalWaveCalculator {
         w_arr: Vec<f64>,
         cos_thetak_arr: Vec<f64>,
         num_threads: Option<usize>,
-    ) -> PyResult<Py<PyArray1<f64>>> {
-        let results =
+    ) -> PyResult<Py<PyArray2<f64>>> {
+        let spectrum_2d =
             self.inner
                 .compute_angular_gw_spectrum(&w_arr, &cos_thetak_arr, num_threads)?;
-        Ok(PyArray1::from_vec(py, results).into())
+
+        // Convert Array2 → numpy array with correct shape: (n_k, n_w)
+        Ok(PyArray2::from_array(py, &spectrum_2d).into())
     }
 
     #[pyo3(signature = (w_arr, k_arr, num_threads = None))]
