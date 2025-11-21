@@ -950,7 +950,7 @@ impl BulkFlow {
     pub fn compute_a_integral(
         &self,
         a_idx: usize,
-        w_arr: ArrayView1<f64>,
+        w_arr: &[f64],
         t: f64,
         first_bubble: ArrayView2<BubbleIndex>,
         delta_tab_grid: ArrayView2<f64>,
@@ -1025,7 +1025,7 @@ impl BulkFlow {
     pub fn compute_c_integrand_fixed_bubble(
         &self,
         a_idx: usize,
-        w_arr: ArrayView1<f64>,
+        w_arr: &[f64],
         t_begin: Option<f64>,
         t_end: f64,
         n_t: usize,
@@ -1127,7 +1127,7 @@ impl BulkFlow {
     pub fn compute_c_integral_fixed_bubble(
         &mut self,
         a_idx: usize,
-        w_arr: ArrayView1<f64>,
+        w_arr: &[f64],
         t_begin: Option<f64>,
         t_end: f64,
         n_t: usize,
@@ -1220,7 +1220,7 @@ impl BulkFlow {
 
     pub fn compute_c_integrand(
         &self,
-        w_arr: ArrayView1<f64>,
+        w_arr: &[f64],
         t_begin: Option<f64>,
         t_end: f64,
         n_t: usize,
@@ -1263,7 +1263,7 @@ impl BulkFlow {
 
     pub fn compute_c_integral(
         &mut self,
-        w_arr: ArrayView1<f64>,
+        w_arr: &[f64],
         t_begin: Option<f64>,
         t_end: f64,
         n_t: usize,

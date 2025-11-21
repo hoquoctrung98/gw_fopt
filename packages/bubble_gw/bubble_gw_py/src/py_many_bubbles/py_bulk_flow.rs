@@ -251,15 +251,14 @@ impl PyBulkFlow {
         &mut self,
         py: Python,
         a_idx: usize,
-        w_arr: PyReadonlyArray1<f64>,
+        w_arr: Vec<f64>,
         t_begin: Option<f64>,
         t_end: f64,
         n_t: usize,
     ) -> PyResult<Py<PyArray3<NumpyComplex64>>> {
-        let w_arr = w_arr.to_owned_array();
-        let c_matrix =
-            self.inner
-                .compute_c_integral_fixed_bubble(a_idx, w_arr.view(), t_begin, t_end, n_t)?;
+        let c_matrix = self
+            .inner
+            .compute_c_integral_fixed_bubble(a_idx, &w_arr, t_begin, t_end, n_t)?;
         let c_matrix_numpy = c_matrix.mapv(|c| NumpyComplex64::new(c.re, c.im));
         Ok(PyArray3::from_array(py, &c_matrix_numpy).into())
     }
@@ -268,19 +267,14 @@ impl PyBulkFlow {
         &self,
         py: Python,
         a_idx: usize,
-        w_arr: PyReadonlyArray1<f64>,
+        w_arr: Vec<f64>,
         t_begin: Option<f64>,
         t_end: f64,
         n_t: usize,
     ) -> PyResult<Py<PyArray4<NumpyComplex64>>> {
-        let w_arr = w_arr.to_owned_array();
-        let integrand = self.inner.compute_c_integrand_fixed_bubble(
-            a_idx,
-            w_arr.view(),
-            t_begin,
-            t_end,
-            n_t,
-        )?;
+        let integrand = self
+            .inner
+            .compute_c_integrand_fixed_bubble(a_idx, &w_arr, t_begin, t_end, n_t)?;
         let integrand_numpy = integrand.mapv(|c| NumpyComplex64::new(c.re, c.im));
         Ok(PyArray4::from_array(py, &integrand_numpy).into())
     }
@@ -289,14 +283,12 @@ impl PyBulkFlow {
     pub fn compute_c_integrand(
         &self,
         py: Python,
-        w_arr: PyReadonlyArray1<f64>,
+        w_arr: Vec<f64>,
         t_begin: Option<f64>,
         t_end: f64,
         n_t: usize,
         selected_bubbles: Option<PyReadonlyArray1<usize>>,
     ) -> PyResult<Py<PyArray4<NumpyComplex64>>> {
-        let w_arr = w_arr.to_owned_array();
-
         let selected_vec: Option<Vec<usize>> = selected_bubbles
             .map(|arr| {
                 let array = arr.to_owned_array();
@@ -313,7 +305,7 @@ impl PyBulkFlow {
 
         let integrand = self
             .inner
-            .compute_c_integrand(w_arr.view(), t_begin, t_end, n_t, selected_slice)
+            .compute_c_integrand(&w_arr, t_begin, t_end, n_t, selected_slice)
             .map_err(|e| match e {
                 BulkFlowError::InvalidIndex { index, max } => {
                     PyBulkFlowError::InvalidIndex { index, max }
@@ -329,14 +321,12 @@ impl PyBulkFlow {
     pub fn compute_c_integral(
         &mut self,
         py: Python,
-        w_arr: PyReadonlyArray1<f64>,
+        w_arr: Vec<f64>,
         t_begin: Option<f64>,
         t_end: f64,
         n_t: usize,
         selected_bubbles: Option<PyReadonlyArray1<usize>>,
     ) -> PyResult<Py<PyArray3<NumpyComplex64>>> {
-        let w_arr = w_arr.to_owned_array();
-
         let selected_vec: Option<Vec<usize>> = selected_bubbles
             .map(|arr| {
                 let array = arr.to_owned_array();
@@ -353,7 +343,7 @@ impl PyBulkFlow {
 
         let c_matrix = self
             .inner
-            .compute_c_integral(w_arr.view(), t_begin, t_end, n_t, selected_slice)
+            .compute_c_integral(&w_arr, t_begin, t_end, n_t, selected_slice)
             .map_err(|e| match e {
                 BulkFlowError::InvalidIndex { index, max } => {
                     PyBulkFlowError::InvalidIndex { index, max }

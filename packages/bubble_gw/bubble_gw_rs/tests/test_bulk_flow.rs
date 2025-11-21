@@ -84,7 +84,8 @@ fn test_bulk_flow_two_bubbles() -> Result<(), Box<dyn Error>> {
         bulk.set_resolution(n_cos_val as usize, n_phi_val as usize, true)?;
         bulk.set_gradient_scaling_params(coefficients_sets.clone(), powers_sets.clone(), None)?;
 
-        let c_matrix = bulk.compute_c_integral(w_arr.view(), Some(0.0), 8.0, 1000, None)?;
+        let c_matrix =
+            bulk.compute_c_integral(w_arr.as_slice().unwrap(), Some(0.0), 8.0, 1000, None)?;
 
         // Extract computed results for coeff=1.0
         let computed_plus: Vec<Complex64> = c_matrix.slice(ndarray::s![0, 0, ..]).to_vec();
