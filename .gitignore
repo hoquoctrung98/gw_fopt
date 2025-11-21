@@ -1,6 +1,7 @@
 /target
 packages/bubble_gw/target
-# notebooks
+notebooks/
+.vscode
 **/*.vim
 .gitignore
 

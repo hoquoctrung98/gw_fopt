@@ -15,8 +15,8 @@ members = [
 
 [tool.uv.sources]
 pygw_fopt = { workspace = true, editable = true }
-bubble-gw = { workspace = true, editable = true }
+bubble_gw = { workspace = true, editable = true }
 
 [build-system]
-requires = ["uv_build>=0.9.5"]
+requires = ["uv_build>=0.9.8,<0.10.0", "maturin>=1.9,<2.0"]
 build-backend = "uv_build"
