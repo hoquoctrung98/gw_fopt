@@ -1,4 +1,7 @@
-use numpy::{PyArray1, PyArray2, PyArray3, PyArrayMethods, PyReadonlyArray1, PyReadonlyArray3};
+use numpy::{
+    Complex64 as NumpyComplex64, PyArray1, PyArray2, PyArray3, PyArrayMethods, PyReadonlyArray1,
+    PyReadonlyArray3,
+};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use thiserror::Error;
@@ -148,42 +151,21 @@ impl PyGravitationalWaveCalculator {
         let spectrum_2d =
             self.inner
                 .compute_angular_gw_spectrum(&w_arr, &cos_thetak_arr, num_threads)?;
-
-        // Convert Array2 → numpy array with correct shape: (n_k, n_w)
         Ok(PyArray2::from_array(py, &spectrum_2d).into())
     }
 
-    #[pyo3(signature = (w_arr, k_arr, num_threads = None))]
+    #[pyo3(signature = (w_arr, cos_thetak_arr, num_threads = None))]
     fn compute_t_tensor(
         &self,
         py: Python,
         w_arr: Vec<f64>,
-        k_arr: Vec<f64>,
+        cos_thetak_arr: Vec<f64>,
         num_threads: Option<usize>,
-    ) -> PyResult<Py<PyArray2<f64>>> {
-        let results = self.inner.compute_t_tensor(&w_arr, &k_arr, num_threads)?;
-
-        let n = w_arr.len();
-        let flat_results: Vec<f64> = results
-            .into_iter()
-            .flat_map(|(t_xx, t_yy, t_zz, t_xz)| {
-                vec![
-                    t_xx.re, t_xx.im, t_yy.re, t_yy.im, t_zz.re, t_zz.im, t_xz.re, t_xz.im,
-                ]
-            })
-            .collect();
-
-        let array = unsafe {
-            let array = PyArray2::new(py, [n, 8], false);
-            for (i, chunk) in flat_results.chunks(8).enumerate() {
-                for (j, &val) in chunk.iter().enumerate() {
-                    *array.uget_mut([i, j]) = val;
-                }
-            }
-            array
-        };
-
-        Ok(array.into())
+    ) -> PyResult<Py<PyArray3<NumpyComplex64>>> {
+        let t_tensor = self
+            .inner
+            .compute_t_tensor(&w_arr, &cos_thetak_arr, num_threads)?;
+        Ok(PyArray3::from_array(py, &t_tensor).into())
     }
 
     #[getter]

@@ -470,110 +470,105 @@ impl GravitationalWaveCalculator {
         gauss_kronrod_quadrature(integrand, (u_min, u_max), G30K61(self.tol, self.max_iter))
     }
 
-    /// Computes the energy-momentum tensor components (t_xx, t_yy, t_zz, t_xz) for given arrays of
-    /// frequencies (w) and wavenumbers (cos_thetak) in parallel.
+    /// Computes the energy-momentum tensor components (t_xx, t_yy, t_zz, t_xz)
+    /// on a full (w × cosθ_k) grid.
+    ///
+    /// Returns ArrayView of shape (n_cos_thetak, n_w, 4), where the last axis=2 contains:
+    ///   [0] = t_xx, [1] = t_yy, [2] = t_zz, [3] = t_xz (all Complex64)
+    ///
+    /// Invalid points (cosθ_k = ±1.0) are returned as zero.
     #[inline]
     pub fn compute_t_tensor(
         &self,
         w_arr: &[f64],
         cos_thetak_arr: &[f64],
         num_threads: Option<usize>,
-    ) -> Result<Vec<(Complex64, Complex64, Complex64, Complex64)>, GWCalcError> {
-        // Check that w_arr and cos_thetak_arr have the same length
-        if w_arr.len() != cos_thetak_arr.len() {
-            return Err(GWCalcError::LengthMismatch {
-                w_len: w_arr.len(),
-                k_len: cos_thetak_arr.len(),
-            });
+    ) -> Result<Array3<Complex64>, GWCalcError> {
+        let n_w = w_arr.len();
+        let n_k = cos_thetak_arr.len();
+
+        // Build list of valid (w, cosθ_k) pairs + mapping back to 2D grid
+        let mut wk_pairs = Vec::with_capacity(n_w * n_k);
+        let mut index_map = Vec::with_capacity(n_w * n_k); // stores (i_k, i_w)
+
+        for (i_w, &w) in w_arr.iter().enumerate() {
+            for (i_k, &cos_thetak) in cos_thetak_arr.iter().enumerate() {
+                if cos_thetak == 1.0 || cos_thetak == -1.0 {
+                    continue; // skip poles — will remain zero
+                }
+                wk_pairs.push((w, cos_thetak));
+                index_map.push((i_k, i_w));
+            }
         }
 
-        // Filter out invalid cos_thetak values (cos_thetak = ±1)
-        let valid_wk_pairs: Vec<(f64, f64)> = w_arr
-            .iter()
-            .zip(cos_thetak_arr.iter())
-            .filter(|&(_w, &cos_thetak)| cos_thetak != 1.0 && cos_thetak != -1.0)
-            .map(|(&w, &cos_thetak)| (w, cos_thetak))
-            .collect();
-
-        // Compute the tensor components for each valid (w, cos_thetak) pair in parallel
-        let results: Vec<Result<(Complex64, Complex64, Complex64, Complex64), String>> =
-            match num_threads {
-                Some(n) if n > 0 => rayon::ThreadPoolBuilder::new()
+        // Parallel computation over all valid points
+        let results: Vec<(Complex64, Complex64, Complex64, Complex64)> = match num_threads {
+            Some(n) if n > 0 => {
+                let pool = rayon::ThreadPoolBuilder::new()
                     .num_threads(n)
-                    .build()?
-                    .install(|| {
-                        valid_wk_pairs
-                            .par_iter()
-                            .map(|&(w, cos_thetak)| {
-                                let exp_wkz: Array1<Complex64> = self
-                                    .lattice
-                                    .z_grid
-                                    .clone()
-                                    .mapv(|z| Complex64::new(0.0, -w * cos_thetak * z).exp());
-                                let wkz_shifted: Array1<f64> = self
-                                    .lattice
-                                    .z_grid
-                                    .slice(s![1..])
-                                    .mapv(|z| w * cos_thetak * (z - 0.5 * self.lattice.dz));
-                                let exp_wkz_shifted: Array1<Complex64> =
-                                    wkz_shifted.mapv(|x| Complex64::new(0.0, -x).exp());
+                    .build()
+                    .map_err(GWCalcError::ThreadPoolBuild)?;
+                pool.install(|| {
+                    wk_pairs
+                        .par_iter()
+                        .map(|&(w, cos_thetak)| {
+                            let exp_wkz: Array1<Complex64> = self
+                                .lattice
+                                .z_grid
+                                .mapv(|z| Complex64::new(0.0, -w * cos_thetak * z).exp());
 
-                                let t_zz = self.compute_t_zz(w, cos_thetak, &exp_wkz_shifted);
-                                let t_xx = self.compute_t_xx(w, cos_thetak, &exp_wkz);
-                                let t_yy = self.compute_t_yy(w, cos_thetak, &exp_wkz);
-                                let t_xz = self.compute_t_xz(w, cos_thetak, &exp_wkz_shifted);
+                            let wkz_shifted: Array1<f64> = self
+                                .lattice
+                                .z_grid
+                                .slice(s![1..])
+                                .mapv(|z| w * cos_thetak * (z - 0.5 * self.lattice.dz));
+                            let exp_wkz_shifted: Array1<Complex64> =
+                                wkz_shifted.mapv(|x| Complex64::new(0.0, x).exp());
 
-                                Ok((t_xx, t_yy, t_zz, t_xz))
-                            })
-                            .collect::<Vec<_>>()
-                    }),
-                _ => valid_wk_pairs
-                    .par_iter()
-                    .map(|&(w, cos_thetak)| {
-                        let exp_wkz: Array1<Complex64> = self
-                            .lattice
-                            .z_grid
-                            .clone()
-                            .mapv(|z| Complex64::new(0.0, -w * cos_thetak * z).exp());
-                        let wkz_shifted: Array1<f64> = self
-                            .lattice
-                            .z_grid
-                            .slice(s![1..])
-                            .mapv(|z| w * cos_thetak * (z - 0.5 * self.lattice.dz));
-                        let exp_wkz_shifted: Array1<Complex64> =
-                            wkz_shifted.mapv(|x| Complex64::new(0.0, -x).exp());
+                            let t_zz = self.compute_t_zz(w, cos_thetak, &exp_wkz_shifted);
+                            let t_xx = self.compute_t_xx(w, cos_thetak, &exp_wkz);
+                            let t_yy = self.compute_t_yy(w, cos_thetak, &exp_wkz);
+                            let t_xz = self.compute_t_xz(w, cos_thetak, &exp_wkz_shifted);
 
-                        let t_zz = self.compute_t_zz(w, cos_thetak, &exp_wkz_shifted);
-                        let t_xx = self.compute_t_xx(w, cos_thetak, &exp_wkz);
-                        let t_yy = self.compute_t_yy(w, cos_thetak, &exp_wkz);
-                        let t_xz = self.compute_t_xz(w, cos_thetak, &exp_wkz_shifted);
-
-                        Ok((t_xx, t_yy, t_zz, t_xz))
-                    })
-                    .collect::<Vec<_>>(),
-            };
-
-        let results: Vec<(Complex64, Complex64, Complex64, Complex64)> = results
-            .into_iter()
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| GWCalcError::IntegrationFailed(e.to_string()))?;
-
-        // Create an output vector matching the input w_arr/cos_thetak_arr size, with zeros for invalid cos_thetak
-        let mut t_tensor = vec![
-            (
-                Complex64::new(0.0, 0.0),
-                Complex64::new(0.0, 0.0),
-                Complex64::new(0.0, 0.0),
-                Complex64::new(0.0, 0.0)
-            );
-            w_arr.len()
-        ];
-        let mut valid_idx = 0;
-        for (i, &cos_thetak) in cos_thetak_arr.iter().enumerate() {
-            if cos_thetak != 1.0 && cos_thetak != -1.0 {
-                t_tensor[i] = results[valid_idx];
-                valid_idx += 1;
+                            (t_xx, t_yy, t_zz, t_xz)
+                        })
+                        .collect()
+                })
             }
+            _ => wk_pairs
+                .par_iter()
+                .map(|&(w, cos_thetak)| {
+                    let exp_wkz: Array1<Complex64> = self
+                        .lattice
+                        .z_grid
+                        .mapv(|z| Complex64::new(0.0, w * cos_thetak * z).exp());
+
+                    let wkz_shifted: Array1<f64> = self
+                        .lattice
+                        .z_grid
+                        .slice(s![1..])
+                        .mapv(|z| w * cos_thetak * (z - 0.5 * self.lattice.dz));
+                    let exp_wkz_shifted: Array1<Complex64> =
+                        wkz_shifted.mapv(|x| Complex64::new(0.0, x).exp());
+
+                    let t_zz = self.compute_t_zz(w, cos_thetak, &exp_wkz_shifted);
+                    let t_xx = self.compute_t_xx(w, cos_thetak, &exp_wkz);
+                    let t_yy = self.compute_t_yy(w, cos_thetak, &exp_wkz);
+                    let t_xz = self.compute_t_xz(w, cos_thetak, &exp_wkz_shifted);
+
+                    (t_xx, t_yy, t_zz, t_xz)
+                })
+                .collect(),
+        };
+
+        // Fill output tensor: shape (n_k, n_w, 4)
+        let mut t_tensor = Array3::<Complex64>::zeros((n_k, n_w, 4));
+
+        for (&(i_k, i_w), (t_xx, t_yy, t_zz, t_xz)) in index_map.iter().zip(results.iter()) {
+            t_tensor[[i_k, i_w, 0]] = *t_xx;
+            t_tensor[[i_k, i_w, 1]] = *t_yy;
+            t_tensor[[i_k, i_w, 2]] = *t_zz;
+            t_tensor[[i_k, i_w, 3]] = *t_xz;
         }
 
         Ok(t_tensor)
