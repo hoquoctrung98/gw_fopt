@@ -1,6 +1,7 @@
 use ndarray::prelude::*;
 use num_complex::Complex64;
 use peroxide::numerical::integral::{Integral::G30K61, gauss_kronrod_quadrature};
+use rayon::ThreadPool;
 use rayon::prelude::*;
 
 use super::gw_integrand::{IntegrandCalculator, IntegrandType};
@@ -23,7 +24,7 @@ pub enum GWCalcError {
     InvalidMaxIter(u32),
 
     #[error("Failed to build thread pool: {0}")]
-    ThreadPoolBuild(#[from] rayon::ThreadPoolBuildError),
+    ThreadPoolBuildError(#[from] rayon::ThreadPoolBuildError),
 
     #[error("Integration failed: {0}")]
     IntegrationFailed(String),
@@ -96,6 +97,7 @@ pub struct GravitationalWaveCalculator {
     pub max_iter: u32,
     pub s_offset: Array1<f64>,
     pub n_fields: usize,
+    thread_pool: ThreadPool,
 }
 
 impl GravitationalWaveCalculator {
@@ -107,6 +109,7 @@ impl GravitationalWaveCalculator {
         ds: f64,
         ratio_t_cut: Option<f64>,
         ratio_t_0: Option<f64>,
+        num_threads: Option<usize>,
     ) -> Result<Self, GWCalcError> {
         let n_fields = phi1.shape()[0];
         let n_s = phi1.shape()[1];
@@ -136,6 +139,18 @@ impl GravitationalWaveCalculator {
 
         let s_offset: Array1<f64> = lattice.s_grid.slice(s![1..]).mapv(|s| s - 0.5 * ds);
 
+        let thread_pool = match num_threads {
+            Some(n) => rayon::ThreadPoolBuilder::new().num_threads(n),
+            None => {
+                let default = std::thread::available_parallelism()
+                    .map(|n| n.get())
+                    .unwrap_or(1);
+                rayon::ThreadPoolBuilder::new().num_threads(default)
+            }
+        }
+        .build()
+        .map_err(GWCalcError::ThreadPoolBuildError)?;
+
         Ok(GravitationalWaveCalculator {
             phi1,
             phi2,
@@ -146,6 +161,7 @@ impl GravitationalWaveCalculator {
             max_iter: 20,
             s_offset,
             n_fields,
+            thread_pool,
         })
     }
 
@@ -507,7 +523,7 @@ impl GravitationalWaveCalculator {
                 let pool = rayon::ThreadPoolBuilder::new()
                     .num_threads(n)
                     .build()
-                    .map_err(GWCalcError::ThreadPoolBuild)?;
+                    .map_err(GWCalcError::ThreadPoolBuildError)?;
                 pool.install(|| {
                     wk_pairs
                         .par_iter()
@@ -582,7 +598,6 @@ impl GravitationalWaveCalculator {
         &self,
         w_arr: &[f64],
         cos_thetak_arr: &[f64],
-        num_threads: Option<usize>,
     ) -> Result<Array2<f64>, GWCalcError> {
         let n_w = w_arr.len();
         let n_k = cos_thetak_arr.len();
@@ -602,24 +617,12 @@ impl GravitationalWaveCalculator {
         }
 
         // Parallel computation over all valid pairs
-        let results: Vec<f64> = match num_threads {
-            Some(n) if n > 0 => {
-                let pool = rayon::ThreadPoolBuilder::new()
-                    .num_threads(n)
-                    .build()
-                    .map_err(GWCalcError::ThreadPoolBuild)?;
-                pool.install(|| {
-                    wk_pairs
-                        .par_iter()
-                        .map(|&(w, cos_thetak)| self.compute_single_angular_point(w, cos_thetak))
-                        .collect()
-                })
-            }
-            _ => wk_pairs
+        let results: Vec<f64> = self.thread_pool.install(|| {
+            wk_pairs
                 .par_iter()
                 .map(|&(w, cos_thetak)| self.compute_single_angular_point(w, cos_thetak))
-                .collect(),
-        };
+                .collect()
+        });
 
         // Fill output Array2, zeros where cosθ_k = ±1
         let mut spectrum = Array2::<f64>::zeros((n_k, n_w));
@@ -671,11 +674,9 @@ impl GravitationalWaveCalculator {
     pub fn compute_averaged_gw_spectrum(
         &self,
         w_arr: &[f64],
-        cos_thetak_grid: &[f64], // grid in cosθ_k, e.g. uniformly spaced in [−1,1] or [0,1]
-        num_threads: Option<usize>,
+        cos_thetak_grid: &[f64],
     ) -> Result<Vec<f64>, GWCalcError> {
-        let angular_spectrum =
-            self.compute_angular_gw_spectrum(w_arr, cos_thetak_grid, num_threads)?; // shape (n_k, n_w)
+        let angular_spectrum = self.compute_angular_gw_spectrum(w_arr, cos_thetak_grid)?;
 
         let dcos = if cos_thetak_grid.len() > 1 {
             cos_thetak_grid[1] - cos_thetak_grid[0]

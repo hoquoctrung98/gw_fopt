@@ -48,7 +48,7 @@ impl From<GWCalcError> for PyGWCalcError {
             }
             GWCalcError::InvalidTolerance(t) => PyGWCalcError::InvalidTolerance(t),
             GWCalcError::InvalidMaxIter(n) => PyGWCalcError::InvalidMaxIter(n),
-            GWCalcError::ThreadPoolBuild(e) => PyGWCalcError::ThreadPoolBuild(e.to_string()),
+            GWCalcError::ThreadPoolBuildError(e) => PyGWCalcError::ThreadPoolBuild(e.to_string()),
             GWCalcError::IntegrationFailed(s) => PyGWCalcError::IntegrationFailed(s),
             GWCalcError::InvalidCutoff { t_cut, t_0, smax } => {
                 PyGWCalcError::InvalidCutoff { t_cut, t_0, smax }
@@ -83,7 +83,7 @@ pub struct PyGravitationalWaveCalculator {
 #[pymethods]
 impl PyGravitationalWaveCalculator {
     #[new]
-    #[pyo3(signature = (initial_field_status, phi1, phi2, z_grid, ds, ratio_t_cut = None, ratio_t_0 = None))]
+    #[pyo3(signature = (initial_field_status, phi1, phi2, z_grid, ds, ratio_t_cut = None, ratio_t_0 = None, num_threads = None))]
     fn new(
         initial_field_status: &str,
         phi1: PyReadonlyArray3<f64>,
@@ -92,6 +92,7 @@ impl PyGravitationalWaveCalculator {
         ds: f64,
         ratio_t_cut: Option<f64>,
         ratio_t_0: Option<f64>,
+        num_threads: Option<usize>,
     ) -> PyResult<Self> {
         let phi1 = phi1.to_owned_array();
         let phi2 = phi2.to_owned_array();
@@ -115,6 +116,7 @@ impl PyGravitationalWaveCalculator {
             ds,
             ratio_t_cut,
             ratio_t_0,
+            num_threads,
         )?;
 
         Ok(Self { inner })
@@ -125,32 +127,30 @@ impl PyGravitationalWaveCalculator {
         Ok(())
     }
 
-    #[pyo3(signature = (w_arr, cos_thetak_arr, num_threads = None))]
+    #[pyo3(signature = (w_arr, cos_thetak_arr))]
     fn compute_averaged_gw_spectrum(
         &self,
         py: Python,
         w_arr: Vec<f64>,
         cos_thetak_arr: Vec<f64>,
-        num_threads: Option<usize>,
     ) -> PyResult<Py<PyArray1<f64>>> {
-        let results =
-            self.inner
-                .compute_averaged_gw_spectrum(&w_arr, &cos_thetak_arr, num_threads)?;
+        let results = self
+            .inner
+            .compute_averaged_gw_spectrum(&w_arr, &cos_thetak_arr)?;
 
         Ok(PyArray1::from_vec(py, results).into())
     }
 
-    #[pyo3(signature = (w_arr, cos_thetak_arr, num_threads = None))]
+    #[pyo3(signature = (w_arr, cos_thetak_arr))]
     fn compute_angular_gw_spectrum(
         &self,
         py: Python,
         w_arr: Vec<f64>,
         cos_thetak_arr: Vec<f64>,
-        num_threads: Option<usize>,
     ) -> PyResult<Py<PyArray2<f64>>> {
-        let spectrum_2d =
-            self.inner
-                .compute_angular_gw_spectrum(&w_arr, &cos_thetak_arr, num_threads)?;
+        let spectrum_2d = self
+            .inner
+            .compute_angular_gw_spectrum(&w_arr, &cos_thetak_arr)?;
         Ok(PyArray2::from_array(py, &spectrum_2d).into())
     }
 

@@ -102,6 +102,7 @@ impl BulkFlow {
         mut bubbles_interior: Array2<f64>,
         mut bubbles_exterior: Array2<f64>,
         sort_by_time: bool,
+        num_threads: Option<usize>,
     ) -> Result<Self, BulkFlowError> {
         // shape validation
         if bubbles_interior.ncols() != 4 || bubbles_exterior.ncols() != 4 {
@@ -197,12 +198,17 @@ impl BulkFlow {
             first_colliding_bubbles: None,
         };
 
-        let default_threads = std::thread::available_parallelism()
-            .map(|n| n.get())
-            .unwrap_or(4);
-        let thread_pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(default_threads)
-            .build()?;
+        let thread_pool = match num_threads {
+            Some(n) => rayon::ThreadPoolBuilder::new().num_threads(n),
+            None => {
+                let default = std::thread::available_parallelism()
+                    .map(|n| n.get())
+                    .unwrap_or(1);
+                rayon::ThreadPoolBuilder::new().num_threads(default)
+            }
+        }
+        .build()
+        .map_err(BulkFlowError::ThreadPoolBuildError)?;
 
         Ok(BulkFlow {
             bubbles_interior,
