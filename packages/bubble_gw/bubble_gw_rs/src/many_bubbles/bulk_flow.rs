@@ -649,13 +649,11 @@ impl BulkFlow {
                 "All power sets must have the same length".to_string(),
             ));
         }
-        let powers_sets = Array2::from_shape_vec(
-            (n_powers, n_pows),
-            powers_sets.into_iter().flatten().collect(),
-        )
-        .map_err(|_| {
-            BulkFlowError::ArrayShapeMismatch("Invalid shape for powers_sets".to_string())
-        })?;
+        let powers_sets =
+            Array2::from_shape_vec((n_powers, n_pows), powers_sets.into_iter().flatten().collect())
+                .map_err(|_| {
+                    BulkFlowError::ArrayShapeMismatch("Invalid shape for powers_sets".to_string())
+                })?;
 
         if n_sets != n_powers {
             return Err(BulkFlowError::ArrayShapeMismatch(

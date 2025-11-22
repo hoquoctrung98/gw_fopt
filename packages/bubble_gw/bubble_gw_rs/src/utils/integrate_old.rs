@@ -24,18 +24,10 @@ impl fmt::Display for IntegrationError {
                 write!(f, "At least 2 points required for integration, got {}", len)
             }
             IntegrationError::MismatchedLengths { x_len, y_len } => {
-                write!(
-                    f,
-                    "x and y must have the same length, got x: {}, y: {}",
-                    x_len, y_len
-                )
+                write!(f, "x and y must have the same length, got x: {}, y: {}", x_len, y_len)
             }
             IntegrationError::InvalidAxis { axis, ndim } => {
-                write!(
-                    f,
-                    "Axis {} out of bounds for array with {} dimensions",
-                    axis, ndim
-                )
+                write!(f, "Axis {} out of bounds for array with {} dimensions", axis, ndim)
             }
             IntegrationError::NonContiguousSlice => {
                 write!(f, "Cannot get contiguous slice from array")

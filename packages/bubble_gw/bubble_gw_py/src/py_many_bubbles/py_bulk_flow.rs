@@ -89,12 +89,8 @@ impl PyBulkFlow {
             .map(|arr| arr.to_owned_array())
             .unwrap_or_else(|| Array2::zeros((0, 4)));
 
-        let bulk_flow = BulkFlow::new(
-            bubbles_interior,
-            bubbles_exterior,
-            sort_by_time,
-            num_threads,
-        )?;
+        let bulk_flow =
+            BulkFlow::new(bubbles_interior, bubbles_exterior, sort_by_time, num_threads)?;
         Ok(PyBulkFlow { inner: bulk_flow })
     }
 

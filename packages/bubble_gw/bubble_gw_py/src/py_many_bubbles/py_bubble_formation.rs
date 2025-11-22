@@ -124,9 +124,7 @@ pub fn py_generate_bubbles_exterior(
     // Validate bubbles
     let bubbles_array = bubbles_interior.to_owned_array();
     if bubbles_array.shape().get(1) != Some(&4) {
-        return Err(PyValueError::new_err(
-            "bubbles_interior must have shape (N, 4)",
-        ));
+        return Err(PyValueError::new_err("bubbles_interior must have shape (N, 4)"));
     }
 
     // Call the new function

@@ -47,10 +47,7 @@ fn test_bulk_flow_two_bubbles() -> Result<(), Box<dyn Error>> {
     let powers_sets = vec![vec![3.0], vec![3.0]];
 
     for (&(n_cos_val, n_phi_val), rows) in &groups {
-        println!(
-            "Testing n_cos={n_cos_val}, n_phi={n_phi_val} → {} points",
-            rows.len()
-        );
+        println!("Testing n_cos={n_cos_val}, n_phi={n_phi_val} → {} points", rows.len());
 
         // Sort by w
         let mut w_with_idx: Vec<(f64, usize)> = rows
@@ -80,12 +77,8 @@ fn test_bulk_flow_two_bubbles() -> Result<(), Box<dyn Error>> {
             })
             .collect();
 
-        let mut bulk = BulkFlow::new(
-            bubbles_interior.clone(),
-            bubbles_exterior.clone(),
-            true,
-            None,
-        )?;
+        let mut bulk =
+            BulkFlow::new(bubbles_interior.clone(), bubbles_exterior.clone(), true, None)?;
         bulk.set_resolution(n_cos_val as usize, n_phi_val as usize, true)?;
         bulk.set_gradient_scaling_params(coefficients_sets.clone(), powers_sets.clone(), None)?;
 
@@ -103,10 +96,7 @@ fn test_bulk_flow_two_bubbles() -> Result<(), Box<dyn Error>> {
             .is_close(&expected_cross, ABS_TOL, REL_TOL)
             .map_err(|e| format!("c_cross failed:\n{e}"))?;
 
-        println!(
-            "PASSED: {n_cos_val}×{n_phi_val} with {} points",
-            w_arr.len()
-        );
+        println!("PASSED: {n_cos_val}×{n_phi_val} with {} points", w_arr.len());
     }
 
     Ok(())

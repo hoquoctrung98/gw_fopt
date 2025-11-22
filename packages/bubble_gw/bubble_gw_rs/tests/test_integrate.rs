@@ -91,15 +91,9 @@ where
     let trap_result2 = y2.trapezoid(Some(&x), None, Some(1)).unwrap();
     let simp_result2 = y2.simpson(Some(&x), None, Some(1)).unwrap();
     println!("Trapezoid results: {:?}", trap_result2);
-    println!(
-        "Trapezoid errors: {:?}",
-        trap_result2.mapv(|v| (v - expected[0]).abs())
-    );
+    println!("Trapezoid errors: {:?}", trap_result2.mapv(|v| (v - expected[0]).abs()));
     println!("Simpson results: {:?}", simp_result2);
-    println!(
-        "Simpson errors: {:?}",
-        simp_result2.mapv(|v| (v - expected[0]).abs())
-    );
+    println!("Simpson errors: {:?}", simp_result2.mapv(|v| (v - expected[0]).abs()));
 
     assert!(
         trap_result2.is_close(&expected, abs_tol, rel_tol).is_ok(),

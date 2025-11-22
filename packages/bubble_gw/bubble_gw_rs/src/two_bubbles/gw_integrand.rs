@@ -74,10 +74,9 @@ impl IntegrandCalculator {
                     factor * exp_term_imag * bessel_sum * c1_val,
                 )
             }
-            IntegrandType::ZZ => (
-                exp_term_real * bessel_0 * c1_val,
-                exp_term_imag * bessel_0 * c1_val,
-            ),
+            IntegrandType::ZZ => {
+                (exp_term_real * bessel_0 * c1_val, exp_term_imag * bessel_0 * c1_val)
+            }
             IntegrandType::XZ => {
                 let factor = self.sign * sqrt_term;
                 (
