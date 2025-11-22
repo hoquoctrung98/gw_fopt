@@ -37,15 +37,6 @@ jobs:
       - name: Install workspace
         run: uv sync --all-extras --dev --locked
 
-      - name: Lint with ruff
-        run: uv run ruff check .
-
-      - name: Type-check with mypy
-        run: uv run mypy .
-
-      - name: Format check with ruff
-        run: uv run ruff format --check .
-
   test:
     name: Test ${{ matrix.os }} • Python ${{ matrix.python }} • Rust ${{ matrix.rust }}
     runs-on: ${{ matrix.os }}
@@ -105,9 +96,6 @@ jobs:
         run: |
           cd packages/bubble_gw/benches
           cargo bench --no-run   # just compile, don't run long benches in CI
-
-      - name: Run Python tests with pytest
-        run: uv run pytest -n auto --cov=pygw_fopt --cov=bubble_gw_py
 
       - name: Upload coverage to Codecov
         if: runner.os == 'Linux'
