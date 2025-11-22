@@ -136,7 +136,7 @@ impl PyGravitationalWaveCalculator {
     ) -> PyResult<Py<PyArray1<f64>>> {
         let results = self
             .inner
-            .compute_averaged_gw_spectrum(&w_arr, &cos_thetak_arr)?;
+            .compute_averaged_gw_spectrum(w_arr, cos_thetak_arr)?;
 
         Ok(PyArray1::from_vec(py, results).into())
     }
@@ -150,21 +150,18 @@ impl PyGravitationalWaveCalculator {
     ) -> PyResult<Py<PyArray2<f64>>> {
         let spectrum_2d = self
             .inner
-            .compute_angular_gw_spectrum(&w_arr, &cos_thetak_arr)?;
+            .compute_angular_gw_spectrum(w_arr, cos_thetak_arr)?;
         Ok(PyArray2::from_array(py, &spectrum_2d).into())
     }
 
-    #[pyo3(signature = (w_arr, cos_thetak_arr, num_threads = None))]
+    #[pyo3(signature = (w_arr, cos_thetak_arr))]
     fn compute_t_tensor(
         &self,
         py: Python,
         w_arr: Vec<f64>,
         cos_thetak_arr: Vec<f64>,
-        num_threads: Option<usize>,
     ) -> PyResult<Py<PyArray3<NumpyComplex64>>> {
-        let t_tensor = self
-            .inner
-            .compute_t_tensor(&w_arr, &cos_thetak_arr, num_threads)?;
+        let t_tensor = self.inner.compute_t_tensor(w_arr, cos_thetak_arr)?;
         Ok(PyArray3::from_array(py, &t_tensor).into())
     }
 

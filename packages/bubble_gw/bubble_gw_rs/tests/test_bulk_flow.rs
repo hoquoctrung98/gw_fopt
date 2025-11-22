@@ -59,7 +59,7 @@ fn test_bulk_flow_two_bubbles() -> Result<(), Box<dyn Error>> {
             .collect();
         w_with_idx.sort_by(|a, b| a.0.total_cmp(&b.0));
 
-        let w_arr: Array1<f64> = Array1::from_iter(w_with_idx.iter().map(|&(w, _)| w));
+        let w_arr = Array1::from_iter(w_with_idx.iter().map(|&(w, _)| w)).to_vec();
         let sorted_rows: Vec<usize> = w_with_idx.iter().map(|&(_, i)| i).collect();
 
         let expected_plus: Vec<Complex64> = sorted_rows
@@ -89,8 +89,7 @@ fn test_bulk_flow_two_bubbles() -> Result<(), Box<dyn Error>> {
         bulk.set_resolution(n_cos_val as usize, n_phi_val as usize, true)?;
         bulk.set_gradient_scaling_params(coefficients_sets.clone(), powers_sets.clone(), None)?;
 
-        let c_matrix =
-            bulk.compute_c_integral(w_arr.as_slice().unwrap(), Some(0.0), 8.0, 1000, None)?;
+        let c_matrix = bulk.compute_c_integral(&w_arr, Some(0.0), 8.0, 1000, None)?;
 
         // Extract computed results for coeff=1.0
         let computed_plus: Vec<Complex64> = c_matrix.slice(ndarray::s![0, 0, ..]).to_vec();

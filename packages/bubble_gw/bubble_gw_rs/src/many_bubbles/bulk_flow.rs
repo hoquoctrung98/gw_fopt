@@ -953,14 +953,18 @@ impl BulkFlow {
         Ok((b_plus_arr, b_minus_arr))
     }
 
-    pub fn compute_a_integral(
+    pub fn compute_a_integral<W>(
         &self,
         a_idx: usize,
-        w_arr: &[f64],
+        w_arr: W,
         t: f64,
         first_bubble: ArrayView2<BubbleIndex>,
         delta_tab_grid: ArrayView2<f64>,
-    ) -> Result<(Array2<Complex64>, Array2<Complex64>), BulkFlowError> {
+    ) -> Result<(Array2<Complex64>, Array2<Complex64>), BulkFlowError>
+    where
+        W: AsRef<[f64]>,
+    {
+        let w_arr = w_arr.as_ref();
         let n_cos_thetax = self
             .n_cos_thetax
             .ok_or_else(|| BulkFlowError::UninitializedField("n_cos_thetax".to_string()))?;
@@ -1028,14 +1032,18 @@ impl BulkFlow {
         Ok((a_plus, a_minus))
     }
 
-    pub fn compute_c_integrand_fixed_bubble(
+    pub fn compute_c_integrand_fixed_bubble<W>(
         &self,
         a_idx: usize,
-        w_arr: &[f64],
+        w_arr: W,
         t_begin: Option<f64>,
         t_end: f64,
         n_t: usize,
-    ) -> Result<Array4<Complex64>, BulkFlowError> {
+    ) -> Result<Array4<Complex64>, BulkFlowError>
+    where
+        W: AsRef<[f64]>,
+    {
+        let w_arr = w_arr.as_ref();
         let n_sets = self.coefficients_sets.nrows();
         let n_w = w_arr.len();
 
@@ -1130,14 +1138,18 @@ impl BulkFlow {
         Ok(c_integrand)
     }
 
-    pub fn compute_c_integral_fixed_bubble(
+    pub fn compute_c_integral_fixed_bubble<W>(
         &mut self,
         a_idx: usize,
-        w_arr: &[f64],
+        w_arr: W,
         t_begin: Option<f64>,
         t_end: f64,
         n_t: usize,
-    ) -> Result<Array3<Complex64>, BulkFlowError> {
+    ) -> Result<Array3<Complex64>, BulkFlowError>
+    where
+        W: AsRef<[f64]>,
+    {
+        let w_arr = w_arr.as_ref();
         let n_sets = self.coefficients_sets.nrows();
         let n_w = w_arr.len();
         let t_begin = t_begin.unwrap_or(0.0);
@@ -1224,14 +1236,18 @@ impl BulkFlow {
         })
     }
 
-    pub fn compute_c_integrand(
+    pub fn compute_c_integrand<W>(
         &self,
-        w_arr: &[f64],
+        w_arr: W,
         t_begin: Option<f64>,
         t_end: f64,
         n_t: usize,
         selected_bubbles: Option<&[usize]>,
-    ) -> Result<Array4<Complex64>, BulkFlowError> {
+    ) -> Result<Array4<Complex64>, BulkFlowError>
+    where
+        W: AsRef<[f64]>,
+    {
+        let w_arr = w_arr.as_ref();
         let n_interior = self.bubbles_interior.nrows();
         let n_sets = self.coefficients_sets.nrows();
         let n_w = w_arr.len();
@@ -1267,14 +1283,18 @@ impl BulkFlow {
         Ok(total)
     }
 
-    pub fn compute_c_integral(
+    pub fn compute_c_integral<W>(
         &mut self,
-        w_arr: &[f64],
+        w_arr: W,
         t_begin: Option<f64>,
         t_end: f64,
         n_t: usize,
         selected_bubbles: Option<&[usize]>,
-    ) -> Result<Array3<Complex64>, BulkFlowError> {
+    ) -> Result<Array3<Complex64>, BulkFlowError>
+    where
+        W: AsRef<[f64]>,
+    {
+        let w_arr = w_arr.as_ref();
         let n_interior = self.bubbles_interior.nrows();
         let n_sets = self.coefficients_sets.nrows();
         let n_w = w_arr.len();

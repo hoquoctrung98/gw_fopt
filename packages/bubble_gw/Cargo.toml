@@ -28,4 +28,10 @@ panic = "abort"
 incremental = true
 
 [profile.bench]
+lto = true
+codegen-units = 1
 opt-level = 3
+incremental = true
+
+[profile.test]
+inherit = "release"

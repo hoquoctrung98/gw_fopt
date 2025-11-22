@@ -487,97 +487,62 @@ impl GravitationalWaveCalculator {
     }
 
     /// Computes the energy-momentum tensor components (t_xx, t_yy, t_zz, t_xz)
-    /// on a full (w × cosθ_k) grid.
+    /// on the full Cartesian product of `w_arr` × `cos_thetak_arr`.
     ///
-    /// Returns ArrayView of shape (n_cos_thetak, n_w, 4), where the last axis=2 contains:
-    ///   [0] = t_xx, [1] = t_yy, [2] = t_zz, [3] = t_xz (all Complex64)
+    /// Returns `Array3<Complex64>` of shape `(n_k, n_w, 4)`:
+    /// - axis 0 → cosθ_k index
+    /// - axis 1 → ω index
+    /// - axis 2 → component: [0]=t_xx, [1]=t_yy, [2]=t_zz, [3]=t_xz
     ///
-    /// Invalid points (cosθ_k = ±1.0) are returned as zero.
+    /// Points with |cosθ_k| = 1.0 are left as zero.
     #[inline]
-    pub fn compute_t_tensor(
+    pub fn compute_t_tensor<W, C>(
         &self,
-        w_arr: &[f64],
-        cos_thetak_arr: &[f64],
-        num_threads: Option<usize>,
-    ) -> Result<Array3<Complex64>, GWCalcError> {
+        w_arr: W,
+        cos_thetak_arr: C,
+    ) -> Result<Array3<Complex64>, GWCalcError>
+    where
+        W: AsRef<[f64]>,
+        C: AsRef<[f64]>,
+    {
+        let w_arr = w_arr.as_ref();
+        let cos_thetak_arr = cos_thetak_arr.as_ref();
+
         let n_w = w_arr.len();
         let n_k = cos_thetak_arr.len();
 
-        // Build list of valid (w, cosθ_k) pairs + mapping back to 2D grid
-        let mut wk_pairs = Vec::with_capacity(n_w * n_k);
-        let mut index_map = Vec::with_capacity(n_w * n_k); // stores (i_k, i_w)
+        if n_w == 0 || n_k == 0 {
+            return Err(GWCalcError::LengthMismatch {
+                w_len: n_w,
+                k_len: n_k,
+            });
+        }
+
+        // Build task list of valid (w, cosθ_k) pairs + output position mapping
+        let mut tasks = Vec::with_capacity(n_w * n_k);
+        let mut index_map = Vec::with_capacity(n_w * n_k);
 
         for (i_w, &w) in w_arr.iter().enumerate() {
             for (i_k, &cos_thetak) in cos_thetak_arr.iter().enumerate() {
                 if cos_thetak == 1.0 || cos_thetak == -1.0 {
-                    continue; // skip poles — will remain zero
+                    continue; // skip poles → remain zero
                 }
-                wk_pairs.push((w, cos_thetak));
+                tasks.push((w, cos_thetak));
                 index_map.push((i_k, i_w));
             }
         }
 
-        // Parallel computation over all valid points
-        let results: Vec<(Complex64, Complex64, Complex64, Complex64)> = match num_threads {
-            Some(n) if n > 0 => {
-                let pool = rayon::ThreadPoolBuilder::new()
-                    .num_threads(n)
-                    .build()
-                    .map_err(GWCalcError::ThreadPoolBuildError)?;
-                pool.install(|| {
-                    wk_pairs
-                        .par_iter()
-                        .map(|&(w, cos_thetak)| {
-                            let exp_wkz: Array1<Complex64> = self
-                                .lattice
-                                .z_grid
-                                .mapv(|z| Complex64::new(0.0, -w * cos_thetak * z).exp());
+        // Use the owned thread_pool stored in self
+        let results: Vec<(Complex64, Complex64, Complex64, Complex64)> =
+            self.thread_pool.install(|| {
+                tasks
+                    .par_iter()
+                    .copied()
+                    .map(|(w, cos_thetak)| self.compute_t_tensor_single_point(w, cos_thetak))
+                    .collect()
+            });
 
-                            let wkz_shifted: Array1<f64> = self
-                                .lattice
-                                .z_grid
-                                .slice(s![1..])
-                                .mapv(|z| w * cos_thetak * (z - 0.5 * self.lattice.dz));
-                            let exp_wkz_shifted: Array1<Complex64> =
-                                wkz_shifted.mapv(|x| Complex64::new(0.0, x).exp());
-
-                            let t_zz = self.compute_t_zz(w, cos_thetak, &exp_wkz_shifted);
-                            let t_xx = self.compute_t_xx(w, cos_thetak, &exp_wkz);
-                            let t_yy = self.compute_t_yy(w, cos_thetak, &exp_wkz);
-                            let t_xz = self.compute_t_xz(w, cos_thetak, &exp_wkz_shifted);
-
-                            (t_xx, t_yy, t_zz, t_xz)
-                        })
-                        .collect()
-                })
-            }
-            _ => wk_pairs
-                .par_iter()
-                .map(|&(w, cos_thetak)| {
-                    let exp_wkz: Array1<Complex64> = self
-                        .lattice
-                        .z_grid
-                        .mapv(|z| Complex64::new(0.0, w * cos_thetak * z).exp());
-
-                    let wkz_shifted: Array1<f64> = self
-                        .lattice
-                        .z_grid
-                        .slice(s![1..])
-                        .mapv(|z| w * cos_thetak * (z - 0.5 * self.lattice.dz));
-                    let exp_wkz_shifted: Array1<Complex64> =
-                        wkz_shifted.mapv(|x| Complex64::new(0.0, x).exp());
-
-                    let t_zz = self.compute_t_zz(w, cos_thetak, &exp_wkz_shifted);
-                    let t_xx = self.compute_t_xx(w, cos_thetak, &exp_wkz);
-                    let t_yy = self.compute_t_yy(w, cos_thetak, &exp_wkz);
-                    let t_xz = self.compute_t_xz(w, cos_thetak, &exp_wkz_shifted);
-
-                    (t_xx, t_yy, t_zz, t_xz)
-                })
-                .collect(),
-        };
-
-        // Fill output tensor: shape (n_k, n_w, 4)
+        // Fill output tensor
         let mut t_tensor = Array3::<Complex64>::zeros((n_k, n_w, 4));
 
         for (&(i_k, i_w), (t_xx, t_yy, t_zz, t_xz)) in index_map.iter().zip(results.iter()) {
@@ -590,15 +555,48 @@ impl GravitationalWaveCalculator {
         Ok(t_tensor)
     }
 
+    #[inline]
+    fn compute_t_tensor_single_point(
+        &self,
+        w: f64,
+        cos_thetak: f64,
+    ) -> (Complex64, Complex64, Complex64, Complex64) {
+        let exp_wkz: Array1<Complex64> = self
+            .lattice
+            .z_grid
+            .mapv(|z| Complex64::new(0.0, -w * cos_thetak * z).exp());
+
+        let wkz_shifted: Array1<f64> = self
+            .lattice
+            .z_grid
+            .slice(s![1..])
+            .mapv(|z| w * cos_thetak * (z - 0.5 * self.lattice.dz));
+        let exp_wkz_shifted: Array1<Complex64> =
+            wkz_shifted.mapv(|x| Complex64::new(0.0, -x).exp());
+
+        let t_zz = self.compute_t_zz(w, cos_thetak, &exp_wkz_shifted);
+        let t_xx = self.compute_t_xx(w, cos_thetak, &exp_wkz);
+        let t_yy = self.compute_t_yy(w, cos_thetak, &exp_wkz);
+        let t_xz = self.compute_t_xz(w, cos_thetak, &exp_wkz_shifted);
+
+        (t_xx, t_yy, t_zz, t_xz)
+    }
+
     /// Computes the gravitational wave spectrum on a full (w × cosθ_k) grid.
     /// Returns an Array2<f64> of shape (n_cos_thetak, n_w) where:
     ///   result[i_k, i_w] = dE/(dlogω dcosθ_k) at cos_thetak_arr[i_k] and w_arr[i_w]
     #[inline]
-    pub fn compute_angular_gw_spectrum(
+    pub fn compute_angular_gw_spectrum<W, C>(
         &self,
-        w_arr: &[f64],
-        cos_thetak_arr: &[f64],
-    ) -> Result<Array2<f64>, GWCalcError> {
+        w_arr: W,
+        cos_thetak_arr: C,
+    ) -> Result<Array2<f64>, GWCalcError>
+    where
+        W: AsRef<[f64]>,
+        C: AsRef<[f64]>,
+    {
+        let w_arr = w_arr.as_ref();
+        let cos_thetak_arr = cos_thetak_arr.as_ref();
         let n_w = w_arr.len();
         let n_k = cos_thetak_arr.len();
 
@@ -671,11 +669,17 @@ impl GravitationalWaveCalculator {
     }
 
     /// Computes the direction-averaged GW spectrum dE/dlogω
-    pub fn compute_averaged_gw_spectrum(
+    pub fn compute_averaged_gw_spectrum<W, C>(
         &self,
-        w_arr: &[f64],
-        cos_thetak_grid: &[f64],
-    ) -> Result<Vec<f64>, GWCalcError> {
+        w_arr: W,
+        cos_thetak_grid: C,
+    ) -> Result<Vec<f64>, GWCalcError>
+    where
+        W: AsRef<[f64]>,
+        C: AsRef<[f64]>,
+    {
+        let w_arr = w_arr.as_ref();
+        let cos_thetak_grid = cos_thetak_grid.as_ref();
         let angular_spectrum = self.compute_angular_gw_spectrum(w_arr, cos_thetak_grid)?;
 
         let dcos = if cos_thetak_grid.len() > 1 {

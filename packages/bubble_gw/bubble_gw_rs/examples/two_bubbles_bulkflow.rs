@@ -8,7 +8,7 @@ fn main() -> Result<(), BulkFlowError> {
     let mut bulk_flow = BulkFlow::new(bubbles_interior, bubbles_exterior, true, None)?;
     bulk_flow.set_resolution(100, 200, true)?;
 
-    let w_arr = Array1::geomspace(1e-2, 1e2, 100).unwrap();
+    let w_arr = Array1::geomspace(1e-2, 1e2, 100).unwrap().to_vec();
     let coefficients_sets = vec![vec![0.0], vec![1.0]];
     let powers_sets = vec![vec![3.0], vec![3.0]];
     bulk_flow.set_gradient_scaling_params(coefficients_sets, powers_sets, None)?;
@@ -35,21 +35,15 @@ fn main() -> Result<(), BulkFlowError> {
     println!("b_plus[1] at cosθ_idx=25: {}", b_plus[1]);
     println!("b_minus[1] at cosθ_idx=25: {}", b_minus[1]);
 
-    let (a_plus, a_minus) = bulk_flow.compute_a_integral(
-        a_idx,
-        w_arr.as_slice().unwrap(),
-        t,
-        first_bubble,
-        delta_tab_grid.view(),
-    )?;
+    let (a_plus, a_minus) =
+        bulk_flow.compute_a_integral(a_idx, &w_arr, t, first_bubble, delta_tab_grid.view())?;
 
     println!("a_plus[0, 50]: {}", a_plus[[0, 50]]);
     println!("a_minus[0, 50]: {}", a_minus[[0, 50]]);
     println!("a_plus[1, 50]: {}", a_plus[[1, 50]]);
     println!("a_minus[1, 50]: {}", a_minus[[1, 50]]);
 
-    let c_matrix =
-        bulk_flow.compute_c_integral(w_arr.as_slice().unwrap(), Some(0.0), 8.0, 1000, None)?;
+    let c_matrix = bulk_flow.compute_c_integral(&w_arr, Some(0.0), 8.0, 1000, None)?;
     println!("c_matrix[0, 0, 0]: {}", c_matrix[[0, 0, 0]]);
     println!("c_matrix[1, 0, 0]: {}", c_matrix[[1, 0, 0]]);
     println!("c_matrix[0, 1, 0]: {}", c_matrix[[0, 1, 0]]);
