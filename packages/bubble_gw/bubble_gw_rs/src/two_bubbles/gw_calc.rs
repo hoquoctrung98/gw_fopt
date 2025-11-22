@@ -139,14 +139,13 @@ impl GravitationalWaveCalculator {
 
         let s_offset: Array1<f64> = lattice.s_grid.slice(s![1..]).mapv(|s| s - 0.5 * ds);
 
-        let thread_pool = match num_threads {
-            Some(n) => rayon::ThreadPoolBuilder::new().num_threads(n),
-            None => {
-                let default = std::thread::available_parallelism()
-                    .map(|n| n.get())
-                    .unwrap_or(1);
-                rayon::ThreadPoolBuilder::new().num_threads(default)
-            }
+        let thread_pool = if let Some(n) = num_threads {
+            rayon::ThreadPoolBuilder::new().num_threads(n)
+        } else {
+            let default = std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1);
+            rayon::ThreadPoolBuilder::new().num_threads(default)
         }
         .build()
         .map_err(GWCalcError::ThreadPoolBuildError)?;
@@ -692,9 +691,9 @@ impl GravitationalWaveCalculator {
         };
 
         let n_w = w_arr.len();
-        let mut de_dlogw = vec![0.0; n_w];
+        let mut de_dlogw_arr = vec![0.0; n_w];
 
-        for i_w in 0..n_w {
+        for (i_w, de_dlogw) in de_dlogw_arr.iter_mut().enumerate().take(n_w) {
             let column = angular_spectrum.column(i_w);
             let mut integral = 0.0;
             for (i_k, &val) in column.iter().enumerate() {
@@ -705,9 +704,9 @@ impl GravitationalWaveCalculator {
                 };
                 integral += weight * val;
             }
-            de_dlogw[i_w] = integral * dcos; // trapezoidal rule (Simpson-like)
+            *de_dlogw = integral * dcos; // trapezoidal rule (Simpson-like)
         }
 
-        Ok(de_dlogw)
+        Ok(de_dlogw_arr)
     }
 }

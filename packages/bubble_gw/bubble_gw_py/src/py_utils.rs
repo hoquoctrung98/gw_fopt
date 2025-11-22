@@ -6,7 +6,7 @@ use pyo3::prelude::*;
 /// Performs sampling based on the specified parameters.
 ///
 /// This function generates a sequence of samples between `start` and `stop` using the specified
-/// sampling type. The samples are returned as a NumPy array for efficient numerical computations.
+/// sampling type. The samples are returned as a `NumPy` array for efficient numerical computations.
 ///
 /// # Arguments
 /// * `start` (float): The start of the sampling range (must be less than `stop`).
@@ -18,7 +18,7 @@ use pyo3::prelude::*;
 /// * `base` (float, optional): Base for logarithmic or exponential sampling (must be positive). Defaults to 10.0.
 ///
 /// # Returns
-/// A NumPy array (`np.ndarray`) containing the generated samples.
+/// A `NumPy` array (`np.ndarray`) containing the generated samples.
 ///
 /// For `n_iter == 0`: includes endpoints, linearly spaced in transformed space.
 /// For `n_iter > 0`: returns **only the new interior points** introduced at this refinement level
@@ -66,24 +66,21 @@ pub fn sample(
         }
         _ => {
             return Err(PyValueError::new_err(format!(
-                "Invalid sample_type: {}. Expected 'uniform', 'linear', 'log', or 'exp'.",
-                sample_type
+                "Invalid sample_type: {sample_type}. Expected 'uniform', 'linear', 'log', or 'exp'."
             )));
         }
     };
 
     // Create SampleParams and map errors
     let params = SampleParams::new(start, stop, rust_sample_type).map_err(|e| match e {
-        SampleError::InvalidRange { start, stop } => PyValueError::new_err(format!(
-            "`start` ({}) must be less than `stop` ({})",
-            start, stop
-        )),
+        SampleError::InvalidRange { start, stop } => {
+            PyValueError::new_err(format!("`start` ({start}) must be less than `stop` ({stop})"))
+        }
         SampleError::InvalidBase { base, sample_type } => PyValueError::new_err(format!(
-            "`base` ({}) must be greater than 0 for {} sampling",
-            base, sample_type
+            "`base` ({base}) must be greater than 0 for {sample_type} sampling"
         )),
         SampleError::InvalidParameter { param, value } => {
-            PyValueError::new_err(format!("Invalid parameter {}: {}", param, value))
+            PyValueError::new_err(format!("Invalid parameter {param}: {value}"))
         }
         SampleError::ConversionError => PyValueError::new_err("Type conversion error"),
     })?;
@@ -93,7 +90,7 @@ pub fn sample(
         .sample(n_sample, n_grid, n_iter)
         .map_err(|e| match e {
             SampleError::InvalidParameter { param, value } => {
-                PyValueError::new_err(format!("Invalid parameter {}: {}", param, value))
+                PyValueError::new_err(format!("Invalid parameter {param}: {value}"))
             }
             SampleError::ConversionError => PyValueError::new_err("Type conversion error"),
             _ => PyValueError::new_err("Unexpected error during sampling"),
@@ -104,7 +101,7 @@ pub fn sample(
 /// Performs sampling over multiple iterations based on the specified parameters.
 ///
 /// This function generates samples for iterations from 0 to `n_iter` and concatenates them
-/// into a single NumPy array. Useful for generating samples with increasing granularity.
+/// into a single `NumPy` array. Useful for generating samples with increasing granularity.
 ///
 /// # Arguments
 /// * `start` (float): The start of the sampling range (must be less than `stop`).
@@ -137,7 +134,7 @@ pub fn sample_arr(
     n_sample: usize,
     n_grid: usize,
     n_iter: usize,
-    sample_type: String,
+    sample_type: &str,
     base: f64,
 ) -> PyResult<Py<PyArray1<f64>>> {
     // Map Python sample_type string to Rust SampleType
@@ -170,16 +167,14 @@ pub fn sample_arr(
 
     // Create SampleParams and map errors
     let params = SampleParams::new(start, stop, rust_sample_type).map_err(|e| match e {
-        SampleError::InvalidRange { start, stop } => PyValueError::new_err(format!(
-            "`start` ({}) must be less than `stop` ({})",
-            start, stop
-        )),
+        SampleError::InvalidRange { start, stop } => {
+            PyValueError::new_err(format!("`start` ({start}) must be less than `stop` ({stop})"))
+        }
         SampleError::InvalidBase { base, sample_type } => PyValueError::new_err(format!(
-            "`base` ({}) must be greater than 0 for {} sampling",
-            base, sample_type
+            "`base` ({base}) must be greater than 0 for {sample_type} sampling",
         )),
         SampleError::InvalidParameter { param, value } => {
-            PyValueError::new_err(format!("Invalid parameter {}: {}", param, value))
+            PyValueError::new_err(format!("Invalid parameter {param}: {value}"))
         }
         SampleError::ConversionError => PyValueError::new_err("Type conversion error"),
     })?;
@@ -189,7 +184,7 @@ pub fn sample_arr(
         .sample_arr(n_sample, n_grid, n_iter)
         .map_err(|e| match e {
             SampleError::InvalidParameter { param, value } => {
-                PyValueError::new_err(format!("Invalid parameter {}: {}", param, value))
+                PyValueError::new_err(format!("Invalid parameter {param}: {value}"))
             }
             SampleError::ConversionError => PyValueError::new_err("Type conversion error"),
             _ => PyValueError::new_err("Unexpected error during sampling"),

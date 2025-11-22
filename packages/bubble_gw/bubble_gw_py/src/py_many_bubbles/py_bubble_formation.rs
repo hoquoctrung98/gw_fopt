@@ -17,8 +17,7 @@ pub struct PyLattice {
 impl PyLattice {
     #[new]
     fn new(lattice_type: &str, sizes: Vec<f64>, n_grid: usize) -> PyResult<Self> {
-        let inner =
-            Lattice::new(lattice_type, sizes, n_grid).map_err(|e| PyValueError::new_err(e))?;
+        let inner = Lattice::new(lattice_type, sizes, n_grid).map_err(PyValueError::new_err)?;
         Ok(PyLattice { inner })
     }
 
@@ -26,9 +25,9 @@ impl PyLattice {
         self.inner.volume()
     }
 
-    fn generate_grid(&self, py: Python) -> PyResult<Py<PyArray2<f64>>> {
+    fn generate_grid(&self, py: Python) -> Py<PyArray2<f64>> {
         let grid = self.inner.generate_grid();
-        Ok(PyArray2::from_array(py, &grid).into())
+        PyArray2::from_array(py, &grid).into()
     }
 
     fn lattice_bounds(&self) -> Vec<(f64, f64)> {
@@ -53,54 +52,6 @@ impl PyLattice {
         self.inner.n_grid
     }
 }
-
-// // PyO3 binding for generate_bubbles_exterior function
-// #[pyfunction]
-// #[pyo3(name = "generate_bubbles_exterior")]
-// pub fn py_generate_bubbles_exterior(
-//     py: Python,
-//     lattice_sizes: Bound<'_, PyAny>,
-//     bubbles_interior: PyReadonlyArray2<f64>,
-// ) -> PyResult<Py<PyArray2<f64>>> {
-//     // Convert lattice_sizes to [f64; 3]
-//     let sizes: [f64; 3] = {
-//         let vec: Vec<f64> = if let Ok(list) = lattice_sizes.cast::<PyList>() {
-//             list.iter()
-//                 .map(|item: Bound<PyAny>| item.extract::<f64>())
-//                 .collect::<PyResult<Vec<f64>>>()
-//         } else if let Ok(tuple) = lattice_sizes.cast::<PyTuple>() {
-//             tuple
-//                 .iter()
-//                 .map(|item: Bound<PyAny>| item.extract::<f64>())
-//                 .collect::<PyResult<Vec<f64>>>()
-//         } else {
-//             return Err(PyValueError::new_err(
-//                 "lattice_sizes must be a list or tuple",
-//             ));
-//         }?;
-//
-//         if vec.len() != 3 {
-//             return Err(PyValueError::new_err(
-//                 "lattice_sizes must contain exactly 3 elements",
-//             ));
-//         }
-//         [vec[0], vec[1], vec[2]]
-//     };
-//
-//     // Validate and convert bubbles_interior to Array2<f64>
-//     let bubbles_array = bubbles_interior.to_owned_array();
-//     if bubbles_array.shape()[1] != 4 {
-//         return Err(PyValueError::new_err(
-//             "bubbles_interior must have shape (N, 4)",
-//         ));
-//     }
-//
-//     // Call the Rust function
-//     let result = generate_bubbles_exterior(sizes, bubbles_array);
-//
-//     // Convert the result to a NumPy array
-//     Ok(PyArray2::from_array(py, &result).into())
-// }
 
 #[pyfunction]
 #[pyo3(name = "generate_bubbles_exterior")]
@@ -142,8 +93,7 @@ pub struct PyPoissonNucleation {
 impl PyPoissonNucleation {
     #[new]
     fn new(gamma0: f64, beta: f64, t0: f64, dp0: f64) -> PyResult<Self> {
-        let inner =
-            PoissonNucleation::new(gamma0, beta, t0, dp0).map_err(|e| PyValueError::new_err(e))?;
+        let inner = PoissonNucleation::new(gamma0, beta, t0, dp0).map_err(PyValueError::new_err)?;
         Ok(PyPoissonNucleation { inner })
     }
 }
@@ -174,8 +124,7 @@ impl PyManualNucleation {
                 Ok((t, rust_points))
             })
             .collect::<PyResult<Vec<(f64, Vec<[f64; 3]>)>>>()?;
-        let inner =
-            ManualNucleation::new(rust_schedule, dt).map_err(|e| PyValueError::new_err(e))?;
+        let inner = ManualNucleation::new(rust_schedule, dt).map_err(PyValueError::new_err)?;
         Ok(PyManualNucleation { inner })
     }
 }
@@ -220,7 +169,7 @@ impl PyBubbleFormationSimulator {
                         poisson.inner.clone(),
                         seed,
                     )
-                    .map_err(|e| PyValueError::new_err(e))?;
+                    .map_err(PyValueError::new_err)?;
                     BubbleFormationSimulatorWrapper::Poisson(simulator)
                 } else if let Ok(manual) = obj.extract::<PyRef<PyManualNucleation>>(py) {
                     let simulator = BubbleFormationSimulator::new(
@@ -229,7 +178,7 @@ impl PyBubbleFormationSimulator {
                         manual.inner.clone(),
                         seed,
                     )
-                    .map_err(|e| PyValueError::new_err(e))?;
+                    .map_err(PyValueError::new_err)?;
                     BubbleFormationSimulatorWrapper::Manual(simulator)
                 } else {
                     return Err(PyValueError::new_err(
@@ -238,11 +187,11 @@ impl PyBubbleFormationSimulator {
                 }
             }
             None => {
-                let poisson = PoissonNucleation::new(0.1, 1.0, 0.0, 0.1)
-                    .map_err(|e| PyValueError::new_err(e))?;
+                let poisson =
+                    PoissonNucleation::new(0.1, 1.0, 0.0, 0.1).map_err(PyValueError::new_err)?;
                 let simulator =
                     BubbleFormationSimulator::new(lattice.inner.clone(), vw, poisson, seed)
-                        .map_err(|e| PyValueError::new_err(e))?;
+                        .map_err(PyValueError::new_err)?;
                 BubbleFormationSimulatorWrapper::Poisson(simulator)
             }
         };
@@ -262,7 +211,7 @@ impl PyBubbleFormationSimulator {
         t_end: Option<f64>,
         min_volume_remaining_fraction: Option<f64>,
         max_time_iterations: Option<usize>,
-    ) -> PyResult<()> {
+    ) {
         match self.get_inner_mut() {
             BubbleFormationSimulatorWrapper::Poisson(sim) => {
                 sim.run_simulation(t_end, min_volume_remaining_fraction, max_time_iterations);
@@ -271,7 +220,6 @@ impl PyBubbleFormationSimulator {
                 sim.run_simulation(t_end, min_volume_remaining_fraction, max_time_iterations);
             }
         }
-        Ok(())
     }
 
     #[getter]
@@ -346,12 +294,12 @@ impl PyBubbleFormationSimulator {
         }
     }
 
-    fn bubbles_interior(&self, py: Python) -> PyResult<Py<PyArray2<f64>>> {
+    fn bubbles_interior(&self, py: Python) -> Py<PyArray2<f64>> {
         let bubbles_array = match self.get_inner() {
             BubbleFormationSimulatorWrapper::Poisson(sim) => sim.bubbles_interior(),
             BubbleFormationSimulatorWrapper::Manual(sim) => sim.bubbles_interior(),
         };
-        Ok(PyArray2::from_array(py, &bubbles_array).into())
+        PyArray2::from_array(py, &bubbles_array).into()
     }
 
     #[pyo3(name = "bubbles_exterior")]
@@ -386,12 +334,12 @@ impl PyBubbleFormationSimulator {
         }
     }
 
-    fn get_valid_points(&mut self, t: f64, py: Python) -> PyResult<Py<PyArray2<f64>>> {
+    fn get_valid_points(&mut self, t: f64, py: Python) -> Py<PyArray2<f64>> {
         let points = match self.get_inner_mut() {
             BubbleFormationSimulatorWrapper::Poisson(sim) => sim.get_valid_points(t),
             BubbleFormationSimulatorWrapper::Manual(sim) => sim.get_valid_points(t),
         };
-        Ok(PyArray2::from_array(py, &points).into())
+        PyArray2::from_array(py, &points).into()
     }
 
     fn get_volume_history(&self, py: Python) -> PyResult<Py<PyArray2<f64>>> {
@@ -404,7 +352,7 @@ impl PyBubbleFormationSimulator {
             .flat_map(|(dt, vol)| vec![dt, vol])
             .collect();
         let history_array = Array2::from_shape_vec((history_vec.len() / 2, 2), history_vec)
-            .map_err(|e| PyValueError::new_err(format!("Failed to create history array: {}", e)))?;
+            .map_err(|e| PyValueError::new_err(format!("Failed to create history array: {e}")))?;
         Ok(PyArray2::from_array(py, &history_array).into())
     }
 
@@ -426,12 +374,12 @@ impl PyBubbleFormationSimulator {
     }
 
     #[getter]
-    fn grid(&self, py: Python) -> PyResult<Py<PyArray2<f64>>> {
+    fn grid(&self, py: Python) -> Py<PyArray2<f64>> {
         let grid = match self.get_inner() {
             BubbleFormationSimulatorWrapper::Poisson(sim) => sim.grid(),
             BubbleFormationSimulatorWrapper::Manual(sim) => sim.grid(),
         };
-        Ok(PyArray2::from_array(py, grid).into())
+        PyArray2::from_array(py, grid).into()
     }
 
     #[getter]

@@ -166,78 +166,78 @@ impl PyGravitationalWaveCalculator {
     }
 
     #[getter]
-    fn phi1(&self, py: Python) -> PyResult<Py<PyArray3<f64>>> {
-        Ok(PyArray3::from_array(py, &self.inner.phi1).into())
+    fn phi1(&self, py: Python) -> Py<PyArray3<f64>> {
+        PyArray3::from_array(py, &self.inner.phi1).into()
     }
 
     #[getter]
-    fn phi2(&self, py: Python) -> PyResult<Py<PyArray3<f64>>> {
-        Ok(PyArray3::from_array(py, &self.inner.phi2).into())
+    fn phi2(&self, py: Python) -> Py<PyArray3<f64>> {
+        PyArray3::from_array(py, &self.inner.phi2).into()
     }
 
     #[getter]
-    fn dphi1_dz(&self, py: Python) -> PyResult<Py<PyArray3<f64>>> {
-        Ok(PyArray3::from_array(py, &self.inner.precomputed.dphi1_dz_sq).into())
+    fn dphi1_dz(&self, py: Python) -> Py<PyArray3<f64>> {
+        PyArray3::from_array(py, &self.inner.precomputed.dphi1_dz_sq).into()
     }
 
     #[getter]
-    fn dphi1_ds(&self, py: Python) -> PyResult<Py<PyArray3<f64>>> {
-        Ok(PyArray3::from_array(py, &self.inner.precomputed.dphi1_ds_sq).into())
+    fn dphi1_ds(&self, py: Python) -> Py<PyArray3<f64>> {
+        PyArray3::from_array(py, &self.inner.precomputed.dphi1_ds_sq).into()
     }
 
     #[getter]
-    fn dphi2_dz(&self, py: Python) -> PyResult<Py<PyArray3<f64>>> {
-        Ok(PyArray3::from_array(py, &self.inner.precomputed.dphi2_dz_sq).into())
+    fn dphi2_dz(&self, py: Python) -> Py<PyArray3<f64>> {
+        PyArray3::from_array(py, &self.inner.precomputed.dphi2_dz_sq).into()
     }
 
     #[getter]
-    fn dphi2_ds(&self, py: Python) -> PyResult<Py<PyArray3<f64>>> {
-        Ok(PyArray3::from_array(py, &self.inner.precomputed.dphi2_ds_sq).into())
+    fn dphi2_ds(&self, py: Python) -> Py<PyArray3<f64>> {
+        PyArray3::from_array(py, &self.inner.precomputed.dphi2_ds_sq).into()
     }
 
     #[getter]
-    fn xz_deriv_dphi_dz(&self, py: Python) -> PyResult<Py<PyArray3<f64>>> {
-        Ok(PyArray3::from_array(py, &self.inner.precomputed.xz_deriv_dphi1_dz).into())
+    fn xz_deriv_dphi_dz(&self, py: Python) -> Py<PyArray3<f64>> {
+        PyArray3::from_array(py, &self.inner.precomputed.xz_deriv_dphi1_dz).into()
     }
 
     #[getter]
-    fn xz_deriv_dphi_ds(&self, py: Python) -> PyResult<Py<PyArray3<f64>>> {
-        Ok(PyArray3::from_array(py, &self.inner.precomputed.xz_deriv_dphi1_ds).into())
+    fn xz_deriv_dphi_ds(&self, py: Python) -> Py<PyArray3<f64>> {
+        PyArray3::from_array(py, &self.inner.precomputed.xz_deriv_dphi1_ds).into()
     }
 
     #[getter]
-    fn xz_deriv_dphi_dz2(&self, py: Python) -> PyResult<Py<PyArray3<f64>>> {
-        Ok(PyArray3::from_array(py, &self.inner.precomputed.xz_deriv_dphi2_dz).into())
+    fn xz_deriv_dphi_dz2(&self, py: Python) -> Py<PyArray3<f64>> {
+        PyArray3::from_array(py, &self.inner.precomputed.xz_deriv_dphi2_dz).into()
     }
 
     #[getter]
-    fn xz_deriv_dphi_ds2(&self, py: Python) -> PyResult<Py<PyArray3<f64>>> {
-        Ok(PyArray3::from_array(py, &self.inner.precomputed.xz_deriv_dphi2_ds).into())
+    fn xz_deriv_dphi_ds2(&self, py: Python) -> Py<PyArray3<f64>> {
+        PyArray3::from_array(py, &self.inner.precomputed.xz_deriv_dphi2_ds).into()
     }
 
     #[getter]
-    fn zz_weights(&self, py: Python) -> PyResult<Py<PyArray1<f64>>> {
-        Ok(PyArray1::from_array(py, &self.inner.precomputed.zz_weights).into())
+    fn zz_weights(&self, py: Python) -> Py<PyArray1<f64>> {
+        PyArray1::from_array(py, &self.inner.precomputed.zz_weights).into()
     }
 
     #[getter]
-    fn rr_weights(&self, py: Python) -> PyResult<Py<PyArray1<f64>>> {
-        Ok(PyArray1::from_array(py, &self.inner.precomputed.rr_weights).into())
+    fn rr_weights(&self, py: Python) -> Py<PyArray1<f64>> {
+        PyArray1::from_array(py, &self.inner.precomputed.rr_weights).into()
     }
 
     #[getter]
-    fn xz_weights(&self, py: Python) -> PyResult<Py<PyArray1<f64>>> {
-        Ok(PyArray1::from_array(py, &self.inner.precomputed.xz_weights).into())
+    fn xz_weights(&self, py: Python) -> Py<PyArray1<f64>> {
+        PyArray1::from_array(py, &self.inner.precomputed.xz_weights).into()
     }
 
     #[getter]
-    fn z_grid(&self, py: Python) -> PyResult<Py<PyArray1<f64>>> {
-        Ok(PyArray1::from_array(py, &self.inner.lattice.z_grid).into())
+    fn z_grid(&self, py: Python) -> Py<PyArray1<f64>> {
+        PyArray1::from_array(py, &self.inner.lattice.z_grid).into()
     }
 
     #[getter]
-    fn s_grid(&self, py: Python) -> PyResult<Py<PyArray1<f64>>> {
-        Ok(PyArray1::from_array(py, &self.inner.lattice.s_grid).into())
+    fn s_grid(&self, py: Python) -> Py<PyArray1<f64>> {
+        PyArray1::from_array(py, &self.inner.lattice.s_grid).into()
     }
 
     #[getter]
@@ -261,13 +261,13 @@ impl PyGravitationalWaveCalculator {
     }
 
     #[getter]
-    fn t_cut(&self) -> PyResult<f64> {
-        Ok(self.inner.config.t_cut)
+    fn t_cut(&self) -> f64 {
+        self.inner.config.t_cut
     }
 
     #[getter]
-    fn t_0(&self) -> PyResult<f64> {
-        Ok(self.inner.config.t_0)
+    fn t_0(&self) -> f64 {
+        self.inner.config.t_0
     }
 
     #[getter]
@@ -281,8 +281,8 @@ impl PyGravitationalWaveCalculator {
     }
 
     #[getter]
-    fn s_offset(&self, py: Python) -> PyResult<Py<PyArray1<f64>>> {
-        Ok(PyArray1::from_array(py, &self.inner.s_offset).into())
+    fn s_offset(&self, py: Python) -> Py<PyArray1<f64>> {
+        PyArray1::from_array(py, &self.inner.s_offset).into()
     }
 
     #[getter]

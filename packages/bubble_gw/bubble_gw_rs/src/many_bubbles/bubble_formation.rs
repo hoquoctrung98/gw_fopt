@@ -742,7 +742,7 @@ impl<S: NucleationStrategy> BubbleFormationSimulator<S> {
             .outside_points
             .par_iter()
             .with_min_len(100)
-            .filter(|&&i| !points_to_remove.iter().any(|&idx| idx == i))
+            .filter(|&&i| !points_to_remove.contains(&i))
             .copied()
             .collect();
 
@@ -772,7 +772,7 @@ impl<S: NucleationStrategy> BubbleFormationSimulator<S> {
         let mut iteration_count = 0;
 
         loop {
-            if t_end.map_or(false, |t_max_val| t >= t_max_val) {
+            if t_end.is_some_and(|t_max_val| t >= t_max_val) {
                 self.end_status = Some(SimulationEndStatus::TimeLimitReached {
                     t_end: t,
                     volume_remaining_fraction: self.params.volume_remaining
@@ -790,7 +790,7 @@ impl<S: NucleationStrategy> BubbleFormationSimulator<S> {
                 });
                 return;
             }
-            if max_time_iterations.map_or(false, |max_iter| iteration_count >= max_iter) {
+            if max_time_iterations.is_some_and(|max_iter| iteration_count >= max_iter) {
                 self.end_status = Some(SimulationEndStatus::MaxTimeIterationsReached {
                     t_end: t,
                     volume_remaining_fraction: self.params.volume_remaining
@@ -918,7 +918,7 @@ impl<S: NucleationStrategy> BubbleFormationSimulator<S> {
                 .outside_points
                 .par_iter()
                 .with_min_len(100)
-                .filter(|&&i| !points_to_remove.iter().any(|&idx| idx == i))
+                .filter(|&&i| !points_to_remove.contains(&i))
                 .copied()
                 .collect();
 

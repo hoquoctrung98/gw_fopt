@@ -23,16 +23,16 @@ pub enum IntegrationError {
 pub trait Integrate<X: PartialOrd> {
     type Output;
 
-    fn trapezoid<'a>(
+    fn trapezoid(
         &self,
-        x: Option<&'a [X]>,
+        x: Option<&[X]>,
         dx: Option<X>,
         axis: Option<isize>,
     ) -> Result<Self::Output, IntegrationError>;
 
-    fn simpson<'a>(
+    fn simpson(
         &self,
-        x: Option<&'a [X]>,
+        x: Option<&[X]>,
         dx: Option<X>,
         axis: Option<isize>,
     ) -> Result<Self::Output, IntegrationError>;
@@ -121,16 +121,16 @@ where
         .map_err(|_| IntegrationError::OutputArrayCreationFailed)
 }
 
-impl<'a, T, X> Integrate<X> for &'a [T]
+impl<T, X> Integrate<X> for &[T]
 where
     T: Num + Copy + From<X> + From<f64>,
     X: Num + Copy + PartialOrd + From<f64>,
 {
     type Output = T;
 
-    fn trapezoid<'b>(
+    fn trapezoid(
         &self,
-        x: Option<&'b [X]>,
+        x: Option<&[X]>,
         dx: Option<X>,
         _axis: Option<isize>,
     ) -> Result<T, IntegrationError> {
@@ -148,9 +148,9 @@ where
         })
     }
 
-    fn simpson<'b>(
+    fn simpson(
         &self,
-        x: Option<&'b [X]>,
+        x: Option<&[X]>,
         dx: Option<X>,
         _axis: Option<isize>,
     ) -> Result<T, IntegrationError> {
@@ -202,9 +202,9 @@ where
 {
     type Output = ArrayBase<OwnedRepr<A>, D::Smaller>;
 
-    fn trapezoid<'a>(
+    fn trapezoid(
         &self,
-        x: Option<&'a [X]>,
+        x: Option<&[X]>,
         dx: Option<X>,
         axis: Option<isize>,
     ) -> Result<Self::Output, IntegrationError> {
@@ -222,9 +222,9 @@ where
         })
     }
 
-    fn simpson<'a>(
+    fn simpson(
         &self,
-        x: Option<&'a [X]>,
+        x: Option<&[X]>,
         dx: Option<X>,
         axis: Option<isize>,
     ) -> Result<Self::Output, IntegrationError> {

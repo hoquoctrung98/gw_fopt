@@ -37,7 +37,7 @@ pub struct Segment {
     pub collision_status: CollisionStatus,
 }
 
-/// Custom error type for BulkFlow operations.
+/// Custom error type for `BulkFlow` operations.
 #[derive(Error, Debug)]
 pub enum BulkFlowError {
     #[error("Field '{0}' is not initialized")]
@@ -198,14 +198,13 @@ impl BulkFlow {
             first_colliding_bubbles: None,
         };
 
-        let thread_pool = match num_threads {
-            Some(n) => rayon::ThreadPoolBuilder::new().num_threads(n),
-            None => {
-                let default = std::thread::available_parallelism()
-                    .map(|n| n.get())
-                    .unwrap_or(1);
-                rayon::ThreadPoolBuilder::new().num_threads(default)
-            }
+        let thread_pool = if let Some(n) = num_threads {
+            rayon::ThreadPoolBuilder::new().num_threads(n)
+        } else {
+            let default = std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1);
+            rayon::ThreadPoolBuilder::new().num_threads(default)
         }
         .build()
         .map_err(BulkFlowError::ThreadPoolBuildError)?;
@@ -482,11 +481,9 @@ impl BulkFlow {
         }
         self.n_cos_thetax = Some(n_cos_thetax);
         self.n_phix = Some(n_phix);
-        self.cos_thetax = Some(Array1::linspace(-1.0, 1.0, n_cos_thetax));
-        self.phix = Some(Array1::linspace(0.0, 2.0 * std::f64::consts::PI, n_phix));
+        let cos_thetax = Array1::linspace(-1.0, 1.0, n_cos_thetax);
+        let phix = Array1::linspace(0.0, 2.0 * std::f64::consts::PI, n_phix);
         let mut direction_vectors = Array3::zeros((n_cos_thetax, n_phix, 4));
-        let cos_thetax = self.cos_thetax.as_ref().unwrap();
-        let phix = self.phix.as_ref().unwrap();
 
         Zip::indexed(&mut direction_vectors).for_each(|(i, j, k), val| {
             let cos_thetax_val = cos_thetax[i];
@@ -561,7 +558,8 @@ impl BulkFlow {
 
         self.cached_data.delta = delta;
         self.cached_data.delta_squared = delta_squared;
-
+        self.cos_thetax = Some(cos_thetax);
+        self.phix = Some(phix);
         Ok(())
     }
 
@@ -711,12 +709,9 @@ impl BulkFlow {
 
         for i in 0..n_cos_thetax {
             for j in 0..n_phix {
-                match first_bubble[[i, j]] {
-                    BubbleIndex::None => {
-                        collision_status[[i, j]] = CollisionStatus::NeverCollided;
-                        continue;
-                    }
-                    _ => (),
+                if first_bubble[[i, j]] == BubbleIndex::None {
+                    collision_status[[i, j]] = CollisionStatus::NeverCollided;
+                    continue;
                 }
                 let delta_tab_val = delta_tab_grid[[i, j]];
                 if delta_tab_val > 0.0 && delta_ta >= delta_tab_val {
