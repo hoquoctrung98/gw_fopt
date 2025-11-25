@@ -56,7 +56,7 @@ version = "0.1.0"
 dependencies = [
  "bubble_gw_rs",
  "criterion",
- "ndarray 0.17.1",
+ "ndarray",
  "num-traits",
 ]
 
@@ -65,7 +65,7 @@ name = "bubble_gw_py"
 version = "0.1.0"
 dependencies = [
  "bubble_gw_rs",
- "ndarray 0.16.1",
+ "ndarray",
  "num",
  "num-complex",
  "numpy",
@@ -80,7 +80,7 @@ version = "0.1.0"
 dependencies = [
  "array-init",
  "csv",
- "ndarray 0.16.1",
+ "ndarray",
  "num",
  "num-complex",
  "num-traits",
@@ -400,21 +400,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ndarray"
-version = "0.17.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c7c9125e8f6f10c9da3aad044cc918cf8784fa34de857b1aa68038eb05a50a9"
-dependencies = [
- "matrixmultiply",
- "num-complex",
- "num-integer",
- "num-traits",
- "portable-atomic",
- "portable-atomic-util",
- "rawpointer",
-]
-
-[[package]]
 name = "num"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -505,7 +490,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fa24ffc88cf9d43f7269d6b6a0d0a00010924a8cc90604a21ef9c433b66998d"
 dependencies = [
  "libc",
- "ndarray 0.16.1",
+ "ndarray",
  "num-complex",
  "num-integer",
  "num-traits",

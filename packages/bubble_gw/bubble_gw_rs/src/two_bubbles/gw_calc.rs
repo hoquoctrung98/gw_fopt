@@ -35,14 +35,14 @@ pub enum GWCalcError {
 
 /// Configuration for cutoff parameters in the gravitational wave calculator.
 #[derive(Debug, Clone)]
-pub struct CutoffConfig {
+pub struct TimeCutoffConfig {
     pub t_cut: f64,
     pub t_0: f64,
 }
 
-impl CutoffConfig {
+impl TimeCutoffConfig {
     pub fn new(smax: f64, ratio_t_cut: Option<f64>, ratio_t_0: Option<f64>) -> Self {
-        let t_cut = ratio_t_cut.unwrap_or(0.9) * smax;
+        let t_cut = ratio_t_cut.unwrap_or(0.9999) * smax;
         let t_0 = ratio_t_0.unwrap_or(0.25) * (smax - t_cut);
         Self { t_cut, t_0 }
     }
@@ -92,7 +92,7 @@ pub struct GravitationalWaveCalculator {
     pub phi2: Array3<f64>,
     pub precomputed: PrecomputedFieldArrays,
     pub lattice: LatticeConfig,
-    pub config: CutoffConfig,
+    pub config: TimeCutoffConfig,
     pub tol: f64,
     pub max_iter: u32,
     pub s_offset: Array1<f64>,
@@ -134,7 +134,7 @@ impl GravitationalWaveCalculator {
             n_z,
             initial_field_status,
         };
-        let config = CutoffConfig::new(smax, ratio_t_cut, ratio_t_0);
+        let config = TimeCutoffConfig::new(smax, ratio_t_cut, ratio_t_0);
         let precomputed = Self::compute_precomputed_arrays(&phi1, &phi2, n_fields, &lattice);
 
         let s_offset: Array1<f64> = lattice.s_grid.slice(s![1..]).mapv(|s| s - 0.5 * ds);

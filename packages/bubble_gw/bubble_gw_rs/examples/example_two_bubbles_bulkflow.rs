@@ -1,4 +1,4 @@
-use bubble_gw_rs::many_bubbles::bulk_flow::{BulkFlow, BulkFlowError};
+use bubble_gw_rs::many_bubbles::bulk_flow_segment::{BulkFlow, BulkFlowError};
 use ndarray::{Array1, Array2, arr2, s};
 
 fn main() -> Result<(), BulkFlowError> {

@@ -1,52 +1,16 @@
-use bubble_gw_rs::utils::{integrate, integrate_old};
+use bubble_gw_rs::utils::{integrate};
 use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
 
 use integrate::Integrate as NewIntegrate;
-use integrate_old::Integrate as OldIntegrate;
 
 fn bench_1d_slice<T, F>(c: &mut Criterion, name: &str, data_size: usize, mut setup: F)
 where
     T: Copy + num_traits::Float + From<f64> + Send + Sync + 'static,
-    F: FnMut(usize) -> (Vec<T>, Option<Vec<T>>),
+    F: Fn(usize) -> (Vec<T>, Option<Vec<T>>),
 {
     let mut group = c.benchmark_group(format!("1D Slice - {} - {} points", name, data_size));
 
     for method in ["trapezoid", "simpson"] {
-        // --- OLD ---
-        group.bench_with_input(BenchmarkId::new("old", method), &data_size, |b, &size| {
-            b.iter_batched(
-                || setup(size),
-                |(y, x)| {
-                    let y_slice = y.as_slice();
-                    let y_ref = &y_slice; // <-- &y_slice: &&[T]
-
-                    match method {
-                        "trapezoid" => {
-                            let _ = <&[T] as OldIntegrate<T>>::trapezoid(
-                                y_ref, // <-- pass &y_slice
-                                x.as_deref(),
-                                None,
-                                None,
-                            )
-                            .unwrap();
-                        }
-                        "simpson" => {
-                            let _ = <&[T] as OldIntegrate<T>>::simpson(
-                                y_ref, // <-- pass &y_slice
-                                x.as_deref(),
-                                None,
-                                None,
-                            )
-                            .unwrap();
-                        }
-                        _ => unreachable!(),
-                    }
-                },
-                BatchSize::SmallInput,
-            );
-        });
-
-        // --- NEW ---
         group.bench_with_input(BenchmarkId::new("new", method), &data_size, |b, &size| {
             b.iter_batched(
                 || setup(size),

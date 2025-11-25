@@ -10,13 +10,16 @@ rust-version.workspace = true
 
 [dependencies]
 bubble_gw_rs = { path = "../bubble_gw_rs" }
-criterion = "0.7.0"
-ndarray = "0.17.1"
-num-traits = "0.2.19"
-# Benchmarking framework
-# criterion = { workspace = true, features = ["html_reports"] }
+criterion = {version = "0.7.0", features = ["html_reports"]}
+ndarray = {workspace = true}
+num-traits = {workspace = true}
 
 [[bench]]
 name = "integrate_1d"
 path = "integrate_1d.rs"
+harness = false
+
+[[bench]]
+name = "bulk_flow_bench"
+path = "bulk_flow_bench.rs"
 harness = false
