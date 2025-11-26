@@ -95,59 +95,59 @@ class U1Potential(GenericPotential):
         
         return fig, ax
 
-# class QuarticPotential(GenericPotential):
-#     def __init__(self, lambdabar):
-#         self.Ndim = 1
-#         self.params = lambdabar
+class GouldQuarticPotential(GenericPotential):
+    def __init__(self, lambdabar):
+        self.Ndim = 1
+        self.params = lambdabar
     
-#     def V0(self, phi):
-#         """Compute the potential V0."""
-#         lambdabar = self.params
-#         return phi**2 * (-phi/3 + phi**2/4 + lambdabar/9)
+    def V0(self, phi):
+        """Compute the potential V0."""
+        lambdabar = self.params
+        return phi**2 * (-phi/3 + phi**2/4 + lambdabar/9)
     
-#     def dV0(self, phi):
-#         """Compute the derivative of the potential with respect to each field component."""
-#         lambdabar = self.params
-#         return phi**3 - phi**2 + 2/9*lambdabar*phi
+    def dV0(self, phi):
+        """Compute the derivative of the potential with respect to each field component."""
+        lambdabar = self.params
+        return phi**3 - phi**2 + 2/9*lambdabar*phi
     
-#     def plot_potential(self, phi_range, num_points = 1000):
-#         # Generate phi_re values
-#         phi = np.linspace(phi_range[0], phi_range[1], num_points)
+    def plot_potential(self, phi_range, num_points = 1000):
+        # Generate phi_re values
+        phi = np.linspace(phi_range[0], phi_range[1], num_points)
 
-#         # Compute potential
-#         V = self.V0(phi)
+        # Compute potential
+        V = self.V0(phi)
 
-#         # Find local minima and maxima
-#         minima_idx = argrelextrema(V, np.less)[0]
-#         maxima_idx = argrelextrema(V, np.greater)[0]
+        # Find local minima and maxima
+        minima_idx = argrelextrema(V, np.less)[0]
+        maxima_idx = argrelextrema(V, np.greater)[0]
 
-#         # Create plot
-#         fig, ax = plt.subplots()
+        # Create plot
+        fig, ax = plt.subplots()
 
-#         ax.plot(phi, V)
+        ax.plot(phi, V)
 
-#         # Scatter plot for minima and maxima if they exist
-#         if len(minima_idx) > 0:
-#             ax.scatter(phi[minima_idx], V[minima_idx], color='green', label='Minima', zorder=5)
-#         if len(maxima_idx) > 0:
-#             ax.scatter(phi[maxima_idx], V[maxima_idx], color='red', label='Maxima', zorder=5)
+        # Scatter plot for minima and maxima if they exist
+        if len(minima_idx) > 0:
+            ax.scatter(phi[minima_idx], V[minima_idx], color='green', label='Minima', zorder=5)
+        if len(maxima_idx) > 0:
+            ax.scatter(phi[maxima_idx], V[maxima_idx], color='red', label='Maxima', zorder=5)
 
-#         # Formatting
-#         ax.set_xlabel('$\\phi_{\\text{re}}$')
-#         ax.set_ylabel('$V_0(\\phi)$', rotation=0, labelpad=15)
-#         # ax.set_xlim(phi_range[0], phi_range[1])
-#         ax.grid(True, linestyle='--', alpha=0.7)
-#         ax.legend()
+        # Formatting
+        ax.set_xlabel('$\\phi_{\\text{re}}$')
+        ax.set_ylabel('$V_0(\\phi)$', rotation=0, labelpad=15)
+        # ax.set_xlim(phi_range[0], phi_range[1])
+        ax.grid(True, linestyle='--', alpha=0.7)
+        ax.legend()
 
-#         # Print extrema for reference
-#         if len(minima_idx) > 0:
-#             print(f"Minima at phi_re = {phi[minima_idx]}, V = {V[minima_idx]}")
-#         if len(maxima_idx) > 0:
-#             print(f"Maxima at phi_re = {phi[maxima_idx]}, V = {V[maxima_idx]}")
+        # Print extrema for reference
+        if len(minima_idx) > 0:
+            print(f"Minima at phi_re = {phi[minima_idx]}, V = {V[minima_idx]}")
+        if len(maxima_idx) > 0:
+            print(f"Maxima at phi_re = {phi[maxima_idx]}, V = {V[maxima_idx]}")
 
-#         return fig, ax
+        return fig, ax
 
-class QuarticPotential(GenericPotential):
+class TobyQuarticPotential(GenericPotential):
     def __init__(self, c2, c3, c4):
         self.Ndim = 1
         self.params = c2, c3, c4
