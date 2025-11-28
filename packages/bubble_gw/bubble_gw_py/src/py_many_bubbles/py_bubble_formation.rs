@@ -17,7 +17,26 @@ pub struct PyLattice {
 impl PyLattice {
     #[new]
     fn new(lattice_type: &str, sizes: Vec<f64>, n_grid: usize) -> PyResult<Self> {
-        let inner = Lattice::new(lattice_type, sizes, n_grid).map_err(PyValueError::new_err)?;
+        let lattice_type = match lattice_type.to_lowercase().as_str() {
+            "cartesian" => {
+                if sizes.len() != 3 {
+                    return Err("For cartesian lattice, sizes must have length 3".to_string())
+                        .map_err(PyValueError::new_err);
+                }
+                LatticeType::Cartesian {
+                    sizes: [sizes[0], sizes[1], sizes[2]],
+                }
+            }
+            "sphere" => {
+                if sizes.len() != 1 {
+                    return Err("For sphere lattice, sizes must have length 1".to_string())
+                        .map_err(PyValueError::new_err);
+                }
+                LatticeType::Sphere { radius: sizes[0] }
+            }
+            _ => return Err("Invalid lattice_type".to_string()).map_err(PyValueError::new_err),
+        };
+        let inner = Lattice::new(lattice_type, n_grid).map_err(PyValueError::new_err)?;
         Ok(PyLattice { inner })
     }
 
@@ -37,14 +56,17 @@ impl PyLattice {
     #[getter]
     fn lattice_type(&self) -> String {
         match self.inner.lattice_type {
-            LatticeType::Cartesian => "cartesian".to_string(),
-            LatticeType::Sphere => "sphere".to_string(),
+            LatticeType::Cartesian { .. } => "cartesian".to_string(),
+            LatticeType::Sphere { .. } => "sphere".to_string(),
         }
     }
 
     #[getter]
     fn sizes(&self) -> Vec<f64> {
-        self.inner.sizes.to_vec()
+        match self.inner.lattice_type {
+            LatticeType::Cartesian { sizes } => sizes.to_vec(),
+            LatticeType::Sphere { radius } => vec![radius],
+        }
     }
 
     #[getter]
@@ -64,7 +86,7 @@ pub fn py_generate_bubbles_exterior(
     // Parse boundary condition
     let bc = match boundary_condition.to_lowercase().as_str() {
         "periodic" => BoundaryConditions::Periodic,
-        "reflective" => BoundaryConditions::Reflective,
+        "reflective" => BoundaryConditions::Reflection,
         _ => {
             return Err(PyValueError::new_err(
                 "boundary_condition must be 'periodic' or 'reflective'",
@@ -310,7 +332,7 @@ impl PyBubbleFormationSimulator {
     ) -> PyResult<Py<PyArray2<f64>>> {
         let bc = match boundary_condition.to_lowercase().as_str() {
             "periodic" => BoundaryConditions::Periodic,
-            "reflective" => BoundaryConditions::Reflective,
+            "reflective" => BoundaryConditions::Reflection,
             _ => {
                 return Err(PyValueError::new_err(
                     "boundary_condition must be 'periodic' or 'reflective'",

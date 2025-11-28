@@ -69,8 +69,8 @@ impl std::hash::Hash for QuantizedPoint {
 /// Enum representing the type of lattice.
 #[derive(Debug, Clone, PartialEq)]
 pub enum LatticeType {
-    Cartesian,
-    Sphere,
+    Cartesian { sizes: [f64; 3] },
+    Sphere { radius: f64 },
 }
 
 /// Represents the simulation domain, either a Cartesian box or a sphere.
@@ -80,7 +80,6 @@ pub enum LatticeType {
 #[derive(Debug, Clone)]
 pub struct Lattice {
     pub lattice_type: LatticeType,
-    pub sizes: [f64; 3],
     pub n_grid: usize,
 }
 
@@ -89,7 +88,7 @@ impl Lattice {
     ///
     /// # Arguments
     ///
-    /// * `lattice_type` - A string specifying the lattice type ("cartesian" or "sphere").
+    /// * `lattice_type` - ("Cartesian" or "Sphere").
     /// * `sizes` - A vector of dimensions: `[lx, ly, lz]` for Cartesian, `[r]` for Sphere.
     /// * `n` - The number of grid points along each dimension.
     ///
@@ -97,31 +96,10 @@ impl Lattice {
     ///
     /// * `Ok(Lattice)` - A new `Lattice` instance.
     /// * `Err(String)` - An error message if the lattice type is invalid or sizes are incorrect.
-    pub fn new(lattice_type: &str, sizes: Vec<f64>, n: usize) -> Result<Self, String> {
-        let lattice_type = match lattice_type.to_lowercase().as_str() {
-            "cartesian" => {
-                if sizes.len() != 3 {
-                    return Err("For cartesian lattice, sizes must have length 3".to_string());
-                }
-                LatticeType::Cartesian
-            }
-            "sphere" => {
-                if sizes.len() != 1 {
-                    return Err("For sphere lattice, sizes must have length 1".to_string());
-                }
-                LatticeType::Sphere
-            }
-            _ => return Err("Invalid lattice_type".to_string()),
-        };
-        let sizes_array = match sizes.len() {
-            1 => [sizes[0], 0.0, 0.0],
-            3 => [sizes[0], sizes[1], sizes[2]],
-            _ => unreachable!(),
-        };
+    pub fn new(lattice_type: LatticeType, n_grid: usize) -> Result<Self, String> {
         Ok(Lattice {
             lattice_type,
-            sizes: sizes_array,
-            n_grid: n,
+            n_grid,
         })
     }
 
@@ -133,8 +111,8 @@ impl Lattice {
     /// * For Sphere: \( \frac{4}{3} \pi r^3 \).
     pub fn volume(&self) -> f64 {
         match self.lattice_type {
-            LatticeType::Cartesian => self.sizes[0] * self.sizes[1] * self.sizes[2],
-            LatticeType::Sphere => (4.0 / 3.0) * std::f64::consts::PI * self.sizes[0].powi(3),
+            LatticeType::Cartesian { sizes } => sizes[0] * sizes[1] * sizes[2],
+            LatticeType::Sphere { radius } => (4.0 / 3.0) * std::f64::consts::PI * radius.powi(3),
         }
     }
 
@@ -147,10 +125,10 @@ impl Lattice {
     /// * For Sphere: Points within a cube \([-r, r]^3\), filtered to lie within the sphere (\( x^2 + y^2 + z^2 \leq r^2 \)).
     pub fn generate_grid(&self) -> Array2<f64> {
         match self.lattice_type {
-            LatticeType::Cartesian => {
-                let lx = self.sizes[0];
-                let ly = self.sizes[1];
-                let lz = self.sizes[2];
+            LatticeType::Cartesian { sizes } => {
+                let lx = sizes[0];
+                let ly = sizes[1];
+                let lz = sizes[2];
                 let n = self.n_grid;
                 let x: Vec<f64> = (0..n).map(|i| i as f64 * lx / (n - 1) as f64).collect();
                 let y: Vec<f64> = (0..n).map(|i| i as f64 * ly / (n - 1) as f64).collect();
@@ -165,18 +143,17 @@ impl Lattice {
                 }
                 Array2::from_shape_vec((n * n * n, 3), grid_points).unwrap()
             }
-            LatticeType::Sphere => {
-                let r = self.sizes[0];
-                let n = self.n_grid;
-                let x: Vec<f64> = (0..n)
-                    .map(|i| -r + 2.0 * i as f64 * r / (n - 1) as f64)
+            LatticeType::Sphere { radius } => {
+                let n_grid = self.n_grid;
+                let x: Vec<f64> = (0..n_grid)
+                    .map(|i| -radius + 2.0 * i as f64 * radius / (n_grid - 1) as f64)
                     .collect();
                 let mut grid_points = Vec::new();
-                for i in 0..n {
-                    for j in 0..n {
-                        for k in 0..n {
+                for i in 0..n_grid {
+                    for j in 0..n_grid {
+                        for k in 0..n_grid {
                             let point = [x[i], x[j], x[k]];
-                            if point.iter().map(|&v| v * v).sum::<f64>() <= r * r {
+                            if point.iter().map(|&v| v * v).sum::<f64>() <= radius * radius {
                                 grid_points.extend_from_slice(&[x[i], x[j], x[k]]);
                             }
                         }
@@ -196,12 +173,10 @@ impl Lattice {
     /// * For Sphere: `[(-r, r), (-r, r), (-r, r)]`.
     pub fn lattice_bounds(&self) -> Vec<(f64, f64)> {
         match self.lattice_type {
-            LatticeType::Cartesian => vec![
-                (0.0, self.sizes[0]),
-                (0.0, self.sizes[1]),
-                (0.0, self.sizes[2]),
-            ],
-            LatticeType::Sphere => vec![(-self.sizes[0], self.sizes[0]); 3],
+            LatticeType::Cartesian { sizes } => {
+                vec![(0.0, sizes[0]), (0.0, sizes[1]), (0.0, sizes[2])]
+            }
+            LatticeType::Sphere { radius } => vec![(0.0, radius)],
         }
     }
 }
@@ -210,7 +185,7 @@ impl Lattice {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BoundaryConditions {
     Periodic,
-    Reflective,
+    Reflection,
 }
 
 /// Generates exterior (image) bubbles for handling boundary conditions.
@@ -234,77 +209,84 @@ pub fn generate_bubbles_exterior(
     bubbles_interior: Array2<f64>,
     boundary_condition: BoundaryConditions,
 ) -> Array2<f64> {
-    if lattice.lattice_type != LatticeType::Cartesian || bubbles_interior.is_empty() {
+    if bubbles_interior.is_empty() {
         return Array2::zeros((0, 4));
     }
 
-    let [lx, ly, lz] = lattice.sizes;
-    let mut exterior = Vec::new();
-    let mut seen = HashSet::new();
+    match lattice.lattice_type {
+        LatticeType::Cartesian { sizes } => {
+            let (lx, ly, lz) = (sizes[0], sizes[1], sizes[2]);
+            let mut exterior = Vec::new();
+            let mut seen = HashSet::new();
 
-    match boundary_condition {
-        BoundaryConditions::Periodic => {
-            let shifts = [
-                [lx, 0.0, 0.0],
-                [-lx, 0.0, 0.0],
-                [0.0, ly, 0.0],
-                [0.0, -ly, 0.0],
-                [0.0, 0.0, lz],
-                [0.0, 0.0, -lz],
-            ];
+            match boundary_condition {
+                BoundaryConditions::Periodic => {
+                    let shifts = [
+                        [lx, 0.0, 0.0],
+                        [-lx, 0.0, 0.0],
+                        [0.0, ly, 0.0],
+                        [0.0, -ly, 0.0],
+                        [0.0, 0.0, lz],
+                        [0.0, 0.0, -lz],
+                    ];
 
-            for bubble in bubbles_interior.outer_iter() {
-                let t = bubble[0];
-                let [x, y, z] = [bubble[1], bubble[2], bubble[3]];
+                    for bubble in bubbles_interior.outer_iter() {
+                        let t = bubble[0];
+                        let [x, y, z] = [bubble[1], bubble[2], bubble[3]];
 
-                for &[dx, dy, dz] in &shifts {
-                    let p = QuantizedPoint::new((x + dx, y + dy, z + dz));
-                    if seen.insert(p) {
-                        exterior.extend_from_slice(&[t, x + dx, y + dy, z + dz]);
+                        for &[dx, dy, dz] in &shifts {
+                            let p = QuantizedPoint::new((x + dx, y + dy, z + dz));
+                            if seen.insert(p) {
+                                exterior.extend_from_slice(&[t, x + dx, y + dy, z + dz]);
+                            }
+                        }
+                    }
+                }
+
+                BoundaryConditions::Reflection => {
+                    // 6 faces → 6 independent reflections
+                    //  face translation flipped coordinate
+                    let faces: [([f64; 3], usize); 6] = [
+                        ([0.0, 0.0, 0.0], 0),      // x = 0  →  -x
+                        ([2.0 * lx, 0.0, 0.0], 0), // x = lx → 2*lx-x
+                        ([0.0, 0.0, 0.0], 1),      // y = 0  →  -y
+                        ([0.0, 2.0 * ly, 0.0], 1), // y = ly → 2*ly-y
+                        ([0.0, 0.0, 0.0], 2),      // z = 0  →  -z
+                        ([0.0, 0.0, 2.0 * lz], 2), // z = lz → 2*lz-z
+                    ];
+
+                    for bubble in bubbles_interior.outer_iter() {
+                        let t = bubble[0];
+                        let mut center = [bubble[1], bubble[2], bubble[3]];
+
+                        for &(trans, axis) in &faces {
+                            // flip only the chosen axis
+                            center[axis] = -center[axis];
+                            let rx = center[0] + trans[0];
+                            let ry = center[1] + trans[1];
+                            let rz = center[2] + trans[2];
+
+                            let p = QuantizedPoint::new((rx, ry, rz));
+                            if seen.insert(p) {
+                                exterior.extend_from_slice(&[t, rx, ry, rz]);
+                            }
+
+                            // restore original coordinate for the next face
+                            center[axis] = -center[axis];
+                        }
                     }
                 }
             }
-        }
 
-        BoundaryConditions::Reflective => {
-            // 6 faces → 6 independent reflections
-            //  face          translation   flipped coordinate
-            let faces: [([f64; 3], usize); 6] = [
-                ([0.0, 0.0, 0.0], 0),      // x = 0  →  -x
-                ([2.0 * lx, 0.0, 0.0], 0), // x = lx → 2*lx-x
-                ([0.0, 0.0, 0.0], 1),      // y = 0  →  -y
-                ([0.0, 2.0 * ly, 0.0], 1), // y = ly → 2*ly-y
-                ([0.0, 0.0, 0.0], 2),      // z = 0  →  -z
-                ([0.0, 0.0, 2.0 * lz], 2), // z = lz → 2*lz-z
-            ];
-
-            for bubble in bubbles_interior.outer_iter() {
-                let t = bubble[0];
-                let mut c = [bubble[1], bubble[2], bubble[3]];
-
-                for &(trans, axis) in &faces {
-                    // flip only the chosen axis
-                    c[axis] = -c[axis];
-                    let rx = c[0] + trans[0];
-                    let ry = c[1] + trans[1];
-                    let rz = c[2] + trans[2];
-
-                    let p = QuantizedPoint::new((rx, ry, rz));
-                    if seen.insert(p) {
-                        exterior.extend_from_slice(&[t, rx, ry, rz]);
-                    }
-
-                    // restore original coordinate for the next face
-                    c[axis] = -c[axis];
-                }
+            if exterior.is_empty() {
+                Array2::zeros((0, 4))
+            } else {
+                Array2::from_shape_vec((exterior.len() / 4, 4), exterior).unwrap()
             }
         }
-    }
 
-    if exterior.is_empty() {
-        Array2::zeros((0, 4))
-    } else {
-        Array2::from_shape_vec((exterior.len() / 4, 4), exterior).unwrap()
+        //TODO: implement exterior bubbles generation for the Sphere lattice
+        LatticeType::Sphere { .. } => return Array2::zeros((0, 4)),
     }
 }
 
@@ -670,12 +652,11 @@ impl<S: NucleationStrategy> BubbleFormationSimulator<S> {
             end_status: None,
         };
 
-        if let LatticeType::Sphere = simulator.lattice.lattice_type {
-            let r = simulator.lattice.sizes[0];
+        if let LatticeType::Sphere { radius } = simulator.lattice.lattice_type {
             simulator.outside_points.retain(|&i| {
                 let row = simulator.grid.row(i);
                 let d = row[0] * row[0] + row[1] * row[1] + row[2] * row[2];
-                d <= r * r
+                d <= radius * radius
             });
         }
 
@@ -978,24 +959,20 @@ impl<S: NucleationStrategy> BubbleFormationSimulator<S> {
             let y = bubble.center[1];
             let z = bubble.center[2];
             match self.lattice.lattice_type {
-                LatticeType::Cartesian => {
-                    let lx = self.lattice.sizes[0];
-                    let ly = self.lattice.sizes[1];
-                    let lz = self.lattice.sizes[2];
+                LatticeType::Cartesian { sizes } => {
                     if x - radius < 0.0
-                        || x + radius > lx
+                        || x + radius > sizes[0]
                         || y - radius < 0.0
-                        || y + radius > ly
+                        || y + radius > sizes[1]
                         || z - radius < 0.0
-                        || z + radius > lz
+                        || z + radius > sizes[2]
                     {
                         boundary_bubbles.push((i, tn));
                     }
                 }
-                LatticeType::Sphere => {
-                    let r = self.lattice.sizes[0];
+                LatticeType::Sphere { radius } => {
                     let center_dist = (x * x + y * y + z * z).sqrt();
-                    let max_radius = r - center_dist;
+                    let max_radius = radius - center_dist;
                     if max_radius < 0.0 || radius > max_radius {
                         boundary_bubbles.push((i, tn));
                     }
@@ -1020,12 +997,6 @@ impl<S: NucleationStrategy> BubbleFormationSimulator<S> {
 
     /// Returns exterior bubbles based on current boundary condition.
     pub fn bubbles_exterior(&self, boundary_condition: BoundaryConditions) -> Array2<f64> {
-        if self.lattice.lattice_type != LatticeType::Cartesian {
-            return Array2::zeros((0, 4));
-        }
-
-        // You need to store boundary_condition in the simulator!
-        // Let's assume you add it later — for now, default to Periodic
         generate_bubbles_exterior(&self.lattice, self.bubbles_interior(), boundary_condition)
     }
 
