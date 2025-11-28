@@ -1,9 +1,26 @@
-use bubble_gw_rs::many_bubbles::bulk_flow_segment::{BulkFlow, BulkFlowError};
-use ndarray::{Array1, Array2, arr2, s};
+use bubble_gw_rs::many_bubbles::bubble_formation::{
+    BoundaryConditions, Lattice, LatticeType, generate_bubbles_exterior,
+};
+use bubble_gw_rs::many_bubbles::bulk_flow::{BulkFlow, BulkFlowError};
+use ndarray::{Array1, arr2, s};
 
 fn main() -> Result<(), BulkFlowError> {
-    let bubbles_interior = arr2(&[[0.0, 0.0, 10.0, 0.0], [1.0, 5.0, 0.0, 0.0]]);
-    let bubbles_exterior = Array2::zeros((0, 4));
+    let bubbles_interior = arr2(&[
+        [0.0, 0.0, 9.0, 0.0],
+        [0.0, 0.0, 0.0, 0.0],
+        [0.0, 4.0, 0.0, 4.0],
+        [0.0, 4.0, 2.0, 4.0],
+        [0.0, 0.0, 2.0, 1.0],
+    ]);
+    let lattice = Lattice::new(
+        LatticeType::Cartesian {
+            sizes: [10., 10., 10.],
+        },
+        100,
+    )
+    .unwrap();
+    let bubbles_exterior =
+        generate_bubbles_exterior(&lattice, bubbles_interior.clone(), BoundaryConditions::Periodic);
 
     let mut bulk_flow = BulkFlow::new(bubbles_interior, bubbles_exterior, true, None)?;
     bulk_flow.set_resolution(100, 200, true)?;

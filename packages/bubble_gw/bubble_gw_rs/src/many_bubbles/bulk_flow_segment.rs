@@ -1,6 +1,4 @@
-use crate::utils::segment::{
-    ConstrainedSegment, SegmentConstraint, TryIntoConstrainedSegment, Unconstrained,
-};
+use crate::utils::segment::{TryIntoConstrainedSegment, Unconstrained};
 use ndarray::{Array1, Array2, Array3, Array4, ArrayView1, ArrayView2, Axis, Zip, azip, s, stack};
 use num_complex::Complex64;
 use rayon::ThreadPool;
@@ -8,7 +6,7 @@ use rayon::prelude::*;
 use thiserror::Error;
 
 /// Represents a bubble index, distinguishing between an interior index, exterior index, and no collision.
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum BubbleIndex {
     Interior(usize),
     Exterior(usize),
@@ -728,67 +726,6 @@ impl BulkFlow {
         Ok(collision_status)
     }
 
-    pub fn generate_segments(
-        &self,
-        first_bubble: ArrayView2<BubbleIndex>,
-        collision_status: ArrayView2<CollisionStatus>,
-    ) -> Result<Vec<Segment>, BulkFlowError> {
-        let n_cos_thetax = self
-            .n_cos_thetax
-            .ok_or_else(|| BulkFlowError::UninitializedField("n_cos_thetax".to_string()))?;
-        let n_phix = self
-            .n_phix
-            .ok_or_else(|| BulkFlowError::UninitializedField("n_phix".to_string()))?;
-        if first_bubble.shape() != [n_cos_thetax, n_phix]
-            || collision_status.shape() != [n_cos_thetax, n_phix]
-        {
-            return Err(BulkFlowError::ArrayShapeMismatch(format!(
-                "Input arrays must match resolution: expected [{}, {}], got first_bubble: {:?}, collision_status: {:?}",
-                n_cos_thetax,
-                n_phix,
-                first_bubble.shape(),
-                collision_status.shape()
-            )));
-        }
-        let mut segments = Vec::with_capacity(n_cos_thetax * 10);
-
-        for i in 0..n_cos_thetax {
-            let first_bubble_row = first_bubble.slice(s![i, ..]);
-            let collision_status_row = collision_status.slice(s![i, ..]);
-            let mut phi_left_idx = 0;
-            let mut current_bubble = first_bubble_row[0];
-            let mut current_status = collision_status_row[0];
-
-            for j in 1..n_phix {
-                let bubble = first_bubble_row[j];
-                let status = collision_status_row[j];
-                if bubble != current_bubble || status != current_status || j == n_phix - 1 {
-                    if j > phi_left_idx {
-                        let phi_upper_idx = if j == n_phix - 1
-                            && bubble == current_bubble
-                            && status == current_status
-                        {
-                            n_phix - 1
-                        } else {
-                            j
-                        };
-                        segments.push(Segment {
-                            cos_thetax_idx: i,
-                            phi_lower_idx: phi_left_idx,
-                            phi_upper_idx,
-                            bubble_index: current_bubble,
-                            collision_status: current_status,
-                        });
-                    }
-                    phi_left_idx = j;
-                    current_bubble = bubble;
-                    current_status = status;
-                }
-            }
-        }
-        Ok(segments)
-    }
-
     pub fn compute_delta_tab(
         &self,
         a_idx: usize,
@@ -804,6 +741,7 @@ impl BulkFlow {
             .direction_vectors
             .as_ref()
             .ok_or_else(|| BulkFlowError::UninitializedField("direction_vectors".to_string()))?;
+
         if first_bubble.shape() != [n_cos_thetax, n_phix] {
             return Err(BulkFlowError::ArrayShapeMismatch(format!(
                 "First bubble array must match resolution: expected [{}, {}], got {:?}",
@@ -812,28 +750,63 @@ impl BulkFlow {
                 first_bubble.shape()
             )));
         }
+
         let n_interior = self.bubbles_interior.nrows();
         let mut delta_tab_grid = Array2::zeros((n_cos_thetax, n_phix));
 
+        let delta = &self.cached_data.delta;
+        let delta_squared = &self.cached_data.delta_squared;
+
         for i in 0..n_cos_thetax {
-            for j in 0..n_phix {
-                let b_total = match first_bubble[[i, j]] {
+            let first_bubble_row = first_bubble.row(i);
+
+            let segments = first_bubble_row
+                .as_slice()
+                .expect("row is contiguous")
+                .try_into_constrained_segment(&Unconstrained)
+                .expect("first_bubble is piecewise constant");
+
+            let mut pos = 0usize;
+            for seg in segments.as_const_subsegments() {
+                let len = seg.len();
+                let start = pos;
+                let end = pos + len;
+
+                let b_total = match seg[0] {
                     BubbleIndex::None => {
+                        pos = end;
                         continue;
                     }
-                    BubbleIndex::Interior(b_idx) => b_idx,
-                    BubbleIndex::Exterior(b_idx) => n_interior + b_idx,
+                    BubbleIndex::Interior(b) => b,
+                    BubbleIndex::Exterior(b) => n_interior + b,
                 };
-                let delta_ba = self.cached_data.delta.slice(s![a_idx, b_total, ..]);
-                let x_vec = direction_vectors.slice(s![i, j, ..]);
-                let delta_ba_squared = self.cached_data.delta_squared[[a_idx, b_total]];
-                let dot_ba_x = dot_minkowski_vec(delta_ba, x_vec);
-                if dot_ba_x.abs() < 1e-10 {
-                    delta_tab_grid[[i, j]] = 0.0;
-                    continue;
-                }
-                let delta_tab_val = delta_ba_squared / (2.0 * dot_ba_x);
-                delta_tab_grid[[i, j]] = delta_tab_val;
+
+                let delta_ba = delta.slice(s![a_idx, b_total, ..]); // (4,)
+                let delta_ba_squared = delta_squared[[a_idx, b_total]];
+
+                // Extract contiguous slice of direction vectors for this segment
+                let x_seg = direction_vectors.slice(s![i, start..end, ..]);
+
+                // Compute Minkowski dot products for all directions in segment at once
+                let mut dot_ba_x = Array1::zeros(len);
+                azip!((dot in &mut dot_ba_x, x in x_seg.rows()) {
+                    *dot = dot_minkowski_vec(delta_ba, x);
+                });
+
+                // Compute delta_tab for the entire segment
+                let mut delta_tab_seg = Array1::zeros(len);
+                azip!((out in &mut delta_tab_seg, &dot in &dot_ba_x) {
+                    if dot.abs() > 1e-10 {
+                        *out = delta_ba_squared / (2.0 * dot);
+                    }
+                });
+
+                // Write back
+                delta_tab_grid
+                    .slice_mut(s![i, start..end])
+                    .assign(&delta_tab_seg);
+
+                pos = end;
             }
         }
 

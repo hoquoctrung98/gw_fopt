@@ -725,67 +725,6 @@ impl BulkFlow {
         Ok(collision_status)
     }
 
-    pub fn generate_segments(
-        &self,
-        first_bubble: ArrayView2<BubbleIndex>,
-        collision_status: ArrayView2<CollisionStatus>,
-    ) -> Result<Vec<Segment>, BulkFlowError> {
-        let n_cos_thetax = self
-            .n_cos_thetax
-            .ok_or_else(|| BulkFlowError::UninitializedField("n_cos_thetax".to_string()))?;
-        let n_phix = self
-            .n_phix
-            .ok_or_else(|| BulkFlowError::UninitializedField("n_phix".to_string()))?;
-        if first_bubble.shape() != [n_cos_thetax, n_phix]
-            || collision_status.shape() != [n_cos_thetax, n_phix]
-        {
-            return Err(BulkFlowError::ArrayShapeMismatch(format!(
-                "Input arrays must match resolution: expected [{}, {}], got first_bubble: {:?}, collision_status: {:?}",
-                n_cos_thetax,
-                n_phix,
-                first_bubble.shape(),
-                collision_status.shape()
-            )));
-        }
-        let mut segments = Vec::with_capacity(n_cos_thetax * 10);
-
-        for i in 0..n_cos_thetax {
-            let first_bubble_row = first_bubble.slice(s![i, ..]);
-            let collision_status_row = collision_status.slice(s![i, ..]);
-            let mut phi_left_idx = 0;
-            let mut current_bubble = first_bubble_row[0];
-            let mut current_status = collision_status_row[0];
-
-            for j in 1..n_phix {
-                let bubble = first_bubble_row[j];
-                let status = collision_status_row[j];
-                if bubble != current_bubble || status != current_status || j == n_phix - 1 {
-                    if j > phi_left_idx {
-                        let phi_upper_idx = if j == n_phix - 1
-                            && bubble == current_bubble
-                            && status == current_status
-                        {
-                            n_phix - 1
-                        } else {
-                            j
-                        };
-                        segments.push(Segment {
-                            cos_thetax_idx: i,
-                            phi_lower_idx: phi_left_idx,
-                            phi_upper_idx,
-                            bubble_index: current_bubble,
-                            collision_status: current_status,
-                        });
-                    }
-                    phi_left_idx = j;
-                    current_bubble = bubble;
-                    current_status = status;
-                }
-            }
-        }
-        Ok(segments)
-    }
-
     pub fn compute_delta_tab(
         &self,
         a_idx: usize,
@@ -813,6 +752,7 @@ impl BulkFlow {
         let mut delta_tab_grid = Array2::zeros((n_cos_thetax, n_phix));
 
         for i in 0..n_cos_thetax {
+            // TODO: This loop can be replaced by iterating over segment with const BubbleIndex
             for j in 0..n_phix {
                 let b_total = match first_bubble[[i, j]] {
                     BubbleIndex::None => {
