@@ -102,6 +102,7 @@ where
 
 /* ============================= Built-in constraints ============================= */
 
+#[derive(Clone, Debug)]
 pub struct Unconstrained;
 impl<T: PartialEq> SegmentConstraint<T> for Unconstrained {
     fn verify(&self, _: &[T]) -> bool {
@@ -109,6 +110,7 @@ impl<T: PartialEq> SegmentConstraint<T> for Unconstrained {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct UniqueValues;
 impl<T: PartialEq + Eq + Hash> SegmentConstraint<T> for UniqueValues {
     fn verify(&self, slice: &[T]) -> bool {
@@ -130,6 +132,7 @@ impl<T: PartialEq + Eq + Hash> SegmentConstraint<T> for UniqueValues {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct Sorted;
 impl<T: PartialOrd> SegmentConstraint<T> for Sorted {
     fn verify(&self, slice: &[T]) -> bool {
@@ -137,7 +140,7 @@ impl<T: PartialOrd> SegmentConstraint<T> for Sorted {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct MaxRunLength(pub usize);
 
 impl<T: PartialEq> SegmentConstraint<T> for MaxRunLength {
@@ -168,6 +171,7 @@ impl<T: PartialEq> SegmentConstraint<T> for MaxRunLength {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct AllowedValues<T>(pub &'static [T])
 where
     T: PartialEq + Eq + Hash + 'static;
