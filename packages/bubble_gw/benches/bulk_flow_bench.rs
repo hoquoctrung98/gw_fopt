@@ -1,7 +1,7 @@
 use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
 use ndarray::{Array1, Array2, arr2};
 
-use bubble_gw_rs::many_bubbles::bulk_flow::BulkFlow;
+use bubble_gw_rs::many_bubbles::bulk_flow::{Bubbles, BulkFlow};
 use bubble_gw_rs::many_bubbles::bulk_flow_segment::BulkFlow as BulkFlowSegment;
 
 fn setup_bulk_flow() -> BulkFlow {
@@ -13,8 +13,11 @@ fn setup_bulk_flow() -> BulkFlow {
         [0.0, 0.0, 2.0, 1.0],
     ]);
     let bubbles_exterior = Array2::zeros((0, 4));
-    let mut bf = BulkFlow::new(bubbles_interior, bubbles_exterior, true, None)
-        .expect("Failed to create BulkFlow");
+    let mut bf = BulkFlow::new(
+        Bubbles::new(bubbles_interior, bubbles_exterior, true).expect("Failed to parse bubbles"),
+        None,
+    )
+    .expect("Failed to create BulkFlow");
     bf.set_resolution(50, 100, true)
         .expect("Failed to set resolution");
     let coefficients_sets = vec![vec![0.0], vec![1.0]];

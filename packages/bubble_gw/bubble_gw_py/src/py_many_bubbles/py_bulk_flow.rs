@@ -1,4 +1,4 @@
-use bubble_gw_rs::many_bubbles::bulk_flow::{BubbleIndex, BulkFlow, BulkFlowError};
+use bubble_gw_rs::many_bubbles::bulk_flow::{BubbleIndex, Bubbles, BulkFlow, BulkFlowError};
 use ndarray::Array2;
 use numpy::{
     Complex64 as NumpyComplex64, PyArray1, PyArray2, PyArray3, PyArray4, PyArrayMethods,
@@ -89,8 +89,10 @@ impl PyBulkFlow {
             .map(|arr| arr.to_owned_array())
             .unwrap_or_else(|| Array2::zeros((0, 4)));
 
-        let bulk_flow =
-            BulkFlow::new(bubbles_interior, bubbles_exterior, sort_by_time, num_threads)?;
+        let bulk_flow = BulkFlow::new(
+            Bubbles::new(bubbles_interior, bubbles_exterior, sort_by_time)?,
+            num_threads,
+        )?;
         Ok(PyBulkFlow { inner: bulk_flow })
     }
 
@@ -102,24 +104,6 @@ impl PyBulkFlow {
     #[getter]
     pub fn bubbles_exterior(&self, py: Python) -> Py<PyArray2<f64>> {
         PyArray2::from_array(py, self.inner.bubbles_exterior()).into()
-    }
-
-    pub fn set_bubbles_interior(
-        &mut self,
-        bubbles_interior: PyReadonlyArray2<f64>,
-    ) -> PyResult<()> {
-        self.inner
-            .set_bubbles_interior(bubbles_interior.to_owned_array())?;
-        Ok(())
-    }
-
-    pub fn set_bubbles_exterior(
-        &mut self,
-        bubbles_exterior: PyReadonlyArray2<f64>,
-    ) -> PyResult<()> {
-        self.inner
-            .set_bubbles_exterior(bubbles_exterior.to_owned_array())?;
-        Ok(())
     }
 
     #[getter]

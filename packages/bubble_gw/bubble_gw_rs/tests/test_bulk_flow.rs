@@ -1,4 +1,4 @@
-use bubble_gw_rs::many_bubbles::bulk_flow::BulkFlow;
+use bubble_gw_rs::many_bubbles::bulk_flow::{Bubbles, BulkFlow};
 use bubble_gw_rs::utils::is_close::IsClose;
 use ndarray::{Array1, Array2, arr2};
 use num::complex::Complex64;
@@ -77,8 +77,10 @@ fn test_bulk_flow_two_bubbles() -> Result<(), Box<dyn Error>> {
             })
             .collect();
 
-        let mut bulk =
-            BulkFlow::new(bubbles_interior.clone(), bubbles_exterior.clone(), true, None)?;
+        let mut bulk = BulkFlow::new(
+            Bubbles::new(bubbles_interior.clone(), bubbles_exterior.clone(), true)?,
+            None,
+        )?;
         bulk.set_resolution(n_cos_val as usize, n_phi_val as usize, true)?;
         bulk.set_gradient_scaling_params(coefficients_sets.clone(), powers_sets.clone(), None)?;
 
