@@ -1,8 +1,8 @@
+use bubble_gw_rs::many_bubbles::bubbles::Bubbles;
+use bubble_gw_rs::many_bubbles::bulk_flow::BulkFlow;
+use bubble_gw_rs::many_bubbles::bulk_flow_segment::BulkFlow as BulkFlowSegment;
 use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
 use ndarray::{Array1, Array2, arr2};
-
-use bubble_gw_rs::many_bubbles::bulk_flow::{Bubbles, BulkFlow};
-use bubble_gw_rs::many_bubbles::bulk_flow_segment::BulkFlow as BulkFlowSegment;
 
 fn setup_bulk_flow() -> BulkFlow {
     let bubbles_interior = arr2(&[

@@ -65,6 +65,7 @@ name = "bubble_gw_py"
 version = "0.1.0"
 dependencies = [
  "bubble_gw_rs",
+ "csv",
  "ndarray",
  "num",
  "num-complex",

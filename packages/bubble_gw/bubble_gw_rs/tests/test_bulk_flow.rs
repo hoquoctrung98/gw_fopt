@@ -1,4 +1,5 @@
-use bubble_gw_rs::many_bubbles::bulk_flow::{Bubbles, BulkFlow};
+use bubble_gw_rs::many_bubbles::bubbles::Bubbles;
+use bubble_gw_rs::many_bubbles::bulk_flow::BulkFlow;
 use bubble_gw_rs::utils::is_close::IsClose;
 use ndarray::{Array1, Array2, arr2};
 use num::complex::Complex64;

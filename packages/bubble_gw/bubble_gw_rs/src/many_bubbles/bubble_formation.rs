@@ -982,24 +982,6 @@ impl<S: NucleationStrategy> BubbleFormationSimulator<S> {
         boundary_bubbles
     }
 
-    // /// Generates exterior bubbles for periodic boundary conditions in Cartesian lattices.
-    // ///
-    // /// # Returns
-    // ///
-    // /// An `Array2<f64>` with shape `(N, 4)`, where each row is `[time, x, y, z]` for exterior bubbles.
-    // /// Returns an empty array for non-Cartesian lattices.
-    // pub fn bubbles_exterior(&self) -> Array2<f64> {
-    //     if self.lattice.lattice_type != LatticeType::Cartesian {
-    //         return Array2::zeros((0, 4));
-    //     }
-    //     generate_bubbles_exterior(self.lattice.sizes, self.bubbles_interior())
-    // }
-
-    /// Returns exterior bubbles based on current boundary condition.
-    pub fn bubbles_exterior(&self, boundary_condition: BoundaryConditions) -> Array2<f64> {
-        generate_bubbles_exterior(&self.lattice, self.bubbles_interior(), boundary_condition)
-    }
-
     /// Returns the lattice used in the simulation.
     pub fn lattice(&self) -> &Lattice {
         &self.lattice

@@ -324,30 +324,6 @@ impl PyBubbleFormationSimulator {
         PyArray2::from_array(py, &bubbles_array).into()
     }
 
-    #[pyo3(name = "bubbles_exterior")]
-    fn py_bubbles_exterior(
-        &self,
-        py: Python,
-        boundary_condition: &str,
-    ) -> PyResult<Py<PyArray2<f64>>> {
-        let bc = match boundary_condition.to_lowercase().as_str() {
-            "periodic" => BoundaryConditions::Periodic,
-            "reflective" => BoundaryConditions::Reflection,
-            _ => {
-                return Err(PyValueError::new_err(
-                    "boundary_condition must be 'periodic' or 'reflective'",
-                ));
-            }
-        };
-
-        let exterior = match self.get_inner() {
-            BubbleFormationSimulatorWrapper::Poisson(sim) => sim.bubbles_exterior(bc),
-            BubbleFormationSimulatorWrapper::Manual(sim) => sim.bubbles_exterior(bc),
-        };
-
-        Ok(PyArray2::from_array(py, &exterior).into())
-    }
-
     #[getter]
     fn volume_remaining(&self) -> f64 {
         match self.get_inner() {

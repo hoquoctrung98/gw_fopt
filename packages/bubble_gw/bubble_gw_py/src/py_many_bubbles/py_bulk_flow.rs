@@ -1,4 +1,5 @@
-use bubble_gw_rs::many_bubbles::bulk_flow::{BubbleIndex, Bubbles, BulkFlow, BulkFlowError};
+use bubble_gw_rs::many_bubbles::bubbles::{BubbleIndex, Bubbles};
+use bubble_gw_rs::many_bubbles::bulk_flow::{BulkFlow, BulkFlowError};
 use ndarray::Array2;
 use numpy::{
     Complex64 as NumpyComplex64, PyArray1, PyArray2, PyArray3, PyArray4, PyArrayMethods,
@@ -7,6 +8,39 @@ use numpy::{
 use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
 use thiserror::Error;
+
+/// Python-facing error
+#[derive(Error, Debug)]
+pub enum PyBubblesError {
+    #[error("Array shape mismatch: {0}")]
+    ArrayShapeMismatch(String),
+
+    #[error("Bubble {a} is formed inside bubble {b} at initial time (overlapping light cones)")]
+    BubbleFormedInsideBubble { a: BubbleIndex, b: BubbleIndex },
+
+    #[error("CSV error: {0}")]
+    Csv(#[from] csv::Error),
+
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+
+    #[error("Parse float error at {path}:{line}: '{value}'")]
+    ParseFloat {
+        path: String,
+        line: usize,
+        value: String,
+    },
+
+    #[error("Invalid row in {path}:{line}: expected 4 columns, got {got}")]
+    InvalidColumnCount {
+        path: String,
+        line: usize,
+        got: usize,
+    },
+
+    #[error("Empty bubble file: {0}")]
+    EmptyFile(String),
+}
 
 /// Python-facing error
 #[derive(Error, Debug)]
@@ -34,6 +68,9 @@ pub enum PyBulkFlowError {
 
     #[error(transparent)]
     PyErr(#[from] pyo3::PyErr),
+
+    #[error("Bubbles Error")]
+    BubblesError,
 }
 
 impl From<BulkFlowError> for PyBulkFlowError {
@@ -54,6 +91,7 @@ impl From<BulkFlowError> for PyBulkFlowError {
             BulkFlowError::BubbleFormedInsideBubble { a, b } => {
                 PyBulkFlowError::BubbleFormedInsideBubble { a, b }
             }
+            BulkFlowError::BubblesError(..) => PyBulkFlowError::BubblesError,
         }
     }
 }
@@ -90,7 +128,8 @@ impl PyBulkFlow {
             .unwrap_or_else(|| Array2::zeros((0, 4)));
 
         let bulk_flow = BulkFlow::new(
-            Bubbles::new(bubbles_interior, bubbles_exterior, sort_by_time)?,
+            Bubbles::new(bubbles_interior, bubbles_exterior, sort_by_time)
+                .map_err(|e| BulkFlowError::BubblesError(e))?,
             num_threads,
         )?;
         Ok(PyBulkFlow { inner: bulk_flow })

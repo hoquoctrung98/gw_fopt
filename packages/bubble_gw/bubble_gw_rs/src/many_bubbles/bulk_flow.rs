@@ -1,16 +1,10 @@
+use crate::many_bubbles::bubbles::BubblesError;
+use crate::many_bubbles::bubbles::{BubbleIndex, Bubbles, dot_minkowski_vec};
 use ndarray::{Array1, Array2, Array3, Array4, ArrayView1, ArrayView2, Axis, Zip, azip, s, stack};
 use num_complex::Complex64;
 use rayon::ThreadPool;
 use rayon::prelude::*;
 use thiserror::Error;
-
-/// Represents a bubble index, distinguishing between an interior index, exterior index, and no collision.
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum BubbleIndex {
-    Interior(usize),
-    Exterior(usize),
-    None,
-}
 
 /// Represents the collision status of a direction relative to a reference bubble.
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -47,176 +41,9 @@ pub enum BulkFlowError {
 
     #[error("Bubble {a} is formed inside bubble {b} at initial time (overlapping light cones)")]
     BubbleFormedInsideBubble { a: BubbleIndex, b: BubbleIndex },
-}
-// Helper Display implementation for BubbleIndex used in the error message
-impl std::fmt::Display for BubbleIndex {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            BubbleIndex::Interior(i) => write!(f, "Interior({i})"),
-            BubbleIndex::Exterior(i) => write!(f, "Exterior({i})"),
-            BubbleIndex::None => write!(f, "None"),
-        }
-    }
-}
 
-// Checks if any bubble is contained within another at the initial time.
-fn check_bubble_formed_inside_bubble(
-    bubbles_interior: &Array2<f64>,
-    bubbles_exterior: &Array2<f64>,
-    delta_squared: &Array2<f64>,
-) -> Result<(), BulkFlowError> {
-    let n_interior = bubbles_interior.nrows();
-    let n_exterior = bubbles_exterior.nrows();
-
-    // Interior-Interior
-    for a_idx in 0..n_interior {
-        for b_idx in a_idx + 1..n_interior {
-            if delta_squared[[a_idx, b_idx]] < 0.0 {
-                return Err(BulkFlowError::BubbleFormedInsideBubble {
-                    a: BubbleIndex::Interior(a_idx),
-                    b: BubbleIndex::Interior(b_idx),
-                });
-            }
-        }
-    }
-
-    // Interior-Exterior
-    for a_idx in 0..n_interior {
-        for b_ex in 0..n_exterior {
-            let b_total = n_interior + b_ex;
-            if delta_squared[[a_idx, b_total]] < 0.0 {
-                return Err(BulkFlowError::BubbleFormedInsideBubble {
-                    a: BubbleIndex::Interior(a_idx),
-                    b: BubbleIndex::Exterior(b_ex),
-                });
-            }
-        }
-    }
-
-    // FIXME: temporarily ignore so that the periodic boundary condition works
-    // // Exterior-Exterior
-    // for a_ex in 0..n_exterior {
-    //     for b_ex in (a_ex + 1)..n_exterior {
-    //         let delta_ba = bubbles_exterior.slice(s![b_ex, ..]).to_owned()
-    //             - bubbles_exterior.slice(s![a_ex, ..]).to_owned();
-    //         let delta_ba_squared = dot_minkowski_vec(delta_ba.view(), delta_ba.view());
-    //         if delta_ba_squared < 0.0 {
-    //             return Err(BulkFlowError::BubbleFormedInsideBubble {
-    //                 a: BubbleIndex::Exterior(a_ex),
-    //                 b: BubbleIndex::Exterior(b_ex),
-    //             });
-    //         }
-    //     }
-    // }
-
-    Ok(())
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct Bubbles {
-    interior: Array2<f64>,
-    exterior: Array2<f64>,
-    delta: Array3<f64>,
-    delta_squared: Array2<f64>,
-}
-
-impl Bubbles {
-    pub fn new(
-        mut bubbles_interior: Array2<f64>,
-        mut bubbles_exterior: Array2<f64>,
-        sort_by_time: bool,
-    ) -> Result<Bubbles, BulkFlowError> {
-        // shape validation
-        if bubbles_interior.ncols() != 4 || bubbles_exterior.ncols() != 4 {
-            return Err(BulkFlowError::ArrayShapeMismatch(format!(
-                "Expected 4 columns, got {} for interior, {} for exterior",
-                bubbles_interior.ncols(),
-                bubbles_exterior.ncols()
-            )));
-        }
-
-        // optional sorting by formation time (column 3)
-        if sort_by_time {
-            // sort interior bubbles
-            let mut rows: Vec<(usize, Array1<f64>)> = bubbles_interior
-                .rows()
-                .into_iter()
-                .map(|r| r.to_owned()) // clone each row
-                .enumerate()
-                .collect();
-
-            rows.sort_by(|a, b| {
-                a.1[3]
-                    .partial_cmp(&b.1[3])
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            });
-
-            for (i, (_, row)) in rows.into_iter().enumerate() {
-                bubbles_interior.row_mut(i).assign(&row);
-            }
-
-            // sort exterior bubbles
-            if !bubbles_exterior.is_empty() {
-                let mut rows: Vec<(usize, Array1<f64>)> = bubbles_exterior
-                    .rows()
-                    .into_iter()
-                    .map(|r| r.to_owned())
-                    .enumerate()
-                    .collect();
-
-                rows.sort_by(|a, b| {
-                    a.1[3]
-                        .partial_cmp(&b.1[3])
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                });
-
-                for (i, (_, row)) in rows.into_iter().enumerate() {
-                    bubbles_exterior.row_mut(i).assign(&row);
-                }
-            }
-        }
-
-        let n_interior = bubbles_interior.nrows();
-        let n_exterior = bubbles_exterior.nrows();
-        let n_total = n_interior + n_exterior;
-
-        // Initialize delta and delta_squared
-        let mut delta = Array3::zeros((n_interior, n_total, 4));
-        let mut delta_squared = Array2::zeros((n_interior, n_total));
-
-        // Compute delta and delta_squared using symmetry for interior-interior
-        for a_idx in 0..n_interior {
-            // Interior to interior (upper triangular and diagonal)
-            for b_idx in a_idx..n_interior {
-                let delta_ba = bubbles_interior.slice(s![b_idx, ..]).to_owned()
-                    - bubbles_interior.slice(s![a_idx, ..]).to_owned();
-                delta.slice_mut(s![a_idx, b_idx, ..]).assign(&delta_ba);
-                delta_squared[[a_idx, b_idx]] = dot_minkowski_vec(delta_ba.view(), delta_ba.view());
-                // Symmetry: delta[b_idx, a_idx, ..] = -delta[a_idx, b_idx, ..]
-                delta.slice_mut(s![b_idx, a_idx, ..]).assign(&(-&delta_ba));
-                delta_squared[[b_idx, a_idx]] = delta_squared[[a_idx, b_idx]];
-            }
-            // Interior to exterior
-            for b_ex in 0..n_exterior {
-                let b_total = n_interior + b_ex;
-                let delta_ba = bubbles_exterior.slice(s![b_ex, ..]).to_owned()
-                    - bubbles_interior.slice(s![a_idx, ..]).to_owned();
-                delta.slice_mut(s![a_idx, b_total, ..]).assign(&delta_ba);
-                delta_squared[[a_idx, b_total]] =
-                    dot_minkowski_vec(delta_ba.view(), delta_ba.view());
-            }
-        }
-
-        // Check for bubble containment
-        check_bubble_formed_inside_bubble(&bubbles_interior, &bubbles_exterior, &delta_squared)?;
-
-        Ok(Bubbles {
-            interior: bubbles_interior,
-            exterior: bubbles_exterior,
-            delta,
-            delta_squared,
-        })
-    }
+    #[error("Bubbles Error")]
+    BubblesError(#[from] BubblesError),
 }
 
 pub struct BulkFlow {
@@ -1113,19 +940,6 @@ impl BulkFlow {
 
         Ok(c_total)
     }
-}
-
-pub fn dot_minkowski_vec(v1: ArrayView1<f64>, v2: ArrayView1<f64>) -> f64 {
-    assert!(v1.len() == 4 && v2.len() == 4, "4-vectors required");
-    let mut sum = 0.0;
-    unsafe {
-        for i in 0..4 {
-            let t1 = *v1.uget(i);
-            let t2 = *v2.uget(i);
-            sum += if i == 0 { -t1 * t2 } else { t1 * t2 };
-        }
-    }
-    sum
 }
 
 pub fn check_collision_point(
