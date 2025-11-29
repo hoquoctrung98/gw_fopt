@@ -22,7 +22,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     )
     .unwrap();
     let bubbles_exterior =
-        generate_bubbles_exterior(&lattice, bubbles_interior.clone(), BoundaryConditions::Periodic);
+        generate_bubbles_exterior(&lattice, bubbles_interior.view(), BoundaryConditions::Periodic);
 
     let mut bulk_flow =
         BulkFlow::new(Bubbles::new(bubbles_interior, bubbles_exterior, true)?, None)?;

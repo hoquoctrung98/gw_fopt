@@ -58,9 +58,9 @@ pub enum BubblesError {
 
 // Checks if any bubble is contained within another at the initial time.
 pub fn check_bubble_formed_inside_bubble(
-    bubbles_interior: &Array2<f64>,
-    bubbles_exterior: &Array2<f64>,
-    delta_squared: &Array2<f64>,
+    bubbles_interior: ArrayView2<f64>,
+    bubbles_exterior: ArrayView2<f64>,
+    delta_squared: ArrayView2<f64>,
 ) -> Result<(), BubblesError> {
     let n_interior = bubbles_interior.nrows();
     let n_exterior = bubbles_exterior.nrows();
@@ -188,7 +188,7 @@ impl Bubbles {
         let n_exterior = bubbles_exterior.nrows();
         let n_total = n_interior + n_exterior;
 
-        // Initialize delta and delta_squared
+        // Initialize `delta` and `delta_squared`
         let mut delta = Array3::zeros((n_interior, n_total, 4));
         let mut delta_squared = Array2::zeros((n_interior, n_total));
 
@@ -216,7 +216,11 @@ impl Bubbles {
         }
 
         // Check for bubble containment
-        check_bubble_formed_inside_bubble(&bubbles_interior, &bubbles_exterior, &delta_squared)?;
+        check_bubble_formed_inside_bubble(
+            bubbles_interior.view(),
+            bubbles_exterior.view(),
+            delta_squared.view(),
+        )?;
 
         Ok(Bubbles {
             interior: bubbles_interior,
@@ -243,11 +247,11 @@ impl Bubbles {
         exterior_path: P,
         sort_by_time: bool,
         has_headers: bool,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
+    ) -> Result<Self, BubblesError> {
         let interior = Self::load_bubbles_from_csv(interior_path, has_headers)?;
         let exterior = Self::load_bubbles_from_csv(exterior_path, has_headers)?;
 
-        Self::new(interior, exterior, sort_by_time).map_err(Into::into)
+        Ok(Self::new(interior, exterior, sort_by_time)?)
     }
 
     /// Load bubbles from a CSV file.
@@ -322,7 +326,7 @@ impl Bubbles {
             wtr.write_record(&["t", "x", "y", "z"])?;
         }
         for row in bubbles.rows() {
-            let fields: Vec<String> = row.iter().map(|&v| format!("{:.8e}", v)).collect();
+            let fields: Vec<String> = row.iter().map(|&v| format!("{:+.8e}", v)).collect();
             wtr.write_record(&fields)?;
         }
         wtr.flush()?;
@@ -356,6 +360,193 @@ impl Bubbles {
     ) -> Result<(), BubblesError> {
         self.save_interior_to_csv(&interior_path, has_headers)?;
         self.save_exterior_to_csv(&exterior_path, has_headers)?;
+        Ok(())
+    }
+
+    /// Add new interior bubbles, optionally checking causality only if requested.
+    /// This is much faster when adding many safe bubbles.
+    pub fn add_interior_bubbles(
+        &mut self,
+        new_bubbles: Array2<f64>,
+        check_bubbles_inside_bubbles: bool,
+    ) -> Result<(), BubblesError> {
+        if new_bubbles.ncols() != 4 {
+            return Err(BubblesError::ArrayShapeMismatch(format!(
+                "New interior bubbles must have 4 columns, got {}",
+                new_bubbles.ncols()
+            )));
+        }
+        if new_bubbles.is_empty() {
+            return Ok(());
+        }
+
+        let n_old = self.interior.nrows();
+        let n_new = new_bubbles.nrows();
+        let n_ext = self.exterior.nrows();
+        let n_total_old = n_old + n_ext;
+        let n_total_new = n_total_old + n_new;
+
+        // Extend interior
+        let mut extended_interior = Array2::zeros((n_old + n_new, 4));
+        extended_interior
+            .slice_mut(s![..n_old, ..])
+            .assign(&self.interior);
+        extended_interior
+            .slice_mut(s![n_old.., ..])
+            .assign(&new_bubbles);
+        self.interior = extended_interior;
+
+        // Extend delta and delta_squared
+        let mut new_delta = Array3::zeros((n_old + n_new, n_total_new, 4));
+        new_delta
+            .slice_mut(s![..n_old, ..n_total_old, ..])
+            .assign(&self.delta);
+
+        let mut new_delta_sq = Array2::zeros((n_old + n_new, n_total_new));
+        new_delta_sq
+            .slice_mut(s![..n_old, ..n_total_old])
+            .assign(&self.delta_squared);
+
+        // === Fill new entries ===
+        for i_new in 0..n_new {
+            let a_global = n_old + i_new;
+            let a_pos = self.interior.row(a_global);
+
+            // Against all old bubbles (interior + exterior)
+            for b in 0..n_total_old {
+                let b_pos = if b < n_old {
+                    self.interior.row(b)
+                } else {
+                    self.exterior.row(b - n_old)
+                };
+                let delta_ba = &b_pos - &a_pos;
+                let dsq = dot_minkowski_vec(delta_ba.view(), delta_ba.view());
+
+                new_delta.slice_mut(s![a_global, b, ..]).assign(&delta_ba);
+                new_delta_sq[[a_global, b]] = dsq;
+
+                if b < n_old {
+                    new_delta.slice_mut(s![b, a_global, ..]).assign(&-&delta_ba);
+                    new_delta_sq[[b, a_global]] = dsq;
+                }
+
+                if check_bubbles_inside_bubbles && dsq < 0.0 {
+                    let b_index = if b < n_old {
+                        BubbleIndex::Interior(b)
+                    } else {
+                        BubbleIndex::Exterior(b - n_old)
+                    };
+                    return Err(BubblesError::BubbleFormedInsideBubble {
+                        a: BubbleIndex::Interior(a_global),
+                        b: b_index,
+                    });
+                }
+            }
+
+            // New interior vs later new interior (upper triangle)
+            for j_new in (i_new + 1)..n_new {
+                let b_global = n_old + j_new;
+                let delta_ba = &self.interior.row(b_global) - &a_pos;
+                let dsq = dot_minkowski_vec(delta_ba.view(), delta_ba.view());
+
+                new_delta
+                    .slice_mut(s![a_global, b_global, ..])
+                    .assign(&delta_ba);
+                new_delta_sq[[a_global, b_global]] = dsq;
+                new_delta
+                    .slice_mut(s![b_global, a_global, ..])
+                    .assign(&-&delta_ba);
+                new_delta_sq[[b_global, a_global]] = dsq;
+
+                if check_bubbles_inside_bubbles && dsq < 0.0 {
+                    return Err(BubblesError::BubbleFormedInsideBubble {
+                        a: BubbleIndex::Interior(a_global),
+                        b: BubbleIndex::Interior(b_global),
+                    });
+                }
+            }
+        }
+
+        self.delta = new_delta;
+        self.delta_squared = new_delta_sq;
+        Ok(())
+    }
+
+    /// Add new exterior (periodic image) bubbles, optionally skipping causality checks.
+    pub fn add_exterior_bubbles(
+        &mut self,
+        new_bubbles: Array2<f64>,
+        check_bubbles_inside_bubbles: bool,
+    ) -> Result<(), BubblesError> {
+        if new_bubbles.ncols() != 4 {
+            return Err(BubblesError::ArrayShapeMismatch(format!(
+                "New exterior bubbles must have 4 columns, got {}",
+                new_bubbles.ncols()
+            )));
+        }
+        if new_bubbles.is_empty() {
+            return Ok(());
+        }
+
+        let n_int = self.interior.nrows();
+        let n_ext_old = self.exterior.nrows();
+        let n_new = new_bubbles.nrows();
+
+        // Extend exterior array
+        let mut extended_exterior = Array2::zeros((n_ext_old + n_new, 4));
+        extended_exterior
+            .slice_mut(s![..n_ext_old, ..])
+            .assign(&self.exterior);
+        extended_exterior
+            .slice_mut(s![n_ext_old.., ..])
+            .assign(&new_bubbles);
+        self.exterior = extended_exterior;
+
+        let n_total_new = n_int + n_ext_old + n_new;
+
+        // Extend delta and delta_squared (only columns grow)
+        let mut new_delta = Array3::zeros((n_int, n_total_new, 4));
+        new_delta
+            .slice_mut(s![.., ..n_int + n_ext_old, ..])
+            .assign(&self.delta);
+
+        let mut new_delta_sq = Array2::zeros((n_int, n_total_new));
+        new_delta_sq
+            .slice_mut(s![.., ..n_int + n_ext_old])
+            .assign(&self.delta_squared);
+
+        // Fill new columns: all interior → new exterior
+        for i in 0..n_int {
+            let a_pos = self.interior.row(i);
+            for j_new in 0..n_new {
+                let b_global = n_int + n_ext_old + j_new;
+                let b_pos = self.exterior.row(n_ext_old + j_new);
+                let delta_ba = &b_pos - &a_pos;
+                let dsq = dot_minkowski_vec(delta_ba.view(), delta_ba.view());
+
+                new_delta.slice_mut(s![i, b_global, ..]).assign(&delta_ba);
+                new_delta_sq[[i, b_global]] = dsq;
+
+                if check_bubbles_inside_bubbles && dsq < 0.0 {
+                    return Err(BubblesError::BubbleFormedInsideBubble {
+                        a: BubbleIndex::Interior(i),
+                        b: BubbleIndex::Exterior(n_ext_old + j_new),
+                    });
+                }
+            }
+        }
+
+        self.delta = new_delta;
+        self.delta_squared = new_delta_sq;
+        Ok(())
+    }
+
+    // sort the bubbles by reconstruct the whole instance of Bubbles again
+    pub fn sort_by_time(&mut self) -> Result<(), BubblesError> {
+        let interior = self.interior.clone();
+        let exterior = self.exterior.clone();
+        let sorted = Bubbles::new(interior, exterior, true)?;
+        *self = sorted;
         Ok(())
     }
 }

@@ -1,11 +1,13 @@
+use bubble_gw_rs::many_bubbles::bubbles::Bubbles;
 use bubble_gw_rs::many_bubbles::bulk_flow_segment::{BulkFlow, BulkFlowError};
 use ndarray::{Array1, Array2, arr2, s};
 
 fn main() -> Result<(), BulkFlowError> {
     let bubbles_interior = arr2(&[[0.0, 0.0, 10.0, 0.0], [1.0, 5.0, 0.0, 0.0]]);
     let bubbles_exterior = Array2::zeros((0, 4));
+    let bubbles = Bubbles::new(bubbles_interior, bubbles_exterior, true)?;
 
-    let mut bulk_flow = BulkFlow::new(bubbles_interior, bubbles_exterior, true, None)?;
+    let mut bulk_flow = BulkFlow::new(bubbles, None)?;
     bulk_flow.set_resolution(100, 200, true)?;
 
     let w_arr = Array1::geomspace(1e-2, 1e2, 100).unwrap().to_vec();

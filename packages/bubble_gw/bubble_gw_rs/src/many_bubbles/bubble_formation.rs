@@ -1,4 +1,4 @@
-use ndarray::Array2;
+use ndarray::{Array2, ArrayView2};
 use rand::random;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
@@ -67,7 +67,7 @@ impl std::hash::Hash for QuantizedPoint {
 }
 
 /// Enum representing the type of lattice.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum LatticeType {
     Cartesian { sizes: [f64; 3] },
     Sphere { radius: f64 },
@@ -77,7 +77,7 @@ pub enum LatticeType {
 ///
 /// The lattice defines the spatial boundaries and grid resolution for the bubble
 /// formation simulation. It supports volume calculations and grid point generation.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Lattice {
     pub lattice_type: LatticeType,
     pub n_grid: usize,
@@ -206,7 +206,7 @@ pub enum BoundaryConditions {
 /// `Array2<f64>` of shape `(M, 4)`: `[time, x, y, z]` for exterior bubbles.
 pub fn generate_bubbles_exterior(
     lattice: &Lattice,
-    bubbles_interior: Array2<f64>,
+    bubbles_interior: ArrayView2<f64>,
     boundary_condition: BoundaryConditions,
 ) -> Array2<f64> {
     if bubbles_interior.is_empty() {

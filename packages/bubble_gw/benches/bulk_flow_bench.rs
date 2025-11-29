@@ -36,8 +36,9 @@ fn setup_bulk_flow_segment() -> BulkFlowSegment {
         [0.0, 0.0, 2.0, 1.0],
     ]);
     let bubbles_exterior = Array2::zeros((0, 4));
-    let mut bf = BulkFlowSegment::new(bubbles_interior, bubbles_exterior, true, None)
-        .expect("Failed to create BulkFlowSegment");
+    let mut bf =
+        BulkFlowSegment::new(Bubbles::new(bubbles_interior, bubbles_exterior, true).unwrap(), None)
+            .expect("Failed to create BulkFlowSegment");
     bf.set_resolution(50, 100, true)
         .expect("Failed to set resolution");
     let coefficients_sets = vec![vec![0.0], vec![1.0]];
