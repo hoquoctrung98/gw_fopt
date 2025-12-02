@@ -4,4 +4,4 @@ from .bubble_envelope_mc import BubbleEnvelopeMC
 from .generic_potential import GenericPotential
 from .lattice_setup import LatticeSetup
 from .pde_bubble_solver import PDEBubbleSolver
-from .potentials import U1Potential, TobyQuarticPotential, GouldQuarticPotential
+from .potentials import U1Potential, QuarticPotential, GouldQuarticPotential, TobyQuarticPotential

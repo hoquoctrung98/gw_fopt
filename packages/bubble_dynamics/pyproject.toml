@@ -1,5 +1,5 @@
 [project]
-name = "pygw_fopt"
+name = "bubble_dynamics"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -17,7 +17,7 @@ dependencies = [
     "psweep>=0.13.0",
     "scipy>=1.16.2",
     "seaborn>=0.13.2",
-    "pyqt6>=6.9.1",
+    # "pyqt6>=6.9.1",
     "ipympl>=0.9.7",
     "h5py>=3.15.1",
     "pyyaml>=6.0.3",

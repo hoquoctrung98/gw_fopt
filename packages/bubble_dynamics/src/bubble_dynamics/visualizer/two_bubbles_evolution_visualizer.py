@@ -36,7 +36,6 @@ class TwoBubblesEvolutionVisualizer:
 
         # Compute rho_grad
         self.rho_grad = 0.5 * np.sum(np.gradient(self.phi1, self.dz, axis=2, edge_order=2)**2, axis=0)
-        self.rho_grad = np.maximum(self.rho_grad, 1e-10)
 
         # Compute s_col: time where rho_grad at z=0 is maximum
         z_zero_idx = np.argmin(np.abs(self.z_grid))  # Find index where z ≈ 0

@@ -12,26 +12,26 @@ from cosmoTransitions import pathDeformation
 class LatticeSetup:
     def __init__(self, potential):
         self.potential = potential
-        self.phi_absMin = None  # Initialize as None
-        self.phi_metaMin = None  # Initialize as None
+        self.phi_tv = None  # Initialize as None
+        self.phi_fv = None  # Initialize as None
         self.alpha = 3
         self.gamma = None
         self.d = None
 
-    def set_tunnelling_phi(self, phi_absMin, phi_metaMin):
-        """Set the phi_absMin and phi_metaMin for tunneling with validation."""
-        self.phi_absMin = np.array(phi_absMin)  # Shape: (Ndim,)
-        self.phi_metaMin = np.array(phi_metaMin)  # Shape: (Ndim,)
-        if self.phi_absMin.shape != (self.potential.Ndim,) or self.phi_metaMin.shape != (self.potential.Ndim,):
-            raise ValueError(f"phi_absMin and phi_metaMin must have shape ({self.potential.Ndim},)")
+    def set_tunnelling_phi(self, phi_tv, phi_fv):
+        """Set the phi_tv and phi_fv for tunneling with validation."""
+        self.phi_tv = np.array(phi_tv)  # Shape: (Ndim,)
+        self.phi_fv = np.array(phi_fv)  # Shape: (Ndim,)
+        if self.phi_tv.shape != (self.potential.Ndim,) or self.phi_fv.shape != (self.potential.Ndim,):
+            raise ValueError(f"phi_tv and phi_fv must have shape ({self.potential.Ndim},)")
 
     def find_profiles(self, npoints=1000):
         """Compute the tunneling profiles for all fields."""
-        if self.phi_absMin is None or self.phi_metaMin is None:
-            raise ValueError("phi_absMin and phi_metaMin must be set using set_tunnelling_phi before finding profiles.")
+        if self.phi_tv is None or self.phi_fv is None:
+            raise ValueError("phi_tv and phi_fv must be set using set_tunnelling_phi before finding profiles.")
         
         bubble = pathDeformation.fullTunneling(
-            [self.phi_absMin, self.phi_metaMin],
+            [self.phi_tv, self.phi_fv],
             self.potential.V0,
             self.potential.dV0,
             tunneling_init_params={"alpha": self.alpha},
@@ -111,8 +111,8 @@ class LatticeSetup:
                 # Value at the boundary (r_max)
                 phi_boundary = phi[-1, n]
                 # Exponential decay from phi_boundary to phi_metaMin
-                decay = (phi_boundary - self.phi_metaMin[n]) * np.exp(-decay_rate * r_excess)
-                phi_z[mask_outside, n] = self.phi_metaMin[n] + decay
+                decay = (phi_boundary - self.phi_fv[n]) * np.exp(-decay_rate * r_excess)
+                phi_z[mask_outside, n] = self.phi_fv[n] + decay
         
         return phi_z
 
@@ -135,8 +135,8 @@ class LatticeSetup:
             ax.plot(r, phi[:, n], label=f'Field {n}', color=colors[n])
             
             # Draw vertical dashed lines at inner and outer radii in the same color
-            ax.axvline(x=inner_radii[n], color=colors[n], linestyle='--', alpha=0.5, label=f'Inner Radius Field {n}' if n == 0 else "")
-            ax.axvline(x=outer_radii[n], color=colors[n], linestyle='--', alpha=0.5, label=f'Outer Radius Field {n}' if n == 0 else "")
+            ax.axvline(x=inner_radii[n], color=colors[n], linestyle='--', alpha=0.5, label=rf'$R^\text{{in}}_{n} = {inner_radii[n]:.2e}$' if n == 0 else "")
+            ax.axvline(x=outer_radii[n], color=colors[n], linestyle='--', alpha=0.5, label=rf'$R^\text{{out}}_{n} = {outer_radii[n]:.2e}$' if n == 0 else "")
             
             # Fill the region between inner and outer radii with transparency
             ax.fill_between(r, 0, phi[:, n], where=(r >= inner_radii[n]) & (r <= outer_radii[n]), 
@@ -149,7 +149,7 @@ class LatticeSetup:
         # Labels and legend
         ax.set_xlabel('r')
         ax.set_ylabel('Field profiles')
-        ax.set_title('Field profiles with inner and outer radii')
+        ax.set_title(rf'Field profiles, $L_w={np.max(outer_radii-inner_radii):.2e}$, $R_c={np.max(self.compute_radii()):.2f}$')
         ax.grid(True)
         
         return fig, ax

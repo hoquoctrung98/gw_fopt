@@ -42,7 +42,7 @@ pub struct TimeCutoffConfig {
 
 impl TimeCutoffConfig {
     pub fn new(smax: f64, ratio_t_cut: Option<f64>, ratio_t_0: Option<f64>) -> Self {
-        let t_cut = ratio_t_cut.unwrap_or(0.9999) * smax;
+        let t_cut = ratio_t_cut.unwrap_or(0.999999999) * smax;
         let t_0 = ratio_t_0.unwrap_or(0.25) * (smax - t_cut);
         Self { t_cut, t_0 }
     }
