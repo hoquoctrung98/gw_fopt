@@ -16,18 +16,16 @@ class GwTwoBubblesVisualizer():
         w_peak = 2*np.pi / self.df_filtered.d.values[0]
         w_arr = sample(*self.df_filtered.ratio_w_sample.values[0]) * w_peak
         cos_thetak_arr = sample(*self.df_filtered.cos_thetak_sample.values[0])
-        dcos = np.abs(cos_thetak_arr[1] - cos_thetak_arr[0])
         dE_dlogw_dcosthetak = self.df_filtered.dE_dlogw_dcosthetak.values[0]
-        spectrum = 2 * np.trapezoid(dE_dlogw_dcosthetak, axis=0, dx=dcos)
+        spectrum = 2 * np.trapezoid(dE_dlogw_dcosthetak, axis=0, x=cos_thetak_arr)
         return (w_arr, spectrum)
     
     def plot_gw_averaged(self, fig, ax, **kwargs_plot):
         w_peak = 2*np.pi / self.df_filtered.d.values[0]
         w_arr = sample(*self.df_filtered.ratio_w_sample.values[0]) * w_peak
         cos_thetak_arr = sample(*self.df_filtered.cos_thetak_sample.values[0])
-        dcos = np.abs(cos_thetak_arr[1] - cos_thetak_arr[0])
         dE_dlogw_dcosthetak = self.df_filtered.dE_dlogw_dcosthetak.values[0]
-        spectrum = 2 * np.trapezoid(dE_dlogw_dcosthetak, axis=0, dx=dcos)
+        spectrum = 2 * np.trapezoid(dE_dlogw_dcosthetak, axis=0, x=cos_thetak_arr)
         ax.plot(w_arr, spectrum, **kwargs_plot)
         ax.set_xscale("log")
         ax.set_yscale("log")

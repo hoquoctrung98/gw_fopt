@@ -104,7 +104,7 @@ class QuarticPotential(GenericPotential):
         self.phi_max = np.array([(c3 - np.sqrt(c3**2 - 4*c4*c2)) / (2*c4)])
         self.phi_tv = np.array([(c3 + np.sqrt(c3**2 - 4*c4*c2)) / (2*c4)])
         self.m2_fv = c2
-        self.m2_tv = c2**2 * (9 + 3*np.sqrt(9 - 8*lambdabar) - 8*lambdabar) / (4*lambdabar)
+        self.m2_tv = c2 * (9 + 3*np.sqrt(9 - 8*lambdabar) - 8*lambdabar) / (4*lambdabar)
         self.potential_fv = np.array([0.])
         self.potential_tv = np.array([(self.m2_fv**2 - self.m2_tv**2)/(12*c4)])
         self.rho_vacuum = self.potential_fv - self.potential_tv
