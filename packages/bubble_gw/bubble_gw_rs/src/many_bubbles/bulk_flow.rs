@@ -1,6 +1,6 @@
 use crate::many_bubbles::bubbles::BubblesError;
 use crate::many_bubbles::bubbles::{BubbleIndex, Bubbles, dot_minkowski_vec};
-use ndarray::{Array1, Array2, Array3, Array4, ArrayView1, ArrayView2, Axis, Zip, azip, s, stack};
+use ndarray::{Array1, Array2, Array3, Array4, ArrayRef1, ArrayRef2, Axis, Zip, azip, s, stack};
 use num_complex::Complex64;
 use rayon::prelude::*;
 use rayon::{ThreadPool, ThreadPoolBuildError, ThreadPoolBuilder};
@@ -149,7 +149,7 @@ impl BulkFlow {
                         }
                         let delta_ba = delta.slice(s![a_idx, b_total, ..]);
                         let delta_ba_squared = delta_squared[[a_idx, b_total]];
-                        let dot_ba_x = dot_minkowski_vec(delta_ba, x_vec);
+                        let dot_ba_x = dot_minkowski_vec(&delta_ba, &x_vec);
                         if dot_ba_x <= tolerance {
                             continue;
                         }
@@ -165,7 +165,7 @@ impl BulkFlow {
                                 continue;
                             }
                             let delta_ca = delta.slice(s![a_idx, c_total, ..]);
-                            if !check_collision_point(delta_ba, delta_ca, x_vec) {
+                            if !check_collision_point(&delta_ba, &delta_ca, &x_vec) {
                                 is_first = false;
                                 break;
                             }
@@ -366,8 +366,8 @@ impl BulkFlow {
         &self,
         a_idx: usize,
         t: f64,
-        first_bubble: ArrayView2<BubbleIndex>,
-        delta_tab_grid: ArrayView2<f64>,
+        first_bubble: &ArrayRef2<BubbleIndex>,
+        delta_tab_grid: &ArrayRef2<f64>,
     ) -> Result<Array2<CollisionStatus>, BulkFlowError> {
         let n_cos_thetax = self
             .n_cos_thetax
@@ -412,7 +412,7 @@ impl BulkFlow {
     pub fn compute_delta_tab(
         &self,
         a_idx: usize,
-        first_bubble: ArrayView2<BubbleIndex>,
+        first_bubble: &ArrayRef2<BubbleIndex>,
     ) -> Result<Array2<f64>, BulkFlowError> {
         let n_cos_thetax = self
             .n_cos_thetax
@@ -448,7 +448,7 @@ impl BulkFlow {
                 let delta_ba = self.bubbles.delta.slice(s![a_idx, b_total, ..]);
                 let x_vec = direction_vectors.slice(s![i, j, ..]);
                 let delta_ba_squared = self.bubbles.delta_squared[[a_idx, b_total]];
-                let dot_ba_x = dot_minkowski_vec(delta_ba, x_vec);
+                let dot_ba_x = dot_minkowski_vec(&delta_ba, &x_vec);
                 if dot_ba_x.abs() < 1e-10 {
                     delta_tab_grid[[i, j]] = 0.0;
                     continue;
@@ -464,8 +464,8 @@ impl BulkFlow {
     pub fn compute_b_integral(
         &self,
         cos_thetax_idx: usize,
-        collision_status_grid: ArrayView2<CollisionStatus>,
-        delta_tab_grid: ArrayView2<f64>,
+        collision_status_grid: &ArrayRef2<CollisionStatus>,
+        delta_tab_grid: &ArrayRef2<f64>,
         delta_ta: f64,
     ) -> Result<(Array1<f64>, Array1<f64>), BulkFlowError> {
         let n_cos_thetax = self
@@ -509,11 +509,10 @@ impl BulkFlow {
         let mut b_plus_arr = Array1::zeros(n_sets);
         let mut b_minus_arr = Array1::zeros(n_sets);
 
-        let phi_row = phix.view();
         let mut sin_2phi_row = Array1::zeros(n_phix);
         let mut cos_2phi_row = Array1::zeros(n_phix);
-        azip!((sin_2phi in &mut sin_2phi_row, &p in &phi_row) *sin_2phi = (2.0 * p).sin());
-        azip!((cos_2phi in &mut cos_2phi_row, &p in &phi_row) *cos_2phi = (2.0 * p).cos());
+        azip!((sin_2phi in &mut sin_2phi_row, p in phix) *sin_2phi = (2.0 * p).sin());
+        azip!((cos_2phi in &mut cos_2phi_row, p in phix) *cos_2phi = (2.0 * p).cos());
 
         let status_row = collision_status_grid.slice(s![cos_thetax_idx, ..]);
         let delta_tab_row = delta_tab_grid.slice(s![cos_thetax_idx, ..]);
@@ -575,8 +574,8 @@ impl BulkFlow {
         a_idx: usize,
         w_arr: W,
         t: f64,
-        first_bubble: ArrayView2<BubbleIndex>,
-        delta_tab_grid: ArrayView2<f64>,
+        first_bubble: &ArrayRef2<BubbleIndex>,
+        delta_tab_grid: &ArrayRef2<f64>,
     ) -> Result<(Array2<Complex64>, Array2<Complex64>), BulkFlowError>
     where
         W: AsRef<[f64]>,
@@ -612,7 +611,7 @@ impl BulkFlow {
 
         // Compute collision status grid
         let collision_status =
-            self.compute_collision_status(a_idx, t, first_bubble, delta_tab_grid)?;
+            self.compute_collision_status(a_idx, t, &first_bubble, &delta_tab_grid)?;
 
         let mut a_plus = Array2::<Complex64>::zeros((n_sets, n_w));
         let mut a_minus = Array2::<Complex64>::zeros((n_sets, n_w));
@@ -620,7 +619,7 @@ impl BulkFlow {
 
         for i in 0..n_cos_thetax {
             let (b_plus, b_minus) =
-                self.compute_b_integral(i, collision_status.view(), delta_tab_grid, delta_ta)?;
+                self.compute_b_integral(i, &collision_status, &delta_tab_grid, delta_ta)?;
 
             let cos_thetax_val = cos_thetax_grid[i];
             let phase_base = Complex64::new(0.0, -delta_ta * cos_thetax_val);
@@ -686,10 +685,7 @@ impl BulkFlow {
             } else {
                 self.compute_first_colliding_bubble(a_idx)?
             };
-        let first_colliding_bubbles_with_a = first_colliding_bubbles_with_a.view();
-
-        let delta_tab = self.compute_delta_tab(a_idx, first_colliding_bubbles_with_a)?;
-        let delta_tab = delta_tab.view();
+        let delta_tab = self.compute_delta_tab(a_idx, &first_colliding_bubbles_with_a)?;
 
         // Final result
         let mut c_integrand = Array4::<Complex64>::zeros((2, n_sets, n_w, n_t));
@@ -711,8 +707,8 @@ impl BulkFlow {
                         a_idx,
                         w_arr,
                         t,
-                        first_colliding_bubbles_with_a,
-                        delta_tab,
+                        &first_colliding_bubbles_with_a,
+                        &delta_tab,
                     )?;
 
                     let weight = if t_idx == 0 || t_idx == n_t - 1 {
@@ -787,10 +783,7 @@ impl BulkFlow {
             } else {
                 self.compute_first_colliding_bubble(a_idx)?
             };
-        let first_colliding_bubbles_with_a = first_colliding_bubbles_with_a.view();
-
-        let delta_tab = self.compute_delta_tab(a_idx, first_colliding_bubbles_with_a)?;
-        let delta_tab = delta_tab.view();
+        let delta_tab = self.compute_delta_tab(a_idx, &first_colliding_bubbles_with_a)?;
 
         let (c_plus, c_minus) = self.thread_pool.install(|| {
             t_arr
@@ -808,8 +801,8 @@ impl BulkFlow {
                                     a_idx,
                                     w_arr,
                                     t,
-                                    first_colliding_bubbles_with_a,
-                                    delta_tab,
+                                    &first_colliding_bubbles_with_a,
+                                    &delta_tab,
                                 )
                                 .unwrap();
                             for s in 0..n_sets {
@@ -951,11 +944,11 @@ impl BulkFlow {
 }
 
 pub fn check_collision_point(
-    delta_ba: ArrayView1<f64>,
-    delta_ca: ArrayView1<f64>,
-    x: ArrayView1<f64>,
+    delta_ba: &ArrayRef1<f64>,
+    delta_ca: &ArrayRef1<f64>,
+    x: &ArrayRef1<f64>,
 ) -> bool {
-    let delta_ba_dot_x = dot_minkowski_vec(delta_ba, x);
+    let delta_ba_dot_x = dot_minkowski_vec(&delta_ba, &x);
     if delta_ba_dot_x <= 0.0 {
         return false;
     }
@@ -969,6 +962,6 @@ pub fn check_collision_point(
         delta_ba_scaled - delta_ca_scaled
     };
 
-    let dot_collision_x = dot_minkowski_vec(collision_vec.view(), x);
+    let dot_collision_x = dot_minkowski_vec(&collision_vec, x);
     dot_collision_x > 0.0
 }

@@ -1,9 +1,9 @@
 use csv::{ReaderBuilder, Writer};
-use ndarray::{Array1, Array2, Array3, ArrayView1, ArrayView2, s};
+use ndarray::{Array1, Array2, Array3, ArrayRef1, ArrayRef2, s};
 use std::path::Path;
 use thiserror::Error;
 
-pub fn dot_minkowski_vec(v1: ArrayView1<f64>, v2: ArrayView1<f64>) -> f64 {
+pub fn dot_minkowski_vec(v1: &ArrayRef1<f64>, v2: &ArrayRef1<f64>) -> f64 {
     assert!(v1.len() == 4 && v2.len() == 4, "4-vectors required");
     let mut sum = 0.0;
     unsafe {
@@ -58,9 +58,9 @@ pub enum BubblesError {
 
 // Checks if any bubble is contained within another at the initial time.
 pub fn check_bubble_formed_inside_bubble(
-    bubbles_interior: ArrayView2<f64>,
-    bubbles_exterior: ArrayView2<f64>,
-    delta_squared: ArrayView2<f64>,
+    bubbles_interior: &ArrayRef2<f64>,
+    bubbles_exterior: &ArrayRef2<f64>,
+    delta_squared: &ArrayRef2<f64>,
 ) -> Result<(), BubblesError> {
     let n_interior = bubbles_interior.nrows();
     let n_exterior = bubbles_exterior.nrows();
@@ -199,7 +199,7 @@ impl Bubbles {
                 let delta_ba = bubbles_interior.slice(s![b_idx, ..]).to_owned()
                     - bubbles_interior.slice(s![a_idx, ..]).to_owned();
                 delta.slice_mut(s![a_idx, b_idx, ..]).assign(&delta_ba);
-                delta_squared[[a_idx, b_idx]] = dot_minkowski_vec(delta_ba.view(), delta_ba.view());
+                delta_squared[[a_idx, b_idx]] = dot_minkowski_vec(&delta_ba, &delta_ba);
                 // Symmetry: delta[b_idx, a_idx, ..] = -delta[a_idx, b_idx, ..]
                 delta.slice_mut(s![b_idx, a_idx, ..]).assign(&(-&delta_ba));
                 delta_squared[[b_idx, a_idx]] = delta_squared[[a_idx, b_idx]];
@@ -210,17 +210,12 @@ impl Bubbles {
                 let delta_ba = bubbles_exterior.slice(s![b_ex, ..]).to_owned()
                     - bubbles_interior.slice(s![a_idx, ..]).to_owned();
                 delta.slice_mut(s![a_idx, b_total, ..]).assign(&delta_ba);
-                delta_squared[[a_idx, b_total]] =
-                    dot_minkowski_vec(delta_ba.view(), delta_ba.view());
+                delta_squared[[a_idx, b_total]] = dot_minkowski_vec(&delta_ba, &delta_ba);
             }
         }
 
         // Check for bubble containment
-        check_bubble_formed_inside_bubble(
-            bubbles_interior.view(),
-            bubbles_exterior.view(),
-            delta_squared.view(),
-        )?;
+        check_bubble_formed_inside_bubble(&bubbles_interior, &bubbles_exterior, &delta_squared)?;
 
         Ok(Bubbles {
             interior: bubbles_interior,
@@ -317,7 +312,7 @@ impl Bubbles {
 
     /// Write bubbles to CSV with scientific notation e.8 and optional header
     fn write_bubbles_to_csv<P: AsRef<Path>>(
-        bubbles: ArrayView2<f64>,
+        bubbles: &ArrayRef2<f64>,
         path: P,
         has_headers: bool,
     ) -> Result<(), BubblesError> {
@@ -339,7 +334,7 @@ impl Bubbles {
         path: P,
         has_headers: bool,
     ) -> Result<(), BubblesError> {
-        Self::write_bubbles_to_csv(self.interior.view(), path, has_headers)
+        Self::write_bubbles_to_csv(&self.interior, path, has_headers)
     }
 
     /// Save exterior bubbles to CSV
@@ -348,7 +343,7 @@ impl Bubbles {
         path: P,
         has_headers: bool,
     ) -> Result<(), BubblesError> {
-        Self::write_bubbles_to_csv(self.exterior.view(), path, has_headers)
+        Self::write_bubbles_to_csv(&self.exterior, path, has_headers)
     }
 
     /// Save both interior and exterior with same header setting
@@ -420,7 +415,7 @@ impl Bubbles {
                     self.exterior.row(b - n_old)
                 };
                 let delta_ba = &b_pos - &a_pos;
-                let dsq = dot_minkowski_vec(delta_ba.view(), delta_ba.view());
+                let dsq = dot_minkowski_vec(&delta_ba, &delta_ba);
 
                 new_delta.slice_mut(s![a_global, b, ..]).assign(&delta_ba);
                 new_delta_sq[[a_global, b]] = dsq;
@@ -447,7 +442,7 @@ impl Bubbles {
             for j_new in (i_new + 1)..n_new {
                 let b_global = n_old + j_new;
                 let delta_ba = &self.interior.row(b_global) - &a_pos;
-                let dsq = dot_minkowski_vec(delta_ba.view(), delta_ba.view());
+                let dsq = dot_minkowski_vec(&delta_ba, &delta_ba);
 
                 new_delta
                     .slice_mut(s![a_global, b_global, ..])
@@ -522,7 +517,7 @@ impl Bubbles {
                 let b_global = n_int + n_ext_old + j_new;
                 let b_pos = self.exterior.row(n_ext_old + j_new);
                 let delta_ba = &b_pos - &a_pos;
-                let dsq = dot_minkowski_vec(delta_ba.view(), delta_ba.view());
+                let dsq = dot_minkowski_vec(&delta_ba, &delta_ba);
 
                 new_delta.slice_mut(s![i, b_global, ..]).assign(&delta_ba);
                 new_delta_sq[[i, b_global]] = dsq;

@@ -1,4 +1,4 @@
-use ndarray::{Array2, ArrayView2};
+use ndarray::{Array2, ArrayRef2};
 use rand::random;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
@@ -206,7 +206,7 @@ pub enum BoundaryConditions {
 /// `Array2<f64>` of shape `(M, 4)`: `[time, x, y, z]` for exterior bubbles.
 pub fn generate_bubbles_exterior(
     lattice: &Lattice,
-    bubbles_interior: ArrayView2<f64>,
+    bubbles_interior: &ArrayRef2<f64>,
     boundary_condition: BoundaryConditions,
 ) -> Array2<f64> {
     if bubbles_interior.is_empty() {

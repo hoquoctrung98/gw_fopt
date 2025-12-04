@@ -16,7 +16,7 @@ license="MIT"
 rust-version = "1.86"
 
 [workspace.dependencies]
-ndarray = {version = "0.16.1", features = ["rayon", "approx"]}
+ndarray = {version = "0.17.1", features = ["rayon", "approx"]}
 num-complex = "0.4.6"
 num = "0.4.3"
 num-traits = "0.2.19"

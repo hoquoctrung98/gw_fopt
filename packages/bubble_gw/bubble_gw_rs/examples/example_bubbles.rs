@@ -50,7 +50,7 @@ pub fn generate_random_bubbles(
     }
 
     let bubbles_exterior =
-        generate_bubbles_exterior(lattice, bubbles.interior.view(), BoundaryConditions::Reflection);
+        generate_bubbles_exterior(lattice, &bubbles.interior, BoundaryConditions::Reflection);
 
     bubbles.add_exterior_bubbles(bubbles_exterior, true)?;
 

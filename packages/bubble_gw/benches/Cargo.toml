@@ -10,7 +10,7 @@ rust-version.workspace = true
 
 [dependencies]
 bubble_gw_rs = { path = "../bubble_gw_rs" }
-criterion = {version = "0.7.0", features = ["html_reports"]}
+criterion = {version = "0.8.0", features = ["html_reports"]}
 ndarray = {workspace = true}
 num-traits = {workspace = true}
 

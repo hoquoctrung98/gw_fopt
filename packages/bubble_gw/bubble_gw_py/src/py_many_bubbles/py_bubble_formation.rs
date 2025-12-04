@@ -101,7 +101,7 @@ pub fn py_generate_bubbles_exterior(
     }
 
     // Call the new function
-    let result = generate_bubbles_exterior(&lattice.inner, bubbles_array.view(), bc);
+    let result = generate_bubbles_exterior(&lattice.inner, &bubbles_array, bc);
 
     Ok(PyArray2::from_array(py, &result).into())
 }

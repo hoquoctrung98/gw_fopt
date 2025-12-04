@@ -245,7 +245,7 @@ impl PyBulkFlow {
                 BubbleIndex::Exterior((-i - 2) as usize)
             }
         });
-        let delta_tab_grid = self.inner.compute_delta_tab(a_idx, first_bubble.view())?;
+        let delta_tab_grid = self.inner.compute_delta_tab(a_idx, &first_bubble)?;
         Ok(PyArray2::from_array(py, &delta_tab_grid).into())
     }
 
@@ -267,12 +267,9 @@ impl PyBulkFlow {
             }
         });
         let delta_tab_grid = delta_tab_grid.to_owned_array();
-        let collision_status = self.inner.compute_collision_status(
-            a_idx,
-            t,
-            first_bubble.view(),
-            delta_tab_grid.view(),
-        )?;
+        let collision_status =
+            self.inner
+                .compute_collision_status(a_idx, t, &first_bubble, &delta_tab_grid)?;
         let collision_status_int = collision_status.mapv(|s| s as i32);
         Ok(PyArray2::from_array(py, &collision_status_int).into())
     }
