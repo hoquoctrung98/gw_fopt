@@ -122,8 +122,13 @@ impl PyGravitationalWaveCalculator {
         Ok(Self { inner })
     }
 
+    pub fn set_num_threads(&mut self, num_threads: usize) -> PyResult<()> {
+        self.inner.set_num_threads(num_threads)?;
+        Ok(())
+    }
+
     fn set_integral_params(&mut self, tol: f64, max_iter: u32) -> PyResult<()> {
-        self.inner.set_integral_params(tol, max_iter)?; // Clean
+        self.inner.set_integral_params(tol, max_iter)?;
         Ok(())
     }
 

@@ -1,8 +1,8 @@
 use ndarray::prelude::*;
 use num_complex::Complex64;
 use peroxide::numerical::integral::{Integral::G30K61, gauss_kronrod_quadrature};
-use rayon::ThreadPool;
 use rayon::prelude::*;
+use rayon::{ThreadPool, ThreadPoolBuilder};
 
 use super::gw_integrand::{IntegrandCalculator, IntegrandType};
 use thiserror::Error;
@@ -162,6 +162,14 @@ impl GravitationalWaveCalculator {
             n_fields,
             thread_pool,
         })
+    }
+
+    pub fn set_num_threads(&mut self, num_threads: usize) -> Result<(), GWCalcError> {
+        self.thread_pool = ThreadPoolBuilder::new()
+            .num_threads(num_threads)
+            .build()
+            .map_err(GWCalcError::ThreadPoolBuildError)?;
+        Ok(())
     }
 
     pub fn set_integral_params(&mut self, tol: f64, max_iter: u32) -> Result<(), GWCalcError> {

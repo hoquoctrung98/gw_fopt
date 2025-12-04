@@ -2,8 +2,8 @@ use crate::many_bubbles::bubbles::BubblesError;
 use crate::many_bubbles::bubbles::{BubbleIndex, Bubbles, dot_minkowski_vec};
 use ndarray::{Array1, Array2, Array3, Array4, ArrayView1, ArrayView2, Axis, Zip, azip, s, stack};
 use num_complex::Complex64;
-use rayon::ThreadPool;
 use rayon::prelude::*;
+use rayon::{ThreadPool, ThreadPoolBuildError, ThreadPoolBuilder};
 use thiserror::Error;
 
 /// Represents the collision status of a direction relative to a reference bubble.
@@ -36,7 +36,7 @@ pub enum BulkFlowError {
     ThreadPoolBuildError(
         #[from]
         #[source]
-        rayon::ThreadPoolBuildError,
+        ThreadPoolBuildError,
     ),
 
     #[error("Bubble {a} is formed inside bubble {b} at initial time (overlapping light cones)")]
@@ -68,12 +68,12 @@ impl BulkFlow {
     /// * `sort_by_time`    – if `true` the two bubble lists are sorted by formation time
     pub fn new(bubbles: Bubbles, num_threads: Option<usize>) -> Result<Self, BulkFlowError> {
         let thread_pool = if let Some(n) = num_threads {
-            rayon::ThreadPoolBuilder::new().num_threads(n)
+            ThreadPoolBuilder::new().num_threads(n)
         } else {
             let default = std::thread::available_parallelism()
                 .map(|n| n.get())
                 .unwrap_or(1);
-            rayon::ThreadPoolBuilder::new().num_threads(default)
+            ThreadPoolBuilder::new().num_threads(default)
         }
         .build()
         .map_err(BulkFlowError::ThreadPoolBuildError)?;
@@ -92,6 +92,14 @@ impl BulkFlow {
             phix: None,
             direction_vectors: None,
         })
+    }
+
+    pub fn set_num_threads(&mut self, num_threads: usize) -> Result<(), BulkFlowError> {
+        self.thread_pool = ThreadPoolBuilder::new()
+            .num_threads(num_threads)
+            .build()
+            .map_err(BulkFlowError::ThreadPoolBuildError)?;
+        Ok(())
     }
 
     pub fn first_colliding_bubbles(&self) -> Option<&Array3<BubbleIndex>> {

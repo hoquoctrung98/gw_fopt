@@ -135,6 +135,11 @@ impl PyBulkFlow {
         Ok(PyBulkFlow { inner: bulk_flow })
     }
 
+    pub fn set_num_threads(&mut self, num_threads: usize) -> PyResult<()> {
+        self.inner.set_num_threads(num_threads)?;
+        Ok(())
+    }
+
     #[getter]
     pub fn bubbles_interior(&self, py: Python) -> Py<PyArray2<f64>> {
         PyArray2::from_array(py, self.inner.bubbles_interior()).into()
