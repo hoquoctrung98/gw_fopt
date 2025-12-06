@@ -1,4 +1,4 @@
-use bubble_gw_rs::utils::segment::*;
+use bubble_gw::utils::segment::*;
 
 fn collect_runs<'a, T: PartialEq + Clone, C: SegmentConstraint<T>>(
     seg: &ConstrainedSegment<'a, T, C>,

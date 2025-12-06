@@ -1,5 +1,5 @@
 [package]
-name = "bubble_gw_rs"
+name = "bubble_gw"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

@@ -1,5 +1,5 @@
-use bubble_gw_rs::utils::is_close::IsClose;
-use bubble_gw_rs::utils::sample::{SampleError, SampleParams, SampleType};
+use bubble_gw::utils::is_close::IsClose;
+use bubble_gw::utils::sample::{SampleError, SampleParams, SampleType};
 use ndarray::Array1;
 
 #[test]

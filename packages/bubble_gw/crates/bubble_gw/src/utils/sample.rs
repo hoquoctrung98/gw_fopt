@@ -94,7 +94,7 @@ where
     ///
     /// # Example
     /// ```rust
-    /// use bubble_gw_rs::utils::sample::{SampleParams, SampleType};
+    /// use bubble_gw::utils::sample::{SampleParams, SampleType};
     /// fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let params = SampleParams::new(1.0, 100.0, SampleType::Logarithmic { base: 10.0 })?;
     /// Ok(())

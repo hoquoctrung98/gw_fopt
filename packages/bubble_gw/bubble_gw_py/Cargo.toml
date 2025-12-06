@@ -16,7 +16,7 @@ crate-type = ["cdylib", "lib"]
 ndarray = {workspace = true}
 num-complex = {workspace = true}
 num = {workspace = true}
-bubble_gw_rs = { path = "../bubble_gw_rs" }
+bubble_gw = { path = "../crates/bubble_gw" }
 pyo3 = { version = "0.27", features = ["extension-module", "num-complex"] }
 numpy = "0.27.1"
 thiserror = "2.0.17"

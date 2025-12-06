@@ -1,8 +1,11 @@
 [workspace]
 members = [
-    "bubble_gw_rs",
-    "benches",
-    "bubble_gw_py",
+  "crates/*",
+  "bubble_gw_py",
+]
+default-members = [
+  "crates/*",
+  "bubble_gw_py",
 ]
 resolver = "2"
 

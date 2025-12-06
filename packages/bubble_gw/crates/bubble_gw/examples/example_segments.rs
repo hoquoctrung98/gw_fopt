@@ -1,4 +1,4 @@
-use bubble_gw_rs::utils::segment::*;
+use bubble_gw::utils::segment::*;
 use std::fmt::Debug;
 
 fn print_segments<T: Debug + PartialEq>(

@@ -60,32 +60,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
-name = "bubble_gw_benchmarks"
-version = "0.1.0"
-dependencies = [
- "bubble_gw_rs",
- "criterion",
- "ndarray",
- "num-traits",
-]
-
-[[package]]
-name = "bubble_gw_py"
-version = "0.1.0"
-dependencies = [
- "bubble_gw_rs",
- "csv",
- "ndarray",
- "num",
- "num-complex",
- "numpy",
- "pyo3",
- "pyo3-build-config",
- "thiserror",
-]
-
-[[package]]
-name = "bubble_gw_rs"
+name = "bubble_gw"
 version = "0.1.0"
 dependencies = [
  "array-init",
@@ -100,6 +75,31 @@ dependencies = [
  "rand_distr",
  "rayon",
  "serde",
+ "thiserror",
+]
+
+[[package]]
+name = "bubble_gw_benchmarks"
+version = "0.1.0"
+dependencies = [
+ "bubble_gw",
+ "criterion",
+ "ndarray",
+ "num-traits",
+]
+
+[[package]]
+name = "bubble_gw_py"
+version = "0.1.0"
+dependencies = [
+ "bubble_gw",
+ "csv",
+ "ndarray",
+ "num",
+ "num-complex",
+ "numpy",
+ "pyo3",
+ "pyo3-build-config",
  "thiserror",
 ]
 

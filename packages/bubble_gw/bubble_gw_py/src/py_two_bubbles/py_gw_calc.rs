@@ -6,7 +6,7 @@ use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use thiserror::Error;
 
-use bubble_gw_rs::two_bubbles::gw_calc::{
+use bubble_gw::two_bubbles::gw_calc::{
     GWCalcError, GravitationalWaveCalculator, InitialFieldStatus,
 };
 

@@ -1,7 +1,7 @@
-use bubble_gw_rs::many_bubbles::bubble_formation::{
+use bubble_gw::many_bubbles::bubble_formation::{
     BoundaryConditions, Lattice, LatticeType, generate_bubbles_exterior,
 };
-use bubble_gw_rs::many_bubbles::bubbles::{Bubbles, BubblesError};
+use bubble_gw::many_bubbles::bubbles::{Bubbles, BubblesError};
 use ndarray::{Array2, arr2};
 use rand::{self, Rng, SeedableRng};
 

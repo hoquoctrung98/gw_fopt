@@ -1,30 +1,13 @@
-use bubble_gw_rs::many_bubbles::bubble_formation::{
-    BoundaryConditions, Lattice, LatticeType, generate_bubbles_exterior,
-};
-use bubble_gw_rs::many_bubbles::bubbles::Bubbles;
-use bubble_gw_rs::many_bubbles::bulk_flow::{BulkFlow, BulkFlowError};
-use ndarray::prelude::*;
-use std::error::Error;
+use bubble_gw::many_bubbles::bubbles::Bubbles;
+use bubble_gw::many_bubbles::bulk_flow_segment::{BulkFlow, BulkFlowError};
+use ndarray::{Array1, Array2, arr2, s};
 
-fn main() -> Result<(), Box<dyn Error>> {
-    let bubbles_interior = arr2(&[
-        [0.0, 0.0, 9.0, 0.0],
-        [0.0, 0.0, 0.0, 0.0],
-        [0.0, 4.0, 0.0, 4.0],
-        [0.0, 4.0, 2.0, 4.0],
-        [0.0, 0.0, 2.0, 1.0],
-    ]);
-    let lattice = Lattice::new(
-        LatticeType::Cartesian {
-            sizes: [10., 10., 10.],
-        },
-        100,
-    )
-    .unwrap();
-    let bubbles_exterior =
-        generate_bubbles_exterior(&lattice, &bubbles_interior, BoundaryConditions::Periodic);
+fn main() -> Result<(), BulkFlowError> {
+    let bubbles_interior = arr2(&[[0.0, 0.0, 10.0, 0.0], [1.0, 5.0, 0.0, 0.0]]);
+    let bubbles_exterior = Array2::zeros((0, 4));
+    let bubbles = Bubbles::new(bubbles_interior, bubbles_exterior, true)?;
 
-    let mut bulk_flow = BulkFlow::new(Bubbles::new(bubbles_interior, bubbles_exterior, true)?)?;
+    let mut bulk_flow = BulkFlow::new(bubbles, None)?;
     bulk_flow.set_resolution(100, 200, true)?;
 
     let w_arr = Array1::geomspace(1e-2, 1e2, 100).unwrap().to_vec();

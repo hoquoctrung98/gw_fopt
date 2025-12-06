@@ -1,5 +1,5 @@
-use bubble_gw_rs::many_bubbles::bubbles::{BubbleIndex, Bubbles};
-use bubble_gw_rs::many_bubbles::bulk_flow::{BulkFlow, BulkFlowError};
+use bubble_gw::many_bubbles::bubbles::{BubbleIndex, Bubbles};
+use bubble_gw::many_bubbles::bulk_flow::{BulkFlow, BulkFlowError};
 use ndarray::Array2;
 use numpy::{
     Complex64 as NumpyComplex64, PyArray1, PyArray2, PyArray3, PyArray4, PyArrayMethods,

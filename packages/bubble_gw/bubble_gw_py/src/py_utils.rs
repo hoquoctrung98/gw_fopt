@@ -1,4 +1,4 @@
-use bubble_gw_rs::utils::sample::{SampleError, SampleParams, SampleType};
+use bubble_gw::utils::sample::{SampleError, SampleParams, SampleType};
 use numpy::{PyArray1, ToPyArray};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;

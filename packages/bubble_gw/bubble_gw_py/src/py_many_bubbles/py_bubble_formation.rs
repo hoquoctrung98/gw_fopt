@@ -1,4 +1,4 @@
-use bubble_gw_rs::many_bubbles::bubble_formation::{
+use bubble_gw::many_bubbles::bubble_formation::{
     BoundaryConditions, BubbleFormationSimulator, Lattice, LatticeType, ManualNucleation,
     PoissonNucleation, SimulationEndStatus, generate_bubbles_exterior,
 };

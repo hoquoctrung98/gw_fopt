@@ -1,5 +1,5 @@
-use bubble_gw_rs::utils::integrate::Integrate;
-use bubble_gw_rs::utils::is_close::IsClose;
+use bubble_gw::utils::integrate::Integrate;
+use bubble_gw::utils::is_close::IsClose;
 use ndarray::{Array, Array1, Array2};
 use num::complex::Complex;
 

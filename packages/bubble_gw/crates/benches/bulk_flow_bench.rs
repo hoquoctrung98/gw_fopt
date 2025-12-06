@@ -1,6 +1,6 @@
-use bubble_gw_rs::many_bubbles::bubbles::Bubbles;
-use bubble_gw_rs::many_bubbles::bulk_flow::BulkFlow;
-use bubble_gw_rs::many_bubbles::bulk_flow_segment::BulkFlow as BulkFlowSegment;
+use bubble_gw::many_bubbles::bubbles::Bubbles;
+use bubble_gw::many_bubbles::bulk_flow::BulkFlow;
+use bubble_gw::many_bubbles::bulk_flow_segment::BulkFlow as BulkFlowSegment;
 use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
 use ndarray::{Array1, Array2, arr2};
 
