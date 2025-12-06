@@ -83,7 +83,7 @@ pub struct PyGravitationalWaveCalculator {
 #[pymethods]
 impl PyGravitationalWaveCalculator {
     #[new]
-    #[pyo3(signature = (initial_field_status, phi1, phi2, z_grid, ds, ratio_t_cut = None, ratio_t_0 = None, num_threads = None))]
+    #[pyo3(signature = (initial_field_status, phi1, phi2, z_grid, ds, ratio_t_cut = None, ratio_t_0 = None))]
     fn new(
         initial_field_status: &str,
         phi1: PyReadonlyArray3<f64>,
@@ -92,7 +92,6 @@ impl PyGravitationalWaveCalculator {
         ds: f64,
         ratio_t_cut: Option<f64>,
         ratio_t_0: Option<f64>,
-        num_threads: Option<usize>,
     ) -> PyResult<Self> {
         let phi1 = phi1.to_owned_array();
         let phi2 = phi2.to_owned_array();
@@ -116,7 +115,6 @@ impl PyGravitationalWaveCalculator {
             ds,
             ratio_t_cut,
             ratio_t_0,
-            num_threads,
         )?;
 
         Ok(Self { inner })

@@ -15,7 +15,6 @@ fn setup_bulk_flow() -> BulkFlow {
     let bubbles_exterior = Array2::zeros((0, 4));
     let mut bf = BulkFlow::new(
         Bubbles::new(bubbles_interior, bubbles_exterior, true).expect("Failed to parse bubbles"),
-        None,
     )
     .expect("Failed to create BulkFlow");
     bf.set_resolution(50, 100, true)
