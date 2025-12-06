@@ -1,5 +1,5 @@
 use csv::{ReaderBuilder, Writer};
-use ndarray::{Array1, Array2, Array3, ArrayRef1, ArrayRef2, s};
+use ndarray::prelude::*;
 use std::path::Path;
 use thiserror::Error;
 

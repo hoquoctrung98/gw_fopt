@@ -1,6 +1,7 @@
 use crate::many_bubbles::bubbles::BubblesError;
 use crate::many_bubbles::bubbles::{BubbleIndex, Bubbles, dot_minkowski_vec};
-use ndarray::{Array1, Array2, Array3, Array4, ArrayRef1, ArrayRef2, Axis, Zip, azip, s, stack};
+use ndarray::prelude::*;
+use ndarray::{Zip, stack};
 use num_complex::Complex64;
 use rayon::prelude::*;
 use rayon::{ThreadPool, ThreadPoolBuildError, ThreadPoolBuilder};
@@ -66,17 +67,14 @@ impl BulkFlow {
     ///
     /// * `bubbles` – spacetime coordinates of nucleated bubbles inside and outside the lattice
     /// * `sort_by_time`    – if `true` the two bubble lists are sorted by formation time
-    pub fn new(bubbles: Bubbles, num_threads: Option<usize>) -> Result<Self, BulkFlowError> {
-        let thread_pool = if let Some(n) = num_threads {
-            ThreadPoolBuilder::new().num_threads(n)
-        } else {
-            let default = std::thread::available_parallelism()
-                .map(|n| n.get())
-                .unwrap_or(1);
-            ThreadPoolBuilder::new().num_threads(default)
-        }
-        .build()
-        .map_err(BulkFlowError::ThreadPoolBuildError)?;
+    pub fn new(bubbles: Bubbles) -> Result<Self, BulkFlowError> {
+        let default_num_threads = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1);
+        let thread_pool = ThreadPoolBuilder::new()
+            .num_threads(default_num_threads)
+            .build()
+            .map_err(BulkFlowError::ThreadPoolBuildError)?;
 
         Ok(BulkFlow {
             bubbles,

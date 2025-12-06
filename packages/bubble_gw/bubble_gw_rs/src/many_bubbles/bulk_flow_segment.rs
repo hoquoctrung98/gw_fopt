@@ -1,7 +1,8 @@
 use crate::many_bubbles::bubbles::BubblesError;
 use crate::many_bubbles::bubbles::{BubbleIndex, Bubbles, dot_minkowski_vec};
 use crate::utils::segment::{TryIntoConstrainedSegment, Unconstrained};
-use ndarray::{Array1, Array2, Array3, Array4, ArrayRef1, ArrayRef2, Axis, Zip, azip, s, stack};
+use ndarray::prelude::*;
+use ndarray::{Zip, stack};
 use num_complex::Complex64;
 use rayon::ThreadPool;
 use rayon::prelude::*;

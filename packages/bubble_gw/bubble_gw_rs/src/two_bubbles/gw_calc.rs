@@ -109,7 +109,6 @@ impl GravitationalWaveCalculator {
         ds: f64,
         ratio_t_cut: Option<f64>,
         ratio_t_0: Option<f64>,
-        num_threads: Option<usize>,
     ) -> Result<Self, GWCalcError> {
         let n_fields = phi1.shape()[0];
         let n_s = phi1.shape()[1];
@@ -139,16 +138,13 @@ impl GravitationalWaveCalculator {
 
         let s_offset: Array1<f64> = lattice.s_grid.slice(s![1..]).mapv(|s| s - 0.5 * ds);
 
-        let thread_pool = if let Some(n) = num_threads {
-            rayon::ThreadPoolBuilder::new().num_threads(n)
-        } else {
-            let default = std::thread::available_parallelism()
-                .map(|n| n.get())
-                .unwrap_or(1);
-            rayon::ThreadPoolBuilder::new().num_threads(default)
-        }
-        .build()
-        .map_err(GWCalcError::ThreadPoolBuildError)?;
+        let default_num_threads = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1);
+        let thread_pool = ThreadPoolBuilder::new()
+            .num_threads(default_num_threads)
+            .build()
+            .map_err(GWCalcError::ThreadPoolBuildError)?;
 
         Ok(GravitationalWaveCalculator {
             phi1,
