@@ -9,9 +9,9 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from pygw_fopt.bubble_simulator import LatticeSetup, PDEBubbleSolver
-from pygw_fopt.bubble_simulator.potentials import QuarticPotential
-from pygw_fopt.visualizer import TwoBubblesEvolutionVisualizer
+from bubble_dynamics.bubble_simulator import LatticeSetup, PDEBubbleSolver
+from bubble_dynamics.bubble_simulator.potentials import QuarticPotential
+from bubble_dynamics.visualizer import TwoBubblesEvolutionVisualizer
 from bubble_gw import two_bubbles
 from bubble_gw.utils import sample
 
@@ -51,7 +51,7 @@ smax = d * 2 # simulation time
 
 setup.set_tunnelling_phi(phi_absMin=phi_absMin, phi_metaMin=phi_metaMin)
 setup.set_d(d=d)
-z_grid, phi_initial, d = setup.two_bubbles(type="full", scale_dz=scale_dz, scale_z=scale_z)
+z_grid, phi_initial, d = setup.two_bubbles(layout="full", scale_dz=scale_dz, scale_z=scale_z)
 phi_initial = phi_initial.T # initial 2-bubbles profile
 dz = abs(z_grid[1] - z_grid[0]) # space step
 ds = dz*0.9 # time step

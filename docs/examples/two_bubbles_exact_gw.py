@@ -9,9 +9,9 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from pygw_fopt.bubble_simulator import LatticeSetup, PDEBubbleSolver
-from pygw_fopt.bubble_simulator.potentials import QuarticPotential
-from pygw_fopt.visualizer import TwoBubblesEvolutionVisualizer
+from bubble_dynamics.bubble_simulator import LatticeSetup, PDEBubbleSolver
+from bubble_dynamics.bubble_simulator.potentials import QuarticPotential
+from bubble_dynamics.visualizer import TwoBubblesEvolutionVisualizer
 from bubble_gw import two_bubbles
 from bubble_gw.utils import sample
 
@@ -51,7 +51,7 @@ smax = d * 2 # simulation time
 
 setup.set_tunnelling_phi(phi_absMin=phi_absMin, phi_metaMin=phi_metaMin)
 setup.set_d(d=d)
-z_grid, phi_initial, d = setup.two_bubbles(type="full", scale_dz=scale_dz, scale_z=scale_z)
+z_grid, phi_initial, d = setup.two_bubbles(layout="full", scale_dz=scale_dz, scale_z=scale_z)
 phi_initial = phi_initial.T # initial 2-bubbles profile
 dz = abs(z_grid[1] - z_grid[0]) # space step
 ds = dz*0.9 # time step
@@ -65,10 +65,10 @@ solver.compute_phi_region2()
 w_arr = sample(1e-3, 1e1, 100, 2, 0, 'log') # array of frequencies
 gw_calc = two_bubbles.GravitationalWaveCalculator(initial_field_status="two_bubbles", phi1=solver.phi1, phi2=solver.phi2, z_grid=solver.z_grid, ds=solver.ds*solver.history_interval)
 gw_calc.set_integral_params(tol=1e-7, max_iter=20)
-dE_dlogw_dcosthetak= gw_calc.compute_angular_gw_spectrum(w_arr=w_arr, cos_thetak_arr=np.full(len(w_arr), 0))
+dE_dlogw_dcosthetak= gw_calc.compute_angular_gw_spectrum(w_arr=w_arr, cos_thetak_arr=[0.])
 
 fig, ax = plt.subplots()
-ax.plot(w_arr, dE_dlogw_dcosthetak, marker='o', ms=4)
+ax.plot(w_arr, dE_dlogw_dcosthetak.mean(axis=0), marker='o', ms=4)
 ax.set_xscale("log")
 ax.set_yscale("log")
 ax.grid(True)
