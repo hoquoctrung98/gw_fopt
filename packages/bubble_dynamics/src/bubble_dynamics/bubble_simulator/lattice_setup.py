@@ -162,17 +162,17 @@ class LatticeSetup:
         self.d = d
         self.gamma = None
 
-    def two_bubbles(self, type="positive half", npoints=1000, dz_max = 0.1, scale_dz = 1.0, scale_z = 3.0):
+    def two_bubbles(self, layout="positive half", npoints=1000, dz_max = 0.1, scale_dz = 1.0, scale_z = 3.0):
         """
         Compute the z_arr and interpolated profiles for two bubbles configuration.
         
         Parameters:
-        - type: "full" for two bubbles at ±d, "positive half" for one bubble at d/2, 
+        - layout: "full" for two bubbles at ±d, "positive half" for one bubble at d/2, 
                 "negative half" for one bubble at -d/2 (default "positive half")
         - npoints: Number of points to use in find_profiles (default 1000)
         
         Returns:
-        - z_arr: Array of z values (range depends on type)
+        - z_arr: Array of z values (range depends on layout)
         - phi_z: Interpolated profiles (sum of two for "full", single for "positive half" or "negative half")
         - d: Distance between bubble centers (for "full") or twice the center position (for "half" types)
         """
@@ -206,24 +206,24 @@ class LatticeSetup:
         dz *= scale_dz
         dz = min(dz, dz_max)
         
-        if type == "full":
+        if layout == "full":
             # Create z_arr from -3d to 3d with step dz
             z_arr = np.arange(-scale_z * d, scale_z * d + dz, dz)
             # Interpolate profiles centered at z0 = -d and z0 = d, then sum them
             phi_z1 = self.interpolate_profiles(z_arr, z0=-d/2, npoints=npoints)
             phi_z2 = self.interpolate_profiles(z_arr, z0=d/2, npoints=npoints)
             phi_z = phi_z1 + phi_z2
-        elif type == "positive half":
+        elif layout == "positive half":
             # Create z_arr from 0 to 3d with step dz
             z_arr = np.arange(0, scale_z * d + dz, dz)
             # Interpolate a single profile centered at z0 = d/2
             phi_z = self.interpolate_profiles(z_arr, z0=d/2, npoints=npoints)
-        elif type == "negative half":
+        elif layout == "negative half":
             # Create z_arr from -3d to 0 with step dz
             z_arr = np.arange(-scale_z * d, 0 + dz, dz)
             # Interpolate a single profile centered at z0 = -d/2
             phi_z = self.interpolate_profiles(z_arr, z0=-d/2, npoints=npoints)
         else:
-            raise ValueError("type must be either 'full', 'positive half', or 'negative half'")
+            raise ValueError("layout must be either 'full', 'positive half', or 'negative half'")
         
         return z_arr, phi_z, d
