@@ -1,8 +1,10 @@
+use crate::many_bubbles::bubbles::{Bubbles, BubblesError};
 use ndarray::{Array2, ArrayRef2};
 use rand::random;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use rayon::prelude::*;
+use std::borrow::Borrow;
 use std::collections::HashSet;
 
 /// Enum representing the reason why the simulation stopped.
@@ -1044,4 +1046,53 @@ impl<S: NucleationStrategy> BubbleFormationSimulator<S> {
     pub fn get_volume_history(&self) -> Vec<(f64, f64)> {
         self.volume_history.clone()
     }
+}
+
+pub fn generate_random_bubbles(
+    lattice: impl Borrow<Lattice>,
+    boundary_condition: BoundaryConditions,
+    t_begin: f64,
+    t_end: f64,
+    n_bubbles: usize,
+    seed: Option<u64>,
+) -> Result<Bubbles, BubblesError> {
+    let lattice = lattice.borrow();
+    let mut rng = match seed {
+        Some(seed_value) => StdRng::seed_from_u64(seed_value),
+        None => StdRng::seed_from_u64(random::<u64>()),
+    };
+    let bounds = lattice.lattice_bounds();
+    let [x_r, y_r, z_r] = [bounds[0], bounds[1], bounds[2]].map(|(lo, hi)| lo..=hi);
+
+    // Start with a valid empty configuration
+    let mut bubbles = Bubbles::new(
+        Array2::zeros((0, 4)),
+        Array2::zeros((0, 4)),
+        false, // no sorting yet
+    )?;
+
+    // Generate interior bubbles one by one with rejection sampling
+    for _ in 0..n_bubbles {
+        loop {
+            let t = rng.random_range(t_begin..=t_end);
+            let x = rng.random_range(x_r.clone());
+            let y = rng.random_range(y_r.clone());
+            let z = rng.random_range(z_r.clone());
+
+            let candidate = Array2::from_shape_vec((1, 4), vec![t, x, y, z])
+                .expect("Failed to create candidate row");
+
+            if bubbles.add_interior_bubbles(candidate, true).is_ok() {
+                break;
+            }
+        }
+    }
+
+    let bubbles_exterior =
+        generate_bubbles_exterior(lattice, &bubbles.interior, boundary_condition);
+
+    bubbles.add_exterior_bubbles(bubbles_exterior, true)?;
+
+    bubbles.sort_by_time()?;
+    Ok(bubbles)
 }

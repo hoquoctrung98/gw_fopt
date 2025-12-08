@@ -1,62 +1,9 @@
 use bubble_gw::many_bubbles::bubble_formation::{
-    BoundaryConditions, Lattice, LatticeType, generate_bubbles_exterior,
+    BoundaryConditions, Lattice, LatticeType, generate_random_bubbles,
 };
-use bubble_gw::many_bubbles::bubbles::{Bubbles, BubblesError};
-use ndarray::{Array2, arr2};
-use rand::{self, Rng, SeedableRng};
-
-use rand::random;
-use rand::rngs::StdRng;
-use std::borrow::Borrow;
+use bubble_gw::many_bubbles::bubbles::Bubbles;
+use ndarray::arr2;
 use std::error::Error;
-
-pub fn generate_random_bubbles(
-    lattice: impl Borrow<Lattice>,
-    t_begin: f64,
-    t_end: f64,
-    n_bubbles: usize,
-    seed: Option<u64>,
-) -> Result<Bubbles, BubblesError> {
-    let lattice = lattice.borrow();
-    let mut rng = match seed {
-        Some(seed_value) => StdRng::seed_from_u64(seed_value),
-        None => StdRng::seed_from_u64(random::<u64>()),
-    };
-    let bounds = lattice.lattice_bounds();
-    let [x_r, y_r, z_r] = [bounds[0], bounds[1], bounds[2]].map(|(lo, hi)| lo..=hi);
-
-    // Start with a valid empty configuration
-    let mut bubbles = Bubbles::new(
-        Array2::zeros((0, 4)),
-        Array2::zeros((0, 4)),
-        false, // no sorting yet
-    )?;
-
-    // Generate interior bubbles one by one with rejection sampling
-    for _ in 0..n_bubbles {
-        loop {
-            let t = rng.random_range(t_begin..=t_end);
-            let x = rng.random_range(x_r.clone());
-            let y = rng.random_range(y_r.clone());
-            let z = rng.random_range(z_r.clone());
-
-            let candidate = Array2::from_shape_vec((1, 4), vec![t, x, y, z])
-                .expect("Failed to create candidate row");
-
-            if bubbles.add_interior_bubbles(candidate, true).is_ok() {
-                break;
-            }
-        }
-    }
-
-    let bubbles_exterior =
-        generate_bubbles_exterior(lattice, &bubbles.interior, BoundaryConditions::Reflection);
-
-    bubbles.add_exterior_bubbles(bubbles_exterior, true)?;
-
-    bubbles.sort_by_time()?;
-    Ok(bubbles)
-}
 
 fn main() -> Result<(), Box<dyn Error>> {
     let lattice = Lattice::new(
@@ -66,12 +13,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         100,
     )
     .unwrap();
-    let bubbles_config = generate_random_bubbles(lattice, -0.1, 0.0, 10, Some(0))?;
+    let bubbles_config =
+        generate_random_bubbles(lattice, BoundaryConditions::Periodic, -0.1, 0.0, 20, Some(0))?;
     let interior_path = "./bubbles_interior.csv";
     let exterior_path = "./bubbles_exterior.csv";
     let has_header = true;
-    bubbles_config.save_interior_to_csv(&interior_path, has_header)?;
-    bubbles_config.save_exterior_to_csv(&exterior_path, has_header)?;
+    bubbles_config.write_bubbles_interior_to_csv(&interior_path, has_header)?;
+    bubbles_config.save_bubbles_exterior_to_csv(&exterior_path, has_header)?;
 
     // read bubbles from csv
     let mut new_bubbles_config =

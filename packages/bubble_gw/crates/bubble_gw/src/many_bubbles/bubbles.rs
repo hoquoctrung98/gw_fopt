@@ -1,10 +1,15 @@
 use csv::{ReaderBuilder, Writer};
 use ndarray::prelude::*;
+use ndarray_csv::{Array2Reader, Array2Writer, ReadError};
 use std::path::Path;
 use thiserror::Error;
 
+#[inline]
 pub fn dot_minkowski_vec(v1: &ArrayRef1<f64>, v2: &ArrayRef1<f64>) -> f64 {
-    assert!(v1.len() == 4 && v2.len() == 4, "4-vectors required");
+    assert!(
+        v1.len() == 4 && v2.len() == 4,
+        "Error using dot_minkowski_vec: 4-vectors required"
+    );
     let mut sum = 0.0;
     unsafe {
         for i in 0..4 {
@@ -32,11 +37,14 @@ pub enum BubblesError {
     #[error("Bubble {a} is formed inside bubble {b} at initial time (overlapping light cones)")]
     BubbleFormedInsideBubble { a: BubbleIndex, b: BubbleIndex },
 
-    #[error("CSV error: {0}")]
-    Csv(#[from] csv::Error),
-
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
+
+    #[error("deserialize_array2 error")]
+    DeserializeArray2(#[from] ReadError),
+
+    #[error("serialize_array2 error")]
+    SerializeArray2(#[from] csv::Error),
 
     #[error("Parse float error at {path}:{line}: '{value}'")]
     ParseFloat {
@@ -45,12 +53,8 @@ pub enum BubblesError {
         value: String,
     },
 
-    #[error("Invalid row in {path}:{line}: expected 4 columns, got {got}")]
-    InvalidColumnCount {
-        path: String,
-        line: usize,
-        got: usize,
-    },
+    #[error("Invalid number of columns")]
+    InvalidNCols,
 
     #[error("Empty bubble file: {0}")]
     EmptyFile(String),
@@ -262,74 +266,38 @@ impl Bubbles {
         has_headers: bool,
     ) -> Result<Array2<f64>, BubblesError> {
         let path = path.as_ref();
-        let mut rdr = ReaderBuilder::new()
+        let mut reader = ReaderBuilder::new()
             .has_headers(has_headers)
             .flexible(false)
             .from_path(path)?;
 
-        let mut records = Vec::new();
-        for (line_num, result) in rdr.records().enumerate() {
-            let record = result.map_err(csv::Error::from)?;
-            let line = line_num + if has_headers { 2 } else { 1 }; // +1 for 1-based, +1 more if header
+        let array: Array2<f64> = reader
+            .deserialize_array2_dynamic()
+            .map_err(BubblesError::DeserializeArray2)?;
 
-            if record.len() != 4 {
-                return Err(BubblesError::InvalidColumnCount {
-                    path: path.display().to_string(),
-                    line,
-                    got: record.len(),
-                });
-            }
-
-            let row: Result<Array1<f64>, _> = record
-                .iter()
-                .map(|s| {
-                    s.trim()
-                        .parse::<f64>()
-                        .map_err(|_| BubblesError::ParseFloat {
-                            path: path.display().to_string(),
-                            line,
-                            value: s.to_string(),
-                        })
-                })
-                .collect::<Result<Vec<_>, _>>()
-                .map(Array1::from);
-
-            records.push(row?);
-        }
-
-        if records.is_empty() {
-            // Allow empty exterior files
-            return Ok(Array2::zeros((0, 4)));
-        }
-
-        let n = records.len();
-        let mut array = Array2::zeros((n, 4));
-        for (i, row) in records.into_iter().enumerate() {
-            array.row_mut(i).assign(&row);
+        if array.ncols() != 4 {
+            return Err(BubblesError::InvalidNCols);
         }
         Ok(array)
     }
 
     /// Write bubbles to CSV with scientific notation e.8 and optional header
     fn write_bubbles_to_csv<P: AsRef<Path>>(
-        bubbles: &ArrayRef2<f64>,
+        bubbles: &Array2<f64>,
         path: P,
         has_headers: bool,
     ) -> Result<(), BubblesError> {
-        let mut wtr = Writer::from_path(path)?;
+        let mut writer = Writer::from_path(path)?;
         if has_headers {
-            wtr.write_record(&["t", "x", "y", "z"])?;
+            writer.write_record(&["t", "x", "y", "z"])?;
         }
-        for row in bubbles.rows() {
-            let fields: Vec<String> = row.iter().map(|&v| format!("{:+.8e}", v)).collect();
-            wtr.write_record(&fields)?;
-        }
-        wtr.flush()?;
+
+        writer.serialize_array2(&bubbles)?;
         Ok(())
     }
 
     /// Save interior bubbles to CSV
-    pub fn save_interior_to_csv<P: AsRef<Path>>(
+    pub fn write_bubbles_interior_to_csv<P: AsRef<Path>>(
         &self,
         path: P,
         has_headers: bool,
@@ -338,7 +306,7 @@ impl Bubbles {
     }
 
     /// Save exterior bubbles to CSV
-    pub fn save_exterior_to_csv<P: AsRef<Path>>(
+    pub fn save_bubbles_exterior_to_csv<P: AsRef<Path>>(
         &self,
         path: P,
         has_headers: bool,
@@ -353,8 +321,8 @@ impl Bubbles {
         exterior_path: Q,
         has_headers: bool,
     ) -> Result<(), BubblesError> {
-        self.save_interior_to_csv(&interior_path, has_headers)?;
-        self.save_exterior_to_csv(&exterior_path, has_headers)?;
+        self.write_bubbles_interior_to_csv(&interior_path, has_headers)?;
+        self.save_bubbles_exterior_to_csv(&exterior_path, has_headers)?;
         Ok(())
     }
 
