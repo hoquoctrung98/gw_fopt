@@ -5,7 +5,7 @@ members = [
 ]
 default-members = [
   "crates/*",
-  "bubble_gw_py",
+  # "bubble_gw_py",
 ]
 resolver = "2"
 
