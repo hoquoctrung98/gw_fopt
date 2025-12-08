@@ -68,17 +68,14 @@ impl BulkFlow {
     ///
     /// * `bubbles` – spacetime coordinates of nucleated bubbles inside and outside the lattice
     /// * `sort_by_time`    – if `true` the two bubble lists are sorted by formation time
-    pub fn new(bubbles: Bubbles, num_threads: Option<usize>) -> Result<Self, BulkFlowError> {
-        let thread_pool = if let Some(n) = num_threads {
-            rayon::ThreadPoolBuilder::new().num_threads(n)
-        } else {
-            let default = std::thread::available_parallelism()
-                .map(|n| n.get())
-                .unwrap_or(1);
-            rayon::ThreadPoolBuilder::new().num_threads(default)
-        }
-        .build()
-        .map_err(BulkFlowError::ThreadPoolBuildError)?;
+    pub fn new(bubbles: Bubbles) -> Result<Self, BulkFlowError> {
+        let default = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1);
+        let thread_pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(default)
+            .build()
+            .map_err(BulkFlowError::ThreadPoolBuildError)?;
 
         Ok(BulkFlow {
             bubbles,
