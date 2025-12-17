@@ -1,11 +1,11 @@
-use crate::many_bubbles::bubbles::BubblesError;
-use crate::many_bubbles::bubbles::{BubbleIndex, LatticeBubbles, dot_minkowski_vec};
-use crate::utils::segment::{TryIntoConstrainedSegment, Unconstrained};
+use crate::many_bubbles::bubbles_nalgebra::{
+    BubbleIndex, BubblesError, LatticeBubbles, dot_minkowski_vec,
+};
 use ndarray::prelude::*;
 use ndarray::{Zip, stack};
 use num_complex::Complex64;
-use rayon::ThreadPool;
 use rayon::prelude::*;
+use rayon::{ThreadPool, ThreadPoolBuildError, ThreadPoolBuilder};
 use thiserror::Error;
 
 /// Represents the collision status of a direction relative to a reference bubble.
@@ -38,7 +38,7 @@ pub enum BulkFlowError {
     ThreadPoolBuildError(
         #[from]
         #[source]
-        rayon::ThreadPoolBuildError,
+        ThreadPoolBuildError,
     ),
 
     #[error("Bubble {a} is formed inside bubble {b} at initial time (overlapping light cones)")]
@@ -69,11 +69,11 @@ impl BulkFlow {
     /// * `bubbles` – spacetime coordinates of nucleated bubbles inside and outside the lattice
     /// * `sort_by_time`    – if `true` the two bubble lists are sorted by formation time
     pub fn new(bubbles: LatticeBubbles) -> Result<Self, BulkFlowError> {
-        let default = std::thread::available_parallelism()
+        let default_num_threads = std::thread::available_parallelism()
             .map(|n| n.get())
             .unwrap_or(1);
-        let thread_pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(default)
+        let thread_pool = ThreadPoolBuilder::new()
+            .num_threads(default_num_threads)
             .build()
             .map_err(BulkFlowError::ThreadPoolBuildError)?;
 
@@ -91,6 +91,14 @@ impl BulkFlow {
             phix: None,
             direction_vectors: None,
         })
+    }
+
+    pub fn set_num_threads(&mut self, num_threads: usize) -> Result<(), BulkFlowError> {
+        self.thread_pool = ThreadPoolBuilder::new()
+            .num_threads(num_threads)
+            .build()
+            .map_err(BulkFlowError::ThreadPoolBuildError)?;
+        Ok(())
     }
 
     pub fn first_colliding_bubbles(&self) -> Option<&Array3<BubbleIndex>> {
@@ -111,8 +119,8 @@ impl BulkFlow {
             .direction_vectors
             .as_ref()
             .ok_or_else(|| BulkFlowError::UninitializedField("direction_vectors".to_string()))?;
-        let n_interior = self.bubbles.interior.nrows();
-        let n_exterior = self.bubbles.exterior.nrows();
+        let n_interior = self.bubbles.interior.n_bubbles();
+        let n_exterior = self.bubbles.exterior.n_bubbles();
         let n_total = n_interior + n_exterior;
         let tolerance = 1e-10;
 
@@ -213,7 +221,7 @@ impl BulkFlow {
 
         if precompute_first_bubbles {
             let first_colliding_bubbles: Vec<Array2<BubbleIndex>> =
-                (0..self.bubbles.interior.nrows())
+                (0..self.bubbles.interior.n_bubbles())
                     .into_par_iter()
                     .map(|a_idx| self.compute_first_colliding_bubble(a_idx).unwrap())
                     .collect();
@@ -242,13 +250,13 @@ impl BulkFlow {
         self.active_bubbles = active_sets;
     }
 
-    pub fn bubbles_interior(&self) -> &Array2<f64> {
-        &self.bubbles.interior
-    }
-
-    pub fn bubbles_exterior(&self) -> &Array2<f64> {
-        &self.bubbles.exterior
-    }
+    // pub fn bubbles_interior(&self) -> &Array2<f64> {
+    //     &self.bubbles.interior
+    // }
+    //
+    // pub fn bubbles_exterior(&self) -> &Array2<f64> {
+    //     &self.bubbles.exterior
+    // }
 
     pub fn delta(&self) -> &Array3<f64> {
         &self.bubbles.delta
@@ -278,7 +286,7 @@ impl BulkFlow {
         self.powers_sets = powers_sets;
     }
 
-    pub fn active_sets(&self) -> &ArrayRef1<bool> {
+    pub fn active_sets(&self) -> &Array1<bool> {
         &self.active_bubbles
     }
 
@@ -379,7 +387,7 @@ impl BulkFlow {
         }
         let mut collision_status =
             Array2::from_elem((n_cos_thetax, n_phix), CollisionStatus::NeverCollided);
-        let ta = self.bubbles.interior[[a_idx, 0]];
+        let ta = self.bubbles.interior.spacetime[(a_idx, 0)];
         let delta_ta = t - ta;
 
         for i in 0..n_cos_thetax {
@@ -415,7 +423,6 @@ impl BulkFlow {
             .direction_vectors
             .as_ref()
             .ok_or_else(|| BulkFlowError::UninitializedField("direction_vectors".to_string()))?;
-
         if first_bubble.shape() != [n_cos_thetax, n_phix] {
             return Err(BulkFlowError::ArrayShapeMismatch(format!(
                 "First bubble array must match resolution: expected [{}, {}], got {:?}",
@@ -424,63 +431,29 @@ impl BulkFlow {
                 first_bubble.shape()
             )));
         }
-
-        let n_interior = self.bubbles.interior.nrows();
+        let n_interior = self.bubbles.interior.n_bubbles();
         let mut delta_tab_grid = Array2::zeros((n_cos_thetax, n_phix));
 
-        let delta = &self.bubbles.delta;
-        let delta_squared = &self.bubbles.delta_squared;
-
         for i in 0..n_cos_thetax {
-            let first_bubble_row = first_bubble.row(i);
-
-            let segments = first_bubble_row
-                .as_slice()
-                .expect("row is contiguous")
-                .try_into_constrained_segment(&Unconstrained)
-                .expect("first_bubble is piecewise constant");
-
-            let mut pos = 0usize;
-            for seg in segments.as_const_subsegments() {
-                let len = seg.len();
-                let start = pos;
-                let end = pos + len;
-
-                let b_total = match seg[0] {
+            // TODO: This loop can be replaced by iterating over segment with const BubbleIndex
+            for j in 0..n_phix {
+                let b_total = match first_bubble[[i, j]] {
                     BubbleIndex::None => {
-                        pos = end;
                         continue;
                     }
-                    BubbleIndex::Interior(b) => b,
-                    BubbleIndex::Exterior(b) => n_interior + b,
+                    BubbleIndex::Interior(b_idx) => b_idx,
+                    BubbleIndex::Exterior(b_idx) => n_interior + b_idx,
                 };
-
-                let delta_ba = delta.slice(s![a_idx, b_total, ..]); // (4,)
-                let delta_ba_squared = delta_squared[[a_idx, b_total]];
-
-                // Extract contiguous slice of direction vectors for this segment
-                let x_seg = direction_vectors.slice(s![i, start..end, ..]);
-
-                // Compute Minkowski dot products for all directions in segment at once
-                let mut dot_ba_x = Array1::zeros(len);
-                azip!((dot in &mut dot_ba_x, x in x_seg.rows()) {
-                    *dot = dot_minkowski_vec(&delta_ba, &x);
-                });
-
-                // Compute delta_tab for the entire segment
-                let mut delta_tab_seg = Array1::zeros(len);
-                azip!((out in &mut delta_tab_seg, &dot in &dot_ba_x) {
-                    if dot.abs() > 1e-10 {
-                        *out = delta_ba_squared / (2.0 * dot);
-                    }
-                });
-
-                // Write back
-                delta_tab_grid
-                    .slice_mut(s![i, start..end])
-                    .assign(&delta_tab_seg);
-
-                pos = end;
+                let delta_ba = self.bubbles.delta.slice(s![a_idx, b_total, ..]);
+                let x_vec = direction_vectors.slice(s![i, j, ..]);
+                let delta_ba_squared = self.bubbles.delta_squared[[a_idx, b_total]];
+                let dot_ba_x = dot_minkowski_vec(&delta_ba, &x_vec);
+                if dot_ba_x.abs() < 1e-10 {
+                    delta_tab_grid[[i, j]] = 0.0;
+                    continue;
+                }
+                let delta_tab_val = delta_ba_squared / (2.0 * dot_ba_x);
+                delta_tab_grid[[i, j]] = delta_tab_val;
             }
         }
 
@@ -494,14 +467,12 @@ impl BulkFlow {
         delta_tab_grid: &ArrayRef2<f64>,
         delta_ta: f64,
     ) -> Result<(Array1<f64>, Array1<f64>), BulkFlowError> {
-        // Setup & validation
         let n_cos_thetax = self
             .n_cos_thetax
             .ok_or_else(|| BulkFlowError::UninitializedField("n_cos_thetax".to_string()))?;
         let n_phix = self
             .n_phix
             .ok_or_else(|| BulkFlowError::UninitializedField("n_phix".to_string()))?;
-
         let cos_thetax_grid = self
             .cos_thetax
             .as_ref()
@@ -510,163 +481,91 @@ impl BulkFlow {
             .phix
             .as_ref()
             .ok_or_else(|| BulkFlowError::UninitializedField("phix".to_string()))?;
+        let n_sets = self.coefficients_sets.nrows();
 
-        if cos_thetax_idx >= n_cos_thetax
-            || collision_status_grid.shape() != [n_cos_thetax, n_phix]
-            || delta_tab_grid.shape() != [n_cos_thetax, n_phix]
-        {
+        if cos_thetax_idx >= n_cos_thetax {
             return Err(BulkFlowError::InvalidIndex {
                 index: cos_thetax_idx,
                 max: n_cos_thetax,
             });
         }
+        if collision_status_grid.shape() != [n_cos_thetax, n_phix]
+            || delta_tab_grid.shape() != [n_cos_thetax, n_phix]
+        {
+            return Err(BulkFlowError::ArrayShapeMismatch(format!(
+                "Grids must be [{}, {}], got status: {:?}, delta_tab: {:?}",
+                n_cos_thetax,
+                n_phix,
+                collision_status_grid.shape(),
+                delta_tab_grid.shape()
+            )));
+        }
 
         let cos_thetax = cos_thetax_grid[cos_thetax_idx];
         let sin_squared_thetax = 1.0 - cos_thetax.powi(2);
         let dphi = 2.0 * std::f64::consts::PI / n_phix as f64;
-        let n_sets = self.coefficients_sets.nrows();
 
-        let mut b_plus = Array1::zeros(n_sets);
-        let mut b_minus = Array1::zeros(n_sets);
+        let mut b_plus_arr = Array1::zeros(n_sets);
+        let mut b_minus_arr = Array1::zeros(n_sets);
 
-        if delta_ta <= 0.0 {
-            return Ok((b_plus, b_minus));
-        }
-        let delta_ta_cubed = delta_ta.powi(3);
+        let mut sin_2phi_row = Array1::zeros(n_phix);
+        let mut cos_2phi_row = Array1::zeros(n_phix);
+        azip!((sin_2phi in &mut sin_2phi_row, p in phix) *sin_2phi = (2.0 * p).sin());
+        azip!((cos_2phi in &mut cos_2phi_row, p in phix) *cos_2phi = (2.0 * p).cos());
 
-        // Pre-compute sin(2φ), cos(2φ) and trapezoidal weights
-        let mut sin_2phi = Array1::zeros(n_phix);
-        let mut cos_2phi = Array1::zeros(n_phix);
-        azip!((s in &mut sin_2phi, &p in phix) *s = (2.0 * p).sin());
-        azip!((c in &mut cos_2phi, &p in phix) *c = (2.0 * p).cos());
+        let status_row = collision_status_grid.slice(s![cos_thetax_idx, ..]);
+        let delta_tab_row = delta_tab_grid.slice(s![cos_thetax_idx, ..]);
 
+        // Trapezoidal weights: 0.5 at endpoints, 1.0 in middle
         let mut weights = Array1::from_elem(n_phix, 1.0);
         weights[0] = 0.5;
         weights[n_phix - 1] = 0.5;
 
-        let status_row = collision_status_grid.row(cos_thetax_idx);
-        let delta_tab_row = delta_tab_grid.row(cos_thetax_idx);
-
-        // Build constant-status segments
-        let status_slice = status_row
-            .as_slice()
-            .expect("status_row must be contiguous after generate_segments");
-
-        let segments = status_slice
-            .try_into_constrained_segment(&Unconstrained)
-            .expect("collision_status must be piecewise constant");
-
-        // Per-segment data: (start, len, status, delta_tab, sin_sum, cos_sum, delta_is_constant)
-        let mut segment_data = Vec::with_capacity(64);
-        let mut seg_sin_sum = Vec::with_capacity(64);
-        let mut seg_cos_sum = Vec::with_capacity(64);
-
-        let mut pos = 0;
-        for seg in segments.as_const_subsegments() {
-            let status = seg[0];
-            let len = seg.len();
-            let start = pos;
-            let end = pos + len;
-
-            let delta_tab = delta_tab_row[start];
-            let mut delta_constant = true;
-            for j in start + 1..end {
-                if (delta_tab_row[j] - delta_tab).abs() > 1e-12 {
-                    delta_constant = false;
-                    break;
-                }
-            }
-
-            let (sin_sum, cos_sum) = if delta_constant {
-                let mut s = 0.0;
-                let mut c = 0.0;
-                for i in start..end {
-                    s += sin_2phi[i] * weights[i];
-                    c += cos_2phi[i] * weights[i];
-                }
-                (s, c)
-            } else {
-                (0.0, 0.0)
-            };
-
-            seg_sin_sum.push(sin_sum);
-            seg_cos_sum.push(cos_sum);
-            segment_data.push((start, len, status, delta_tab, delta_constant));
-
-            pos = end;
+        if delta_ta <= 0.0 {
+            return Ok((b_plus_arr, b_minus_arr));
         }
-
-        let angular_factor = dphi * delta_ta_cubed * 0.5 * sin_squared_thetax;
+        let delta_ta_cubed = delta_ta.powi(3);
 
         for s in 0..n_sets {
-            let mut total_plus = 0.0;
-            let mut total_minus = 0.0;
+            let mut factors = Array1::zeros(n_phix);
 
-            for (idx, &(start, len, status, delta_tab, delta_constant)) in
-                segment_data.iter().enumerate()
-            {
-                let (contrib_plus, contrib_minus) = if delta_constant {
-                    // Fast path: factor is uniform over the segment
-                    let factor = match status {
-                        CollisionStatus::NeverCollided | CollisionStatus::NotYetCollided => 1.0,
-                        CollisionStatus::AlreadyCollided => {
-                            if delta_tab <= 0.0 || delta_ta <= delta_tab {
-                                0.0
-                            } else {
-                                let r = delta_tab / delta_ta;
-                                let mut f = 0.0;
-                                for k in 0..self.coefficients_sets.ncols() {
-                                    f += self.coefficients_sets[[s, k]]
-                                        * r.powf(self.powers_sets[[s, k]]);
-                                }
-                                if let Some(dw) = self.damping_width {
-                                    f *= (-delta_ta * (1.0 - r) / dw).exp();
-                                }
-                                f
-                            }
-                        }
-                    };
-                    (factor * seg_cos_sum[idx], factor * seg_sin_sum[idx])
-                } else {
-                    // Rare fallback: per-bin evaluation
-                    let mut plus = 0.0;
-                    let mut minus = 0.0;
-                    for i in start..start + len {
-                        let dt = delta_tab_row[i];
-                        let f = match status {
-                            CollisionStatus::NeverCollided | CollisionStatus::NotYetCollided => 1.0,
-                            CollisionStatus::AlreadyCollided => {
-                                if dt <= 0.0 || delta_ta <= dt {
-                                    0.0
-                                } else {
-                                    let r = dt / delta_ta;
-                                    let mut val = 0.0;
-                                    for k in 0..self.coefficients_sets.ncols() {
-                                        val += self.coefficients_sets[[s, k]]
-                                            * r.powf(self.powers_sets[[s, k]]);
-                                    }
-                                    if let Some(dw) = self.damping_width {
-                                        val *= (-delta_ta * (1.0 - r) / dw).exp();
-                                    }
-                                    val
-                                }
-                            }
-                        };
-                        plus += f * cos_2phi[i] * weights[i];
-                        minus += f * sin_2phi[i] * weights[i];
+            azip!((factor in &mut factors, &status in &status_row, &delta_tab in &delta_tab_row) {
+                match status {
+                    CollisionStatus::NeverCollided | CollisionStatus::NotYetCollided => {
+                        *factor = 1.0;
                     }
-                    (plus, minus)
-                };
+                    CollisionStatus::AlreadyCollided => {
+                        let ratio = delta_tab / delta_ta;
+                        let mut f = 0.0;
+                        for k in 0..self.coefficients_sets.shape()[1] {
+                            f += self.coefficients_sets[[s, k]] * ratio.powf(self.powers_sets[[s, k]]);
+                        }
+                        if let Some(damping_width) = self.damping_width {
+                            let damp = (-delta_ta * (1.0 - ratio) / damping_width).exp();
+                            f *= damp;
+                        }
+                        *factor = f;
+                    }
+                }
+            });
 
-                total_plus += contrib_plus;
-                total_minus += contrib_minus;
-            }
+            let mut contrib_sin = Array1::zeros(n_phix);
+            let mut contrib_cos = Array1::zeros(n_phix);
+            azip!((sin_val in &mut contrib_sin, &sin2 in &sin_2phi_row, &factor in &factors, &weight in &weights) {
+                *sin_val = sin2 * factor * weight;
+            });
+            azip!((cos_val in &mut contrib_cos, &cos2 in &cos_2phi_row, &scale in &factors, &weight in &weights) {
+                *cos_val = cos2 * scale * weight;
+            });
 
-            b_plus[s] += angular_factor * total_plus;
-            b_minus[s] += angular_factor * total_minus;
+            let integral_minus = contrib_sin.sum() * dphi * delta_ta_cubed;
+            let integral_plus = contrib_cos.sum() * dphi * delta_ta_cubed;
+
+            b_plus_arr[s] += 0.5 * sin_squared_thetax * integral_plus;
+            b_minus_arr[s] += 0.5 * sin_squared_thetax * integral_minus;
         }
 
-        Ok((b_plus, b_minus))
+        Ok((b_plus_arr, b_minus_arr))
     }
 
     pub fn compute_a_integral<W>(
@@ -706,12 +605,12 @@ impl BulkFlow {
 
         let n_w = w_arr.len();
         let n_sets = self.coefficients_sets.nrows();
-        let ta = self.bubbles.interior[[a_idx, 0]];
+        let ta = self.bubbles.interior.spacetime[(a_idx, 0)];
         let delta_ta = t - ta;
 
         // Compute collision status grid
         let collision_status =
-            self.compute_collision_status(a_idx, t, first_bubble, delta_tab_grid)?;
+            self.compute_collision_status(a_idx, t, &first_bubble, &delta_tab_grid)?;
 
         let mut a_plus = Array2::<Complex64>::zeros((n_sets, n_w));
         let mut a_minus = Array2::<Complex64>::zeros((n_sets, n_w));
@@ -763,7 +662,7 @@ impl BulkFlow {
         let n_sets = self.coefficients_sets.nrows();
         let n_w = w_arr.len();
 
-        let t_nucleation = self.bubbles.interior[[a_idx, 0]];
+        let t_nucleation = self.bubbles.interior.spacetime[(a_idx, 0)];
         if t_nucleation >= t_end {
             return Ok(Array4::zeros((2, n_sets, n_w, n_t)));
         }
@@ -777,7 +676,7 @@ impl BulkFlow {
         }
         let t_arr = Array1::linspace(t_begin, t_end, n_t).to_vec();
         let dt = if n_t > 1 { t_arr[1] - t_arr[0] } else { 0.0 };
-        let z_a = self.bubbles.interior[[a_idx, 3]];
+        let z_a = self.bubbles.interior.spacetime[(a_idx, 3)];
 
         let first_colliding_bubbles_with_a: Array2<BubbleIndex> =
             if let Some(cache) = self.first_colliding_bubbles.as_ref() {
@@ -875,7 +774,7 @@ impl BulkFlow {
         let t_arr = Array1::linspace(t_begin, t_end, n_t).to_vec();
         let dt = if n_t > 1 { t_arr[1] - t_arr[0] } else { 0.0 };
 
-        let z_a = self.bubbles.interior[[a_idx, 3]];
+        let z_a = self.bubbles.interior.spacetime[(a_idx, 3)];
 
         let first_colliding_bubbles_with_a: Array2<BubbleIndex> =
             if let Some(cache) = self.first_colliding_bubbles.as_ref() {
@@ -894,7 +793,7 @@ impl BulkFlow {
                     |(mut integral_plus, mut integral_minus), (t_idx, t)| {
                         let mut integrand_dt_plus = Array2::zeros((n_sets, n_w));
                         let mut integrand_dt_minus = Array2::zeros((n_sets, n_w));
-                        let t_nucleation = self.bubbles.interior[[a_idx, 0]];
+                        let t_nucleation = self.bubbles.interior.spacetime[(a_idx, 0)];
                         if t_nucleation <= t {
                             let (a_plus, a_minus) = self
                                 .compute_a_integral(
@@ -958,7 +857,7 @@ impl BulkFlow {
         W: AsRef<[f64]>,
     {
         let w_arr = w_arr.as_ref();
-        let n_interior = self.bubbles.interior.nrows();
+        let n_interior = self.bubbles.interior.n_bubbles();
         let n_sets = self.coefficients_sets.nrows();
         let n_w = w_arr.len();
 
@@ -1005,7 +904,7 @@ impl BulkFlow {
         W: AsRef<[f64]>,
     {
         let w_arr = w_arr.as_ref();
-        let n_interior = self.bubbles.interior.nrows();
+        let n_interior = self.bubbles.interior.n_bubbles();
         let n_sets = self.coefficients_sets.nrows();
         let n_w = w_arr.len();
 
@@ -1053,8 +952,8 @@ pub fn check_collision_point(
         return false;
     }
 
-    let delta_ba_norm = dot_minkowski_vec(&delta_ba, &delta_ba);
-    let delta_ca_norm = dot_minkowski_vec(&delta_ca, &delta_ca);
+    let delta_ba_norm = dot_minkowski_vec(delta_ba, delta_ba);
+    let delta_ca_norm = dot_minkowski_vec(delta_ca, delta_ca);
 
     let collision_vec = {
         let delta_ba_scaled = delta_ba.mapv(|v| v * delta_ca_norm);
@@ -1062,6 +961,6 @@ pub fn check_collision_point(
         delta_ba_scaled - delta_ca_scaled
     };
 
-    let dot_collision_x = dot_minkowski_vec(&collision_vec, &x);
+    let dot_collision_x = dot_minkowski_vec(&collision_vec, x);
     dot_collision_x > 0.0
 }

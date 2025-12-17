@@ -1,4 +1,4 @@
-use bubble_gw::many_bubbles::bubbles::{BubbleIndex, Bubbles};
+use bubble_gw::many_bubbles::bubbles::{BubbleIndex, LatticeBubbles};
 use bubble_gw::many_bubbles::bulk_flow::{BulkFlow, BulkFlowError};
 use ndarray::Array2;
 use numpy::{
@@ -127,7 +127,7 @@ impl PyBulkFlow {
             .unwrap_or_else(|| Array2::zeros((0, 4)));
 
         let bulk_flow = BulkFlow::new(
-            Bubbles::new(bubbles_interior, bubbles_exterior, sort_by_time)
+            LatticeBubbles::new(bubbles_interior, bubbles_exterior, sort_by_time)
                 .map_err(|e| BulkFlowError::BubblesError(e))?,
         )?;
         Ok(PyBulkFlow { inner: bulk_flow })

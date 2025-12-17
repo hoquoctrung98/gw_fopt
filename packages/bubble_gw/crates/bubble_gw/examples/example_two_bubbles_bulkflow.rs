@@ -1,11 +1,11 @@
-use bubble_gw::many_bubbles::bubbles::Bubbles;
+use bubble_gw::many_bubbles::bubbles::LatticeBubbles;
 use bubble_gw::many_bubbles::bulk_flow_segment::{BulkFlow, BulkFlowError};
 use ndarray::{Array1, Array2, arr2, s};
 
 fn main() -> Result<(), BulkFlowError> {
     let bubbles_interior = arr2(&[[0.0, 0.0, 10.0, 0.0], [1.0, 5.0, 0.0, 0.0]]);
     let bubbles_exterior = Array2::zeros((0, 4));
-    let bubbles = Bubbles::new(bubbles_interior, bubbles_exterior, true)?;
+    let bubbles = LatticeBubbles::new(bubbles_interior, bubbles_exterior, true)?;
 
     let mut bulk_flow = BulkFlow::new(bubbles)?;
     bulk_flow.set_resolution(100, 200, true)?;

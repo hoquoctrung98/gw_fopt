@@ -1,5 +1,5 @@
 use crate::many_bubbles::bubbles::BubblesError;
-use crate::many_bubbles::bubbles::{BubbleIndex, Bubbles, dot_minkowski_vec};
+use crate::many_bubbles::bubbles::{BubbleIndex, LatticeBubbles, dot_minkowski_vec};
 use ndarray::prelude::*;
 use ndarray::{Zip, stack};
 use num_complex::Complex64;
@@ -48,7 +48,7 @@ pub enum BulkFlowError {
 }
 
 pub struct BulkFlow {
-    bubbles: Bubbles,
+    bubbles: LatticeBubbles,
     first_colliding_bubbles: Option<Array3<BubbleIndex>>,
     coefficients_sets: Array2<f64>,
     powers_sets: Array2<f64>,
@@ -67,7 +67,7 @@ impl BulkFlow {
     ///
     /// * `bubbles` – spacetime coordinates of nucleated bubbles inside and outside the lattice
     /// * `sort_by_time`    – if `true` the two bubble lists are sorted by formation time
-    pub fn new(bubbles: Bubbles) -> Result<Self, BulkFlowError> {
+    pub fn new(bubbles: LatticeBubbles) -> Result<Self, BulkFlowError> {
         let default_num_threads = std::thread::available_parallelism()
             .map(|n| n.get())
             .unwrap_or(1);

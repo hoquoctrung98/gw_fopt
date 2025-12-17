@@ -1,7 +1,6 @@
-use bubble_gw::many_bubbles::bubble_formation::{
-    BoundaryConditions, Lattice, LatticeType, generate_random_bubbles,
-};
-use bubble_gw::many_bubbles::bubbles::Bubbles;
+use bubble_gw::many_bubbles::bubble_formation::generate_random_bubbles;
+use bubble_gw::many_bubbles::bubbles::LatticeBubbles;
+use bubble_gw::many_bubbles::lattice::{BoundaryConditions, Lattice, LatticeType};
 use ndarray::arr2;
 use std::error::Error;
 
@@ -23,7 +22,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // read bubbles from csv
     let mut new_bubbles_config =
-        Bubbles::from_csv_files(&interior_path, &exterior_path, true, has_header)?;
+        LatticeBubbles::from_csv_files(&interior_path, &exterior_path, true, has_header)?;
     println!("{:?}", new_bubbles_config);
 
     let extra_bubbles = arr2(&[

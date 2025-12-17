@@ -1,6 +1,8 @@
 use bubble_gw::many_bubbles::bubble_formation::{
-    BoundaryConditions, BubbleFormationSimulator, Lattice, LatticeType, ManualNucleation,
-    PoissonNucleation, SimulationEndStatus, generate_bubbles_exterior,
+    BubbleFormationSimulator, ManualNucleation, PoissonNucleation, SimulationEndStatus,
+};
+use bubble_gw::many_bubbles::lattice::{
+    BoundaryConditions, Lattice, LatticeType, generate_bubbles_exterior,
 };
 use ndarray::Array2;
 use numpy::{PyArray2, PyArrayMethods, PyReadonlyArray2};

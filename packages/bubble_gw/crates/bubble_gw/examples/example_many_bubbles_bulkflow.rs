@@ -1,8 +1,8 @@
-use bubble_gw::many_bubbles::bubble_formation::{
+use bubble_gw::many_bubbles::bubbles::LatticeBubbles;
+use bubble_gw::many_bubbles::bulk_flow::{BulkFlow, BulkFlowError};
+use bubble_gw::many_bubbles::lattice::{
     BoundaryConditions, Lattice, LatticeType, generate_bubbles_exterior,
 };
-use bubble_gw::many_bubbles::bubbles::Bubbles;
-use bubble_gw::many_bubbles::bulk_flow::{BulkFlow, BulkFlowError};
 use ndarray::prelude::*;
 use std::error::Error;
 
@@ -24,7 +24,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let bubbles_exterior =
         generate_bubbles_exterior(&lattice, &bubbles_interior, BoundaryConditions::Periodic);
 
-    let mut bulk_flow = BulkFlow::new(Bubbles::new(bubbles_interior, bubbles_exterior, true)?)?;
+    let mut bulk_flow =
+        BulkFlow::new(LatticeBubbles::new(bubbles_interior, bubbles_exterior, true)?)?;
     bulk_flow.set_resolution(100, 200, true)?;
 
     let w_arr = Array1::geomspace(1e-2, 1e2, 100).unwrap().to_vec();
