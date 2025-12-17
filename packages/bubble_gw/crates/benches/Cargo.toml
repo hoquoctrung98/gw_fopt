@@ -13,6 +13,9 @@ bubble_gw = { path = "../bubble_gw" }
 criterion = {version = "0.8.0", features = ["html_reports"]}
 ndarray = {workspace = true}
 num-traits = {workspace = true}
+puruspe = "0.4.2"
+rand = "0.9.2"
+scirs2-special = "0.1.0-rc.2"
 
 [[bench]]
 name = "integrate_1d"
@@ -22,4 +25,14 @@ harness = false
 [[bench]]
 name = "bulk_flow_bench"
 path = "bulk_flow_bench.rs"
+harness = false
+
+[[bench]]
+name = "first_bubble_bench"
+path = "first_bubble_bench.rs"
+harness = false
+
+[[bench]]
+name = "jn_puruspe_vs_scirs2"
+path = "jn_puruspe_vs_scirs2.rs"
 harness = false

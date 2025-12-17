@@ -1,8 +1,6 @@
 use crate::many_bubbles::bubbles::{Bubbles, BubblesError};
 use ndarray::{Array2, ArrayRef2};
-use rand::random;
-use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
+use rand::{Rng, SeedableRng, random, rngs::StdRng};
 use rayon::prelude::*;
 use std::borrow::Borrow;
 use std::collections::HashSet;
