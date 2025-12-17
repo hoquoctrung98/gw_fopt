@@ -103,3 +103,18 @@ impl IsClose for Vec<Complex<f64>> {
         Ok(())
     }
 }
+
+// For Vec<Complex<f64>>
+impl IsClose for Vec<f64> {
+    fn is_close(&self, other: &Self, abs_tol: f64, rel_tol: f64) -> Result<(), String> {
+        if self.len() != other.len() {
+            return Err(format!("Length mismatch: {} ≠ {}", self.len(), other.len()));
+        }
+        for (i, (a, b)) in self.iter().zip(other).enumerate() {
+            if let Err(e) = a.is_close(b, abs_tol, rel_tol) {
+                return Err(format!("at [{i}]: {e}"));
+            }
+        }
+        Ok(())
+    }
+}
