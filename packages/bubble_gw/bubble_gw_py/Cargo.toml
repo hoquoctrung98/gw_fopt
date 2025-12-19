@@ -18,7 +18,7 @@ num-complex = {workspace = true}
 num = {workspace = true}
 bubble_gw = { path = "../crates/bubble_gw" }
 pyo3 = { version = "0.27", features = ["extension-module", "num-complex"] }
-numpy = "0.27.1"
+numpy = {version = "0.27.1", features = ["nalgebra"]}
 thiserror = "2.0.17"
 csv = "1.4.0"
 

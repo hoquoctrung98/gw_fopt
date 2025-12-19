@@ -78,6 +78,18 @@ fn bench_compute_c_integral(c: &mut Criterion) {
 
     let w_arr: Vec<f64> = Array1::geomspace(1e-2, 1e2, 120).unwrap().to_vec();
 
+    // Benchmark nalgebra (optimized)
+    group.bench_function(BenchmarkId::new("Nalgebra", "nθ=50 nφ=100 n_t=800"), |b| {
+        b.iter_batched(
+            || setup_bulk_flow_nalgebra(),
+            |mut bf| {
+                bf.compute_c_integral(&w_arr, Some(0.0), 15.0, 800, None)
+                    .expect("Nalgebra failed");
+            },
+            BatchSize::SmallInput,
+        )
+    });
+
     // Benchmark original
     group.bench_function(BenchmarkId::new("Original", "nθ=50 nφ=100 n_t=800"), |b| {
         b.iter_batched(
@@ -97,18 +109,6 @@ fn bench_compute_c_integral(c: &mut Criterion) {
             |mut bf| {
                 bf.compute_c_integral(&w_arr, Some(0.0), 15.0, 800, None)
                     .expect("Segmented failed");
-            },
-            BatchSize::SmallInput,
-        )
-    });
-
-    // Benchmark nalgebra (optimized)
-    group.bench_function(BenchmarkId::new("Nalgebra", "nθ=50 nφ=100 n_t=800"), |b| {
-        b.iter_batched(
-            || setup_bulk_flow_nalgebra(),
-            |mut bf| {
-                bf.compute_c_integral(&w_arr, Some(0.0), 15.0, 800, None)
-                    .expect("Nalgebra failed");
             },
             BatchSize::SmallInput,
         )

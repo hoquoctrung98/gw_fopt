@@ -10,12 +10,12 @@ rust-version.workspace = true
 
 [dependencies]
 bubble_gw = { path = "../bubble_gw" }
-criterion = {version = "0.8.0", features = ["html_reports"]}
+criterion = {version = "0.8.1", features = ["html_reports"]}
 ndarray = {workspace = true}
 num-traits = {workspace = true}
 puruspe = "0.4.2"
 rand = "0.9.2"
-scirs2-special = "0.1.0-rc.2"
+scirs2-special = "0.1.0-rc.3"
 
 [[bench]]
 name = "integrate_1d"

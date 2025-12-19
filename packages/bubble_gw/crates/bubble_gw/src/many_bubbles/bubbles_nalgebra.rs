@@ -1,27 +1,10 @@
 use csv::{ReaderBuilder, Writer};
-use nalgebra::{Const, Dyn, MatrixXx4};
+use nalgebra::{DMatrix, Vector4};
+use nalgebra_spacetime::Lorentzian;
 use ndarray::prelude::*;
 use ndarray_csv::{Array2Reader, Array2Writer, ReadError};
 use std::path::Path;
 use thiserror::Error;
-
-// TODO: convert the input arguments to type Bubbles
-#[inline]
-pub fn dot_minkowski_vec(v1: &ArrayRef1<f64>, v2: &ArrayRef1<f64>) -> f64 {
-    assert!(
-        v1.len() == 4 && v2.len() == 4,
-        "Error using dot_minkowski_vec: 4-vectors required"
-    );
-    let mut sum = 0.0;
-    unsafe {
-        for i in 0..4 {
-            let t1 = *v1.uget(i);
-            let t2 = *v2.uget(i);
-            sum += if i == 0 { -t1 * t2 } else { t1 * t2 };
-        }
-    }
-    sum
-}
 
 /// Represents a bubble index, distinguishing between an interior index, exterior index, and no collision.
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -64,18 +47,14 @@ pub enum BubblesError {
 
 // TODO: convert the input arguments to type Bubbles
 // Checks if any bubble is contained within another at the initial time.
-pub fn check_bubble_formed_inside_bubble(
-    bubbles_interior: &ArrayRef2<f64>,
-    bubbles_exterior: &ArrayRef2<f64>,
-    delta_squared: &ArrayRef2<f64>,
-) -> Result<(), BubblesError> {
-    let n_interior = bubbles_interior.nrows();
-    let n_exterior = bubbles_exterior.nrows();
+pub fn check_bubble_formed_inside_bubble(delta_squared: &DMatrix<f64>) -> Result<(), BubblesError> {
+    let (n_interior, n_total) = delta_squared.shape();
+    let n_exterior = n_total - n_interior;
 
     // Interior-Interior
     for a_idx in 0..n_interior {
         for b_idx in a_idx + 1..n_interior {
-            if delta_squared[[a_idx, b_idx]] < 0.0 {
+            if delta_squared[(a_idx, b_idx)] < 0.0 {
                 return Err(BubblesError::BubbleFormedInsideBubble {
                     a: BubbleIndex::Interior(a_idx),
                     b: BubbleIndex::Interior(b_idx),
@@ -88,7 +67,7 @@ pub fn check_bubble_formed_inside_bubble(
     for a_idx in 0..n_interior {
         for b_ex in 0..n_exterior {
             let b_total = n_interior + b_ex;
-            if delta_squared[[a_idx, b_total]] < 0.0 {
+            if delta_squared[(a_idx, b_total)] < 0.0 {
                 return Err(BubblesError::BubbleFormedInsideBubble {
                     a: BubbleIndex::Interior(a_idx),
                     b: BubbleIndex::Exterior(b_ex),
@@ -129,27 +108,37 @@ impl std::fmt::Display for BubbleIndex {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Bubbles {
-    pub spacetime: MatrixXx4<f64>,
+    pub spacetime: Vec<Vector4<f64>>,
 }
 
 impl Bubbles {
-    pub fn new(spacetime: MatrixXx4<f64>) -> Self {
+    pub fn new(spacetime: Vec<Vector4<f64>>) -> Self {
         Self { spacetime }
     }
 
     pub fn n_bubbles(&self) -> usize {
-        self.spacetime.nrows()
+        self.spacetime.len()
     }
 
     pub fn to_array2(&self) -> Array2<f64> {
-        let n = self.spacetime.nrows();
-        Array2::from_shape_fn((n, 4), |(i, j)| self.spacetime[(i, j)])
+        Array2::from_shape_fn((self.n_bubbles(), 4), |(i_bubble, i_spacetime)| {
+            self.spacetime[i_bubble][i_spacetime]
+        })
     }
 
     pub fn from_array2(array: Array2<f64>) -> Self {
-        let n = array.nrows();
+        let n_bubbles = array.nrows();
         assert_eq!(array.ncols(), 4);
-        let mat = MatrixXx4::from_fn_generic(Dyn(n), Const::<4>, |i, j| array[[i, j]]);
+        let mat: Vec<Vector4<f64>> = (0..n_bubbles)
+            .map(|i_bubble| {
+                Vector4::from_row_slice(
+                    array
+                        .row(i_bubble)
+                        .as_slice()
+                        .expect("Cannot convert Array2 to slice"),
+                )
+            })
+            .collect();
         Self::new(mat)
     }
 }
@@ -158,8 +147,8 @@ impl Bubbles {
 pub struct LatticeBubbles {
     pub interior: Bubbles,
     pub exterior: Bubbles,
-    pub delta: Array3<f64>,
-    pub delta_squared: Array2<f64>,
+    pub delta: DMatrix<Vector4<f64>>,
+    pub delta_squared: DMatrix<f64>,
 }
 
 impl LatticeBubbles {
@@ -223,42 +212,52 @@ impl LatticeBubbles {
         let n_total = n_interior + n_exterior;
 
         // Initialize `delta` and `delta_squared`
-        let mut delta = Array3::zeros((n_interior, n_total, 4));
-        let mut delta_squared = Array2::zeros((n_interior, n_total));
+        let mut delta = DMatrix::from_element(n_interior, n_total, Vector4::zeros());
+        let mut delta_squared = DMatrix::zeros(n_interior, n_total);
 
-        // Compute delta and delta_squared using symmetry for interior-interior
+        // Convert to Bubbles (still using Array2 as intermediate)
+        let bubbles_interior = Bubbles::from_array2(bubbles_interior.clone());
+        let bubbles_exterior = Bubbles::from_array2(bubbles_exterior.clone());
+        // Pre-extract bubble positions as slices of Vector4 for fast access
+        let int_vecs = &bubbles_interior.spacetime;
+        let ext_vecs = &bubbles_exterior.spacetime;
+
+        // Compute delta and delta_squared
         for a_idx in 0..n_interior {
-            // Interior to interior (upper triangular and diagonal)
+            // Interior → Interior (a_idx to b_idx)
             for b_idx in a_idx..n_interior {
-                let delta_ba = bubbles_interior.slice(s![b_idx, ..]).to_owned()
-                    - bubbles_interior.slice(s![a_idx, ..]).to_owned();
-                delta.slice_mut(s![a_idx, b_idx, ..]).assign(&delta_ba);
-                delta_squared[[a_idx, b_idx]] = dot_minkowski_vec(&delta_ba, &delta_ba);
-                // Symmetry: delta[b_idx, a_idx, ..] = -delta[a_idx, b_idx, ..]
-                delta.slice_mut(s![b_idx, a_idx, ..]).assign(&(-&delta_ba));
-                delta_squared[[b_idx, a_idx]] = delta_squared[[a_idx, b_idx]];
+                let da = &int_vecs[b_idx] - &int_vecs[a_idx]; // Vector4 - Vector4 → Vector4
+                delta[(a_idx, b_idx)] = da;
+                let dsq = da.scalar(&da);
+                delta_squared[(a_idx, b_idx)] = dsq;
+                // Symmetry
+                delta[(b_idx, a_idx)] = -da;
+                delta_squared[(b_idx, a_idx)] = dsq;
             }
-            // Interior to exterior
+
+            // Interior → Exterior
             for b_ex in 0..n_exterior {
                 let b_total = n_interior + b_ex;
-                let delta_ba = bubbles_exterior.slice(s![b_ex, ..]).to_owned()
-                    - bubbles_interior.slice(s![a_idx, ..]).to_owned();
-                delta.slice_mut(s![a_idx, b_total, ..]).assign(&delta_ba);
-                delta_squared[[a_idx, b_total]] = dot_minkowski_vec(&delta_ba, &delta_ba);
+                let da = &ext_vecs[b_ex] - &int_vecs[a_idx];
+                delta[(a_idx, b_total)] = da;
+                delta_squared[(a_idx, b_total)] = da.scalar(&da);
             }
         }
 
         // Check for bubble containment
-        check_bubble_formed_inside_bubble(&bubbles_interior, &bubbles_exterior, &delta_squared)?;
+        check_bubble_formed_inside_bubble(&delta_squared)?;
 
-        let bubbles_interior = Bubbles::from_array2(bubbles_interior);
-        let bubbles_exterior = Bubbles::from_array2(bubbles_exterior);
         Ok(LatticeBubbles {
             interior: bubbles_interior,
             exterior: bubbles_exterior,
             delta,
             delta_squared,
         })
+    }
+
+    /// Get the distances between the bubble centers and the origin of the lattice
+    pub fn get_distance_to_origin(&self) -> Vec<f64> {
+        todo!()
     }
 
     /// Create a new `Bubbles` instance by reading interior and exterior bubbles from CSV files.
