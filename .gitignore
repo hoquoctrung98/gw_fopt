@@ -1,8 +1,9 @@
 /target
-packages/bubble_gw/target
+packages/bubble-gw/target
 notebooks/
 .vscode
 **/*.vim
+**/*.csv
 .gitignore
 
 # Byte-compiled / optimized / DLL files

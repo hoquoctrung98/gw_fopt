@@ -1,5 +1,5 @@
 [package]
-name = "bubble_gw_py"
+name = "bubble-gw-python"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -17,7 +17,7 @@ ndarray = {workspace = true}
 nalgebra = {workspace = true}
 num-complex = {workspace = true}
 num = {workspace = true}
-bubble_gw = { path = "../crates/bubble_gw" }
+bubble_gw = { path = "../bubble-gw" }
 pyo3 = { version = "0.27", features = ["extension-module", "num-complex"] }
 numpy = {version = "0.27.1", features = ["nalgebra"]}
 thiserror = "2.0.17"

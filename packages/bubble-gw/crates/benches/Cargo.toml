@@ -9,7 +9,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-bubble_gw = { path = "../bubble_gw" }
+bubble_gw = { path = "../bubble-gw" }
 criterion = {version = "0.8.1", features = ["html_reports"]}
 ndarray = {workspace = true}
 num-traits = {workspace = true}

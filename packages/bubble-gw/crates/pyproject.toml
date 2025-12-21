@@ -1,5 +1,5 @@
 [project]
-name = "bubble_gw_py"
+name = "bubble-gw-python"
 requires-python = ">=3.12"
 classifiers = [
     "Programming Language :: Rust",
@@ -15,7 +15,7 @@ build-backend = "maturin"
 [tool.maturin]
 profile = "release"
 features = ["pyo3/extension-module"]
-manifest-path = "bubble_gw_py/Cargo.toml"
+manifest-path = "bubble-gw-python/Cargo.toml"
 
 [tool.uv]
 cache-keys = [{file = "pyproject.toml"}, {file = "Cargo.toml"}, {file = "**/*.rs"}]
