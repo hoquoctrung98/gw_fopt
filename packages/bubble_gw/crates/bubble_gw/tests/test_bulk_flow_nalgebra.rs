@@ -1,5 +1,6 @@
-use bubble_gw::many_bubbles::bubbles_nalgebra::LatticeBubbles;
-use bubble_gw::many_bubbles::bulk_flow_nalgebra::BulkFlow;
+use bubble_gw::many_bubbles_nalgebra::bubbles_nalgebra::LatticeBubbles;
+use bubble_gw::many_bubbles_nalgebra::bulk_flow_nalgebra::BulkFlow;
+use bubble_gw::many_bubbles_nalgebra::lattice_nalgebra::EmptyLattice;
 use bubble_gw::utils::is_close::IsClose;
 use ndarray::{Array1, Array2, arr2};
 use num::complex::Complex64;
@@ -81,6 +82,7 @@ fn test_bulk_flow_two_bubbles_nalgebra() -> Result<(), Box<dyn Error>> {
         let mut bulk = BulkFlow::new(LatticeBubbles::new(
             bubbles_interior.clone(),
             bubbles_exterior.clone(),
+            EmptyLattice {},
             true,
         )?)?;
         bulk.set_resolution(n_cos_val as usize, n_phi_val as usize, true)?;

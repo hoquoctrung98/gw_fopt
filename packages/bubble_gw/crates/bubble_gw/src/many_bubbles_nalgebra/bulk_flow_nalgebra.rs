@@ -1,4 +1,7 @@
-use crate::many_bubbles::bubbles_nalgebra::{BubbleIndex, Bubbles, BubblesError, LatticeBubbles};
+use crate::many_bubbles_nalgebra::bubbles_nalgebra::{
+    BubbleIndex, Bubbles, BubblesError, LatticeBubbles,
+};
+use crate::many_bubbles_nalgebra::lattice_nalgebra::LatticeGeometry;
 use nalgebra::{DMatrix, Vector4};
 use nalgebra_spacetime::Lorentzian;
 use ndarray::prelude::*;
@@ -48,8 +51,11 @@ pub enum BulkFlowError {
     BubblesError(#[from] BubblesError),
 }
 
-pub struct BulkFlow {
-    bubbles: LatticeBubbles,
+pub struct BulkFlow<L>
+where
+    L: LatticeGeometry,
+{
+    bubbles: LatticeBubbles<L>,
     first_colliding_bubbles: Option<Array3<BubbleIndex>>,
     coefficients_sets: Array2<f64>,
     powers_sets: Array2<f64>,
@@ -63,12 +69,15 @@ pub struct BulkFlow {
     direction_vectors: Option<DMatrix<Vector4<f64>>>,
 }
 
-impl BulkFlow {
+impl<L> BulkFlow<L>
+where
+    L: LatticeGeometry,
+{
     /// Create a new `BulkFlow`.
     ///
     /// * `bubbles` – spacetime coordinates of nucleated bubbles inside and outside the lattice
     /// * `sort_by_time`    – if `true` the two bubble lists are sorted by formation time
-    pub fn new(bubbles: LatticeBubbles) -> Result<Self, BulkFlowError> {
+    pub fn new(bubbles: LatticeBubbles<L>) -> Result<Self, BulkFlowError> {
         let default_num_threads = std::thread::available_parallelism()
             .map(|n| n.get())
             .unwrap_or(1);
@@ -954,8 +963,8 @@ pub fn check_collision_point(
         return false;
     }
 
-    let delta_ba_norm = delta_ba.spacelike_norm();
-    let delta_ca_norm = delta_ca.spacelike_norm();
+    let delta_ba_norm = delta_ba.scalar(&delta_ba);
+    let delta_ca_norm = delta_ca.scalar(&delta_ca);
 
     let collision_vec = delta_ba * delta_ba_norm - delta_ca * delta_ca_norm;
     collision_vec.scalar(&x) > 0.0

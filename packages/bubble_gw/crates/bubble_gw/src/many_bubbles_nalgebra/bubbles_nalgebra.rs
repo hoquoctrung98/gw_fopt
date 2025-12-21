@@ -1,5 +1,6 @@
+use crate::many_bubbles_nalgebra::lattice_nalgebra::LatticeGeometry;
 use csv::{ReaderBuilder, Writer};
-use nalgebra::{DMatrix, Vector4};
+use nalgebra::{DMatrix, Rotation3, Vector3, Vector4};
 use nalgebra_spacetime::Lorentzian;
 use ndarray::prelude::*;
 use ndarray_csv::{Array2Reader, Array2Writer, ReadError};
@@ -141,22 +142,66 @@ impl Bubbles {
             .collect();
         Self::new(mat)
     }
+
+    /// Returns a new `Bubbles` with spatial parts rotated by `rotation`.
+    ///
+    /// The rotation is applied only to the spatial `(x, y, z)` components;
+    /// the time component (`t`) is unchanged.
+    ///
+    /// Accepts any type convertible to `Rotation3<f64>` (e.g., `Matrix3`, `UnitQuaternion`, `Rotation3`, Euler angles via `::from_euler_angles(...)`).
+    pub fn rotate_spatial<R: Into<Rotation3<f64>>>(&self, rotation: R) -> Self {
+        let rot = rotation.into();
+        let rotated_spacetime = self
+            .spacetime
+            .iter()
+            .map(|v| {
+                let t = v[0];
+                // Extract spatial: indices 1..4 → [x, y, z]
+                let spatial = Vector3::from_row_slice(&v.as_slice()[1..4]);
+                let rotated = rot * spatial;
+                // Rebuild: [t, x', y', z']
+                Vector4::from_row_slice(&[t, rotated.x, rotated.y, rotated.z])
+            })
+            .collect();
+        Self::new(rotated_spacetime)
+    }
+
+    /// In-place version: rotates the spatial parts of all bubbles.
+    ///
+    /// More efficient when mutation is acceptable.
+    pub fn rotate_spatial_mut<R: Into<Rotation3<f64>>>(&mut self, rotation: R) {
+        let rot = rotation.into();
+        for v in &mut self.spacetime {
+            let t = v[0];
+            let spatial = Vector3::from_row_slice(&v.as_slice()[1..4]);
+            let rotated = rot * spatial;
+            *v = Vector4::from_row_slice(&[t, rotated.x, rotated.y, rotated.z]);
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct LatticeBubbles {
+pub struct LatticeBubbles<L>
+where
+    L: LatticeGeometry,
+{
     pub interior: Bubbles,
     pub exterior: Bubbles,
+    pub lattice: L,
     pub delta: DMatrix<Vector4<f64>>,
     pub delta_squared: DMatrix<f64>,
 }
 
-impl LatticeBubbles {
+impl<L> LatticeBubbles<L>
+where
+    L: LatticeGeometry,
+{
     pub fn new(
         mut bubbles_interior: Array2<f64>,
         mut bubbles_exterior: Array2<f64>,
+        lattice: L,
         sort_by_time: bool,
-    ) -> Result<LatticeBubbles, BubblesError> {
+    ) -> Result<LatticeBubbles<L>, BubblesError> {
         // shape validation
         if bubbles_interior.ncols() != 4 || bubbles_exterior.ncols() != 4 {
             return Err(BubblesError::ArrayShapeMismatch(format!(
@@ -250,6 +295,7 @@ impl LatticeBubbles {
         Ok(LatticeBubbles {
             interior: bubbles_interior,
             exterior: bubbles_exterior,
+            lattice,
             delta,
             delta_squared,
         })
@@ -275,13 +321,14 @@ impl LatticeBubbles {
     pub fn from_csv_files<P: AsRef<Path>>(
         interior_path: P,
         exterior_path: P,
+        lattice: L,
         sort_by_time: bool,
         has_headers: bool,
     ) -> Result<Self, BubblesError> {
         let interior = Self::load_bubbles_from_csv(interior_path, has_headers)?;
         let exterior = Self::load_bubbles_from_csv(exterior_path, has_headers)?;
 
-        Ok(Self::new(interior, exterior, sort_by_time)?)
+        Ok(Self::new(interior, exterior, lattice, sort_by_time)?)
     }
 
     /// Load bubbles from a CSV file.

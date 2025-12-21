@@ -1,6 +1,11 @@
-use bubble_gw::many_bubbles::bubbles_nalgebra::{BubbleIndex, LatticeBubbles};
-use bubble_gw::many_bubbles::bulk_flow_nalgebra::{BulkFlow, BulkFlowError};
-use ndarray::Array2;
+use crate::py_many_bubbles_nalgebra::PyLatticeBubbles;
+use bubble_gw::many_bubbles_nalgebra::bubbles_nalgebra::BubbleIndex;
+use bubble_gw::many_bubbles_nalgebra::bulk_flow_nalgebra::{BulkFlow, BulkFlowError};
+use bubble_gw::many_bubbles_nalgebra::lattice_nalgebra::{
+    CartesianLattice, EmptyLattice, LatticeGeometry, LatticeTransform, ParallelepipedLattice,
+    SphericalLattice,
+};
+use nalgebra::{Isometry3, Point3};
 use numpy::{
     Complex64 as NumpyComplex64, PyArray1, PyArray2, PyArray3, PyArray4, PyArrayMethods,
     PyReadonlyArray1, PyReadonlyArray2, ToPyArray,
@@ -8,6 +13,135 @@ use numpy::{
 use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
 use thiserror::Error;
+
+#[derive(Clone, Debug)]
+pub enum ConcreteLattice {
+    Parallelepiped(ParallelepipedLattice),
+    Cartesian(CartesianLattice),
+    Sphere(SphericalLattice),
+    Empty(EmptyLattice),
+}
+
+impl LatticeGeometry for ConcreteLattice {
+    fn volume(&self) -> f64 {
+        match self {
+            Self::Parallelepiped(l) => l.volume(),
+            Self::Cartesian(l) => l.volume(),
+            Self::Sphere(l) => l.volume(),
+            Self::Empty(l) => l.volume(),
+        }
+    }
+
+    fn reference_point(&self) -> Point3<f64> {
+        match self {
+            Self::Parallelepiped(l) => l.reference_point(),
+            Self::Cartesian(l) => l.reference_point(),
+            Self::Sphere(l) => l.reference_point(),
+            Self::Empty(l) => l.reference_point(),
+        }
+    }
+
+    fn parameters(&self) -> Vec<f64> {
+        match self {
+            Self::Parallelepiped(l) => l.parameters(),
+            Self::Cartesian(l) => l.parameters(),
+            Self::Sphere(l) => l.parameters(),
+            Self::Empty(l) => l.parameters(),
+        }
+    }
+
+    fn contains(&self, points: &[Point3<f64>]) -> Vec<bool> {
+        match self {
+            Self::Parallelepiped(l) => l.contains(points),
+            Self::Cartesian(l) => l.contains(points),
+            Self::Sphere(l) => l.contains(points),
+            Self::Empty(l) => l.contains(points),
+        }
+    }
+}
+
+impl LatticeTransform for ConcreteLattice {
+    fn transform(&self, iso: &Isometry3<f64>) -> Self {
+        match self {
+            Self::Parallelepiped(l) => Self::Parallelepiped(l.transform(iso)),
+            Self::Cartesian(l) => Self::Cartesian(l.transform(iso)),
+            Self::Sphere(l) => Self::Sphere(l.transform(iso)),
+            Self::Empty(l) => Self::Empty(l.transform(iso)),
+        }
+    }
+
+    fn transform_mut(&mut self, iso: &Isometry3<f64>) {
+        match self {
+            Self::Parallelepiped(l) => l.transform_mut(iso),
+            Self::Cartesian(l) => l.transform_mut(iso),
+            Self::Sphere(l) => l.transform_mut(iso),
+            Self::Empty(l) => l.transform_mut(iso),
+        }
+    }
+}
+
+#[pyclass(name = "Lattice")]
+#[derive(Clone)]
+pub struct PyConcreteLattice {
+    pub inner: ConcreteLattice,
+}
+
+#[pymethods]
+impl PyConcreteLattice {
+    #[staticmethod]
+    fn parallelepiped(origin: [f64; 3], edges: [[f64; 3]; 3]) -> PyResult<Self> {
+        let origin = nalgebra::Point3::from(origin);
+        let edges = [
+            nalgebra::Vector3::from(edges[0]),
+            nalgebra::Vector3::from(edges[1]),
+            nalgebra::Vector3::from(edges[2]),
+        ];
+        let lattice = ParallelepipedLattice::new(origin, edges);
+        Ok(Self {
+            inner: ConcreteLattice::Parallelepiped(lattice),
+        })
+    }
+
+    #[staticmethod]
+    fn cartesian(origin: [f64; 3], edges: [[f64; 3]; 3]) -> PyResult<Self> {
+        let origin = nalgebra::Point3::from(origin);
+        let edges = [
+            nalgebra::Vector3::from(edges[0]),
+            nalgebra::Vector3::from(edges[1]),
+            nalgebra::Vector3::from(edges[2]),
+        ];
+        let lattice = CartesianLattice::new(origin, edges);
+        Ok(Self {
+            inner: ConcreteLattice::Cartesian(lattice),
+        })
+    }
+
+    #[staticmethod]
+    fn sphere(center: [f64; 3], radius: f64) -> PyResult<Self> {
+        let center = nalgebra::Point3::from(center);
+        let lattice = SphericalLattice::new(center, radius);
+        Ok(Self {
+            inner: ConcreteLattice::Sphere(lattice),
+        })
+    }
+
+    #[staticmethod]
+    fn empty() -> Self {
+        Self {
+            inner: ConcreteLattice::Empty(EmptyLattice {}),
+        }
+    }
+
+    #[getter]
+    fn parameters(&self) -> Vec<f64> {
+        self.inner.parameters()
+    }
+
+    #[getter]
+    fn volume(&self) -> f64 {
+        self.inner.volume()
+    }
+}
 
 /// Python-facing error
 #[derive(Error, Debug)]
@@ -109,27 +243,28 @@ type PyResult<T> = Result<T, PyBulkFlowError>;
 
 #[pyclass(name = "BulkFlow")]
 pub struct PyBulkFlow {
-    inner: BulkFlow,
+    inner: BulkFlow<ConcreteLattice>,
 }
 
 #[pymethods]
 impl PyBulkFlow {
     #[new]
-    #[pyo3(signature = (bubbles_interior, bubbles_exterior = None, sort_by_time = false))]
-    pub fn new(
-        bubbles_interior: PyReadonlyArray2<f64>,
-        bubbles_exterior: Option<PyReadonlyArray2<f64>>,
-        sort_by_time: bool,
-    ) -> PyResult<Self> {
-        let bubbles_interior = bubbles_interior.to_owned_array();
-        let bubbles_exterior = bubbles_exterior
-            .map(|arr| arr.to_owned_array())
-            .unwrap_or_else(|| Array2::zeros((0, 4)));
+    #[pyo3(signature = (lattice))]
+    pub fn new(lattice: PyLatticeBubbles) -> PyResult<Self> {
+        let bulk_flow = BulkFlow::new(lattice.inner).unwrap();
 
-        let bulk_flow = BulkFlow::new(
-            LatticeBubbles::new(bubbles_interior, bubbles_exterior, sort_by_time)
-                .map_err(|e| BulkFlowError::BubblesError(e))?,
-        )?;
+        // // TODO: Avoid using unwrap here
+        // let bulk_flow = BulkFlow::new(
+        //     LatticeBubbles::new(
+        //         bubbles_interior,
+        //         bubbles_exterior,
+        //         lattice.inner,
+        //         sort_by_time,
+        //     )
+        //     .unwrap(),
+        // )
+        // .unwrap();
+
         Ok(PyBulkFlow { inner: bulk_flow })
     }
 
