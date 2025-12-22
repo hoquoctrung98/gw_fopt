@@ -39,7 +39,7 @@ One can solve for the bubble profile using e.g CosmoTransitions.
 This profile can be use to build the initial condition for the lattice simulation with 2 bubbles nucleated at the same time and has a separation $d$.
 
 ## Example code
-An example of working with two bubbles system can be found at [](./examples/two_bubbles_evolution.py)
+An example of working with two bubbles system can be found at [two_bubbles.ipynb](./examples/two_bubbles.ipynb).
 
 ## Evolution of field profile
 

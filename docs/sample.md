@@ -25,14 +25,14 @@ Written in Rust, exposed via PyO3 → extremely fast and memory-efficient.
 from bubble_gw.utils import sample
 
 # Linear spacing (equivalent to np.linspace)
-sample(1.0, 100.0, n_sample=5, n_grid=2, n_iter=0, sample_type="linear")
+sample(start=1.0, stop=100.0, n_sample=5, n_grid=2, n_iter=0, sample_type="linear")
 
 # Logarithmic spacing (equivalent to np.geomspace with base 10)
-sample(1.0, 100.0, n_sample=5, n_grid=2, n_iter=0, sample_type="log")
-# or with different base
-sample(1.0, 100.0, n_sample=5, n_grid=2, n_iter=0, sample_type="log", base=2.0)
+sample(start=1.0, stop=100.0, n_sample=5, n_grid=2, n_iter=0, sample_type="log")
+# or with a different base
+sample(start=1.0, stop=100.0, n_sample=5, n_grid=2, n_iter=0, sample_type="log", base=2.0)
 ```
 
-To better visualize the usage of this util, run the example [./examples/visualize_samples.py](./examples/figures/visualize_samples.py)
+To better visualize the usage of this util, run the example [visualize_samples.ipynb](./examples/visualize_samples.ipynb)
 ![uniform](examples/figures/sample_uniform.png)
 ![log](examples/figures/sample_log.png)
