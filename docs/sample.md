@@ -1,6 +1,6 @@
 # Adaptive 1D Sampling Utility (`bubble_gw.utils.sample`)
 
-A high-performance adaptive sampling tool for generating hierarchical, non-uniform grids — ideal when evaluating expensive functions (e.g. likelihoods, simulations) with increasing resolution.
+A high-performance adaptive sampling tool for generating hierarchical, non-uniform grids — ideal when evaluating expensive functions with gradually increasing resolution.
 
 - Start with a coarse grid (`n_iter = 0`)
 - Each refinement level (`n_iter ≥ 1`) adds **only new points** in between existing ones
