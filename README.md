@@ -40,6 +40,7 @@ In order to use the installed packages, you need to source the virtual environme
   ```
 
 ## Examples of using the package **gw_fopt**:
+
 + [two bubbles](./docs/two_bubbles.md): Here we use `bubbles_dynamics` to solve the equation of motion on $(1+1)$D lattice of a quartic potential and plugging this to `bubbles_gw.two_bubbles` to compute the exact GW spectrum. 
 Also from the field evolution, we can compute the surface tension of the wall as a function of time, which will be useful in fitting and extracting the coefficients for the generalized bulk-flow approximation.
 
@@ -49,7 +50,12 @@ Also from the field evolution, we can compute the surface tension of the wall as
 
 + [generalized bulk-flow](./docs/generalized_bulkflow.md): Here we illustrate how to approximate the GW spectrum using generalized bulk-flow scheme, with the input being the bubbles configuration (i.e a list of four-vectors $(t_c, x_c, y_c, z_c)$ of the center of the nucleated bubbles).
 
-## Some docs for useful utilities:
+| First collided bubbles | Collision time with first collided bubbles |
+|-|-|
+|![first collided bubbles](docs/examples/figures/many_bubbles/first_collision.png) | ![collision time](docs/examples/figures/many_bubbles/collision_time.png)|
+
+## Some docs for useful utilities
+
 + [sample](./docs/sample.md): This util can be used to generate the samples for the parameter scan.
 It is especially useful when working with an expensive (i.e time consuming) function, where we can divide the input parameters into several disjoint batches with gradually larger density. 
 One then get the output of the expensive function with higher and higher resolution over the whole range of parameter scan per iteration.
