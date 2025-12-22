@@ -39,21 +39,22 @@ One can solve for the bubble profile using e.g CosmoTransitions.
 This profile can be use to build the initial condition for the lattice simulation with 2 bubbles nucleated at the same time and has a separation $d$.
 
 ## Example code
+
 An example of working with two bubbles system can be found at [two_bubbles.ipynb](./examples/two_bubbles.ipynb).
 
-## Evolution of field profile
+### Evolution of field profile
 
-![evolution_field](examples/figures/evolution_field.png)
+![evolution_field](examples/figures/two_bubbles/evolution_field.png)
 
-## Evolution of gradient energy density
+### Evolution of gradient energy density
 
-![evolution_gradient_energy_density](examples/figures/evolution_gradient_energy_density.png)
+![evolution_gradient_energy_density](examples/figures/two_bubbles/evolution_gradient_energy_density.png)
 
-## Surface tension of the wall as a function of time
+### Surface tension of the wall as a function of time
 
-![surface_tension](examples/figures/surface_tension.png)
+![surface_tension](examples/figures/two_bubbles/surface_tension.png)
 
-## GW spectrum of two bubbles collision
+### GW spectrum of two bubbles collision
 
 Below is the GW spectrum computed with the input being field evolution
-![gw_spectrum](examples/figures/gw_spectrum.png)
+![gw_spectrum](examples/figures/two_bubbles/gw_spectrum.png)

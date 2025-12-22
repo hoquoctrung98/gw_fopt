@@ -45,7 +45,7 @@ Also from the field evolution, we can compute the surface tension of the wall as
 
 | Field evolution | Corresponding GW spectrum |
 |-|-|
-|![evolution_field](docs/examples/figures/evolution_field.png) | ![gw_spectrum](docs/examples/figures/gw_spectrum.png)|
+|![evolution_field](docs/examples/figures/two_bubbles/evolution_field.png) | ![gw_spectrum](docs/examples/figures/two_bubbles/gw_spectrum.png)|
 
 + [generalized bulk-flow](./docs/generalized_bulkflow.md): Here we illustrate how to approximate the GW spectrum using generalized bulk-flow scheme, with the input being the bubbles configuration (i.e a list of four-vectors $(t_c, x_c, y_c, z_c)$ of the center of the nucleated bubbles).
 

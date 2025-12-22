@@ -104,6 +104,7 @@ impl BulkFlow {
         self.first_colliding_bubbles.as_ref()
     }
 
+    // TODO: Handle the case a_idx is outside of the range
     pub fn compute_first_colliding_bubble(
         &self,
         a_idx: usize,
@@ -360,6 +361,7 @@ impl BulkFlow {
         Ok(())
     }
 
+    // TODO: Handle the case a_idx is outside of the range
     pub fn compute_collision_status(
         &self,
         a_idx: usize,
@@ -407,6 +409,7 @@ impl BulkFlow {
         Ok(collision_status)
     }
 
+    // TODO: Handle the case a_idx is outside of the range
     pub fn compute_delta_tab(
         &self,
         a_idx: usize,
