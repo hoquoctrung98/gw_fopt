@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-@author: Quoc Trung Ho <qho@sissa.it>
+@author: Quoc Trung Ho <hoquoctrung98@gmail.com>
 """
 
-import numpy as np
-
 from typing import Any
+
+import numpy as np
 from cosmoTransitions.generic_potential import generic_potential
+
 
 # working
 class GenericPotential(generic_potential):
@@ -21,27 +22,29 @@ class GenericPotential(generic_potential):
     def V0(self, X: np.ndarray) -> float:
         """
         Compute the potential at tree level V0 at given points.
-        
+
         Parameters:
             X (np.ndarray): A NumPy array of shape (..., Ndim), where the last axis represents the field variables.
-        
+
         Returns:
             float: The potential value at X.
-        
+
         Raises:
             NotImplementedError: If the method is not implemented in a subclass.
         """
-        raise NotImplementedError("The potential function V0 must be defined in a subclass.")
+        raise NotImplementedError(
+            "The potential function V0 must be defined in a subclass."
+        )
 
     def dV0(self, X: np.ndarray, eps: float = 1e-6) -> np.ndarray:
         """
         Compute the gradient of the potential V0 numerically using central finite differences.
         If a subclass defines an explicit dV method, it will override this behavior.
-        
+
         Parameters:
             X (np.ndarray): A NumPy array of shape (..., Ndim) representing input points.
             eps (float): Step size for finite difference approximation.
-        
+
         Returns:
             np.ndarray: A NumPy array of the same shape as X, containing the gradient of V0.
         """
@@ -50,7 +53,7 @@ class GenericPotential(generic_potential):
         for i in range(X.shape[-1]):
             dX = np.zeros_like(X)
             dX[..., i] = eps  # Perturb only the i-th field component
-            
+
             V_plus = self.V0(X + dX)
             V_minus = self.V0(X - dX)
             grad[..., i] = (V_plus - V_minus) / (2 * eps)  # Central difference
@@ -60,11 +63,11 @@ class GenericPotential(generic_potential):
         """
         Compute the Hessian matrix (second derivatives) of the potential V0 numerically.
         If a subclass defines an explicit d2V method, it will override this behavior.
-        
+
         Parameters:
             X (np.ndarray): A NumPy array of shape (..., Ndim) representing input points.
             eps (float): Step size for finite difference approximation.
-        
+
         Returns:
             np.ndarray: A NumPy array of shape (Ndim, Ndim) representing the Hessian matrix.
         """
