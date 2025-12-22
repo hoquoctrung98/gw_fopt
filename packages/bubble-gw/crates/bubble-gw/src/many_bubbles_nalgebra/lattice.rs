@@ -1,3 +1,6 @@
+use std::borrow::Borrow;
+
+use crate::many_bubbles_nalgebra::bubbles::Bubbles;
 use approx::{AbsDiffEq, RelativeEq};
 use nalgebra::{Isometry3, Point3, Vector3};
 use thiserror::Error;
@@ -11,7 +14,7 @@ pub enum LatticeError {
     NonOrthogonalEdges,
 }
 
-pub trait LatticeTransform: Clone + Sync {
+pub trait TransformationIsometry3: Clone + Sync {
     /// Applies an isometry, returning a new lattice.
     fn transform(&self, iso: &Isometry3<f64>) -> Self;
 
@@ -61,7 +64,7 @@ impl LatticeGeometry for EmptyLattice {
     }
 }
 
-impl LatticeTransform for EmptyLattice {
+impl TransformationIsometry3 for EmptyLattice {
     fn transform(&self, _iso: &Isometry3<f64>) -> Self {
         EmptyLattice {}
     }
@@ -168,7 +171,7 @@ impl ParallelepipedLattice {
     }
 }
 
-impl LatticeTransform for ParallelepipedLattice {
+impl TransformationIsometry3 for ParallelepipedLattice {
     fn transform(&self, iso: &Isometry3<f64>) -> Self {
         Self {
             origin: iso * self.origin,
@@ -361,7 +364,7 @@ impl LatticeGeometry for CartesianLattice {
     }
 }
 
-impl LatticeTransform for CartesianLattice {
+impl TransformationIsometry3 for CartesianLattice {
     fn transform(&self, iso: &Isometry3<f64>) -> Self {
         Self(self.0.transform(iso))
     }
@@ -383,7 +386,7 @@ impl SphericalLattice {
     }
 }
 
-impl LatticeTransform for SphericalLattice {
+impl TransformationIsometry3 for SphericalLattice {
     fn transform(&self, iso: &Isometry3<f64>) -> Self {
         Self {
             center: iso * self.center,
@@ -417,5 +420,150 @@ impl LatticeGeometry for SphericalLattice {
             .iter()
             .map(|p| (*p - self.center).norm_squared() <= r2)
             .collect()
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum ConcreteLattice {
+    Parallelepiped(ParallelepipedLattice),
+    Cartesian(CartesianLattice),
+    Sphere(SphericalLattice),
+    Empty(EmptyLattice),
+}
+
+impl LatticeGeometry for ConcreteLattice {
+    fn volume(&self) -> f64 {
+        match self {
+            Self::Parallelepiped(l) => l.volume(),
+            Self::Cartesian(l) => l.volume(),
+            Self::Sphere(l) => l.volume(),
+            Self::Empty(l) => l.volume(),
+        }
+    }
+
+    fn reference_point(&self) -> Point3<f64> {
+        match self {
+            Self::Parallelepiped(l) => l.reference_point(),
+            Self::Cartesian(l) => l.reference_point(),
+            Self::Sphere(l) => l.reference_point(),
+            Self::Empty(l) => l.reference_point(),
+        }
+    }
+
+    fn parameters(&self) -> Vec<f64> {
+        match self {
+            Self::Parallelepiped(l) => l.parameters(),
+            Self::Cartesian(l) => l.parameters(),
+            Self::Sphere(l) => l.parameters(),
+            Self::Empty(l) => l.parameters(),
+        }
+    }
+
+    fn contains(&self, points: &[Point3<f64>]) -> Vec<bool> {
+        match self {
+            Self::Parallelepiped(l) => l.contains(points),
+            Self::Cartesian(l) => l.contains(points),
+            Self::Sphere(l) => l.contains(points),
+            Self::Empty(l) => l.contains(points),
+        }
+    }
+}
+
+impl TransformationIsometry3 for ConcreteLattice {
+    fn transform(&self, iso: &Isometry3<f64>) -> Self {
+        match self {
+            Self::Parallelepiped(l) => Self::Parallelepiped(l.transform(iso)),
+            Self::Cartesian(l) => Self::Cartesian(l.transform(iso)),
+            Self::Sphere(l) => Self::Sphere(l.transform(iso)),
+            Self::Empty(l) => Self::Empty(l.transform(iso)),
+        }
+    }
+
+    fn transform_mut(&mut self, iso: &Isometry3<f64>) {
+        match self {
+            Self::Parallelepiped(l) => l.transform_mut(iso),
+            Self::Cartesian(l) => l.transform_mut(iso),
+            Self::Sphere(l) => l.transform_mut(iso),
+            Self::Empty(l) => l.transform_mut(iso),
+        }
+    }
+}
+
+/// Enum representing boundary conditions for the simulation domain.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BoundaryConditions {
+    Periodic,
+    Reflection,
+}
+
+pub trait GenerateBubblesExterior: Clone + Sync {
+    fn generate_bubbles_exterior(
+        &self,
+        bubbles_interior: impl Borrow<Bubbles>,
+        boundary_condition: BoundaryConditions,
+    ) -> Bubbles;
+}
+
+impl GenerateBubblesExterior for ParallelepipedLattice {
+    fn generate_bubbles_exterior(
+        &self,
+        bubbles_interior: impl Borrow<Bubbles>,
+        boundary_condition: BoundaryConditions,
+    ) -> Bubbles {
+        todo!()
+    }
+}
+
+impl GenerateBubblesExterior for CartesianLattice {
+    fn generate_bubbles_exterior(
+        &self,
+        bubbles_interior: impl Borrow<Bubbles>,
+        boundary_condition: BoundaryConditions,
+    ) -> Bubbles {
+        todo!()
+    }
+}
+
+impl GenerateBubblesExterior for SphericalLattice {
+    fn generate_bubbles_exterior(
+        &self,
+        bubbles_interior: impl Borrow<Bubbles>,
+        boundary_condition: BoundaryConditions,
+    ) -> Bubbles {
+        todo!()
+    }
+}
+
+impl GenerateBubblesExterior for EmptyLattice {
+    fn generate_bubbles_exterior(
+        &self,
+        bubbles_interior: impl Borrow<Bubbles>,
+        boundary_condition: BoundaryConditions,
+    ) -> Bubbles {
+        todo!()
+    }
+}
+
+impl GenerateBubblesExterior for ConcreteLattice {
+    fn generate_bubbles_exterior(
+        &self,
+        bubbles_interior: impl Borrow<Bubbles>,
+        boundary_condition: BoundaryConditions,
+    ) -> Bubbles {
+        let bubbles = match self {
+            ConcreteLattice::Parallelepiped(lattice) => {
+                lattice.generate_bubbles_exterior(bubbles_interior, boundary_condition)
+            }
+            ConcreteLattice::Cartesian(lattice) => {
+                lattice.generate_bubbles_exterior(bubbles_interior, boundary_condition)
+            }
+            ConcreteLattice::Sphere(lattice) => {
+                lattice.generate_bubbles_exterior(bubbles_interior, boundary_condition)
+            }
+            ConcreteLattice::Empty(lattice) => {
+                lattice.generate_bubbles_exterior(bubbles_interior, boundary_condition)
+            }
+        };
+        bubbles
     }
 }

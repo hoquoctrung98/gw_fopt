@@ -1,7 +1,8 @@
-use crate::many_bubbles_nalgebra::bubbles_nalgebra::{
-    BubbleIndex, Bubbles, BubblesError, LatticeBubbles,
+use crate::many_bubbles_nalgebra::bubbles::Bubbles;
+use crate::many_bubbles_nalgebra::lattice::{
+    GenerateBubblesExterior, LatticeGeometry, TransformationIsometry3,
 };
-use crate::many_bubbles_nalgebra::lattice_nalgebra::LatticeGeometry;
+use crate::many_bubbles_nalgebra::lattice_bubbles::{BubbleIndex, BubblesError, LatticeBubbles};
 use nalgebra::{DMatrix, Vector4};
 use nalgebra_spacetime::Lorentzian;
 use ndarray::prelude::*;
@@ -53,7 +54,7 @@ pub enum BulkFlowError {
 
 pub struct BulkFlow<L>
 where
-    L: LatticeGeometry,
+    L: LatticeGeometry + TransformationIsometry3 + GenerateBubblesExterior,
 {
     bubbles: LatticeBubbles<L>,
     first_colliding_bubbles: Option<Array3<BubbleIndex>>,
@@ -71,7 +72,7 @@ where
 
 impl<L> BulkFlow<L>
 where
-    L: LatticeGeometry,
+    L: LatticeGeometry + TransformationIsometry3 + GenerateBubblesExterior,
 {
     /// Create a new `BulkFlow`.
     ///

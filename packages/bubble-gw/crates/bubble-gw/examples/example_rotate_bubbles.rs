@@ -1,4 +1,4 @@
-use bubble_gw::many_bubbles_nalgebra::bubbles_nalgebra::Bubbles;
+use bubble_gw::many_bubbles_nalgebra::bubbles::Bubbles;
 use nalgebra::{Rotation3, Vector4};
 
 fn main() {

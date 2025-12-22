@@ -1,6 +1,6 @@
-use crate::py_many_bubbles_nalgebra::py_bulk_flow_nalgebra::{ConcreteLattice, PyConcreteLattice};
-use bubble_gw::many_bubbles_nalgebra::bubbles_nalgebra::LatticeBubbles;
-use bubble_gw::many_bubbles_nalgebra::lattice_nalgebra::{LatticeGeometry, LatticeTransform};
+use crate::py_many_bubbles_nalgebra::py_lattice::PyConcreteLattice;
+use bubble_gw::many_bubbles_nalgebra::lattice::{ConcreteLattice, LatticeGeometry};
+use bubble_gw::many_bubbles_nalgebra::lattice_bubbles::LatticeBubbles;
 use numpy::{PyArray2, PyArrayMethods, PyReadonlyArray2};
 use pyo3::prelude::*;
 
@@ -10,6 +10,7 @@ pub struct PyLatticeBubbles {
     pub inner: LatticeBubbles<ConcreteLattice>,
 }
 
+// NOTE: Need to add methods to perform Isometry3 on both lattice and bubbles
 #[pymethods]
 impl PyLatticeBubbles {
     #[new]
@@ -69,10 +70,5 @@ impl PyLatticeBubbles {
             points.into_iter().map(nalgebra::Point3::from).collect();
         let result = self.inner.lattice.contains(&points);
         result
-    }
-
-    fn transform(&self, _iso_data: [f64; 16]) -> Self {
-        todo!();
-        self.to_owned()
     }
 }

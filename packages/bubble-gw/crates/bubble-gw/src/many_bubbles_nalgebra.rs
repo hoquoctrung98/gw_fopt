@@ -1,3 +1,4 @@
-pub mod bubbles_nalgebra;
-pub mod bulk_flow_nalgebra;
-pub mod lattice_nalgebra;
+pub mod bubbles;
+pub mod bulk_flow;
+pub mod lattice;
+pub mod lattice_bubbles;

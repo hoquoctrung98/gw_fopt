@@ -1,6 +1,10 @@
-use crate::many_bubbles_nalgebra::lattice_nalgebra::LatticeGeometry;
+use crate::many_bubbles_nalgebra::bubbles::Bubbles;
+use crate::many_bubbles_nalgebra::lattice::BoundaryConditions;
+use crate::many_bubbles_nalgebra::lattice::{
+    GenerateBubblesExterior, LatticeGeometry, TransformationIsometry3,
+};
 use csv::{ReaderBuilder, Writer};
-use nalgebra::{DMatrix, Rotation3, Vector3, Vector4};
+use nalgebra::{DMatrix, Vector4};
 use nalgebra_spacetime::Lorentzian;
 use ndarray::prelude::*;
 use ndarray_csv::{Array2Reader, Array2Writer, ReadError};
@@ -108,82 +112,9 @@ impl std::fmt::Display for BubbleIndex {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Bubbles {
-    pub spacetime: Vec<Vector4<f64>>,
-}
-
-impl Bubbles {
-    pub fn new(spacetime: Vec<Vector4<f64>>) -> Self {
-        Self { spacetime }
-    }
-
-    pub fn n_bubbles(&self) -> usize {
-        self.spacetime.len()
-    }
-
-    pub fn to_array2(&self) -> Array2<f64> {
-        Array2::from_shape_fn((self.n_bubbles(), 4), |(i_bubble, i_spacetime)| {
-            self.spacetime[i_bubble][i_spacetime]
-        })
-    }
-
-    pub fn from_array2(array: Array2<f64>) -> Self {
-        let n_bubbles = array.nrows();
-        assert_eq!(array.ncols(), 4);
-        let mat: Vec<Vector4<f64>> = (0..n_bubbles)
-            .map(|i_bubble| {
-                Vector4::from_row_slice(
-                    array
-                        .row(i_bubble)
-                        .as_slice()
-                        .expect("Cannot convert Array2 to slice"),
-                )
-            })
-            .collect();
-        Self::new(mat)
-    }
-
-    /// Returns a new `Bubbles` with spatial parts rotated by `rotation`.
-    ///
-    /// The rotation is applied only to the spatial `(x, y, z)` components;
-    /// the time component (`t`) is unchanged.
-    ///
-    /// Accepts any type convertible to `Rotation3<f64>` (e.g., `Matrix3`, `UnitQuaternion`, `Rotation3`, Euler angles via `::from_euler_angles(...)`).
-    pub fn rotate_spatial<R: Into<Rotation3<f64>>>(&self, rotation: R) -> Self {
-        let rot = rotation.into();
-        let rotated_spacetime = self
-            .spacetime
-            .iter()
-            .map(|v| {
-                let t = v[0];
-                // Extract spatial: indices 1..4 → [x, y, z]
-                let spatial = Vector3::from_row_slice(&v.as_slice()[1..4]);
-                let rotated = rot * spatial;
-                // Rebuild: [t, x', y', z']
-                Vector4::from_row_slice(&[t, rotated.x, rotated.y, rotated.z])
-            })
-            .collect();
-        Self::new(rotated_spacetime)
-    }
-
-    /// In-place version: rotates the spatial parts of all bubbles.
-    ///
-    /// More efficient when mutation is acceptable.
-    pub fn rotate_spatial_mut<R: Into<Rotation3<f64>>>(&mut self, rotation: R) {
-        let rot = rotation.into();
-        for v in &mut self.spacetime {
-            let t = v[0];
-            let spatial = Vector3::from_row_slice(&v.as_slice()[1..4]);
-            let rotated = rot * spatial;
-            *v = Vector4::from_row_slice(&[t, rotated.x, rotated.y, rotated.z]);
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
 pub struct LatticeBubbles<L>
 where
-    L: LatticeGeometry,
+    L: LatticeGeometry + TransformationIsometry3 + GenerateBubblesExterior,
 {
     pub interior: Bubbles,
     pub exterior: Bubbles,
@@ -192,9 +123,26 @@ where
     pub delta_squared: DMatrix<f64>,
 }
 
+impl<L> TransformationIsometry3 for LatticeBubbles<L>
+where
+    L: LatticeGeometry + TransformationIsometry3 + GenerateBubblesExterior,
+{
+    // TODO: We need to perform the transformation on both the lattice and the bubbles
+    fn transform_mut(&mut self, iso: &nalgebra::Isometry3<f64>) {
+        self.lattice.transform_mut(iso);
+        todo!()
+    }
+
+    // TODO: Avoid unwrap here
+    fn transform(&self, iso: &nalgebra::Isometry3<f64>) -> Self {
+        let lattice = self.lattice.transform(iso);
+        Self::new(self.interior.to_array2(), self.exterior.to_array2(), lattice, false).unwrap()
+    }
+}
+
 impl<L> LatticeBubbles<L>
 where
-    L: LatticeGeometry,
+    L: LatticeGeometry + TransformationIsometry3 + GenerateBubblesExterior,
 {
     pub fn new(
         mut bubbles_interior: Array2<f64>,
@@ -299,6 +247,12 @@ where
             delta,
             delta_squared,
         })
+    }
+
+    pub fn with_boundary_condition(&mut self, boundary_condition: BoundaryConditions) {
+        self.exterior = self
+            .lattice
+            .generate_bubbles_exterior(&self.interior, boundary_condition);
     }
 
     /// Get the distances between the bubble centers and the origin of the lattice

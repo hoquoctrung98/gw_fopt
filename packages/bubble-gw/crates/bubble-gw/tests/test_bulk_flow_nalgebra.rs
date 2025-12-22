@@ -1,6 +1,6 @@
-use bubble_gw::many_bubbles_nalgebra::bubbles_nalgebra::LatticeBubbles;
-use bubble_gw::many_bubbles_nalgebra::bulk_flow_nalgebra::BulkFlow;
-use bubble_gw::many_bubbles_nalgebra::lattice_nalgebra::EmptyLattice;
+use bubble_gw::many_bubbles_nalgebra::bulk_flow::BulkFlow;
+use bubble_gw::many_bubbles_nalgebra::lattice::EmptyLattice;
+use bubble_gw::many_bubbles_nalgebra::lattice_bubbles::LatticeBubbles;
 use bubble_gw::utils::is_close::IsClose;
 use ndarray::{Array1, Array2, arr2};
 use num::complex::Complex64;
