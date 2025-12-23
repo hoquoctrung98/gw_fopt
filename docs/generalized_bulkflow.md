@@ -20,7 +20,7 @@ $$
     \Theta(t_{n, c}-t)
     + \Theta(t - t_{n, c}) \left(\frac{t_{n, c}-t_n}{t-t_n}\right)^3 \sum_\xi a_\xi \left(\frac{t_{n, c}-t_n}{t-t_n}\right)^\xi,
 $$
-where the coefficients $a_\xi$ can be extracted from fitting the surface tension of the bubble wall from e.g $(1+1)$D simulation using package **bubble_dynamics**
+where the coefficients $a_\xi$ can be extracted from fitting the surface tension of the bubble wall from e.g $(1+1)D$ simulation using package **bubble_dynamics**
 $$
     \sigma(t,t_n, t_{n, c}) = \Theta(t_{n, c}-t)\sigma_0 (t-t_n)
     + \Theta(t - t_{n, c}) \sigma_0 (t_{n, c} - t_n) \left(\frac{t_{n, c}-t_n}{t-t_n}\right)^2 \sum_\xi a_\xi \left(\frac{t_{n, c}-t_n}{t-t_n}\right)^\xi,
@@ -29,6 +29,7 @@ $$
 ## Example of computing GW spectrum in many bubbles set-up
 
 The bubble configuration file is given at [input configuration](./examples/inputs/confY.txt), which is a table containing four columns corresponding to $(t_c, x_c, y_c, z_c)$ of the nucleated bubbles, and each row corresponds to one bubble.
+The example code to reproduce the results below is [generalized_bulkflow.ipynb](./examples/generalized_bulkflow.ipynb).
 
 ### First collided bubbles
 
