@@ -1,6 +1,6 @@
 use crate::py_many_bubbles_nalgebra::PyLatticeBubbles;
 use bubble_gw::many_bubbles_nalgebra::bulk_flow::{BulkFlow, BulkFlowError};
-use bubble_gw::many_bubbles_nalgebra::lattice::ConcreteLattice;
+use bubble_gw::many_bubbles_nalgebra::lattice::BuiltInLattice;
 use bubble_gw::many_bubbles_nalgebra::lattice_bubbles::BubbleIndex;
 use numpy::{
     Complex64 as NumpyComplex64, PyArray1, PyArray2, PyArray3, PyArray4, PyArrayMethods,
@@ -110,7 +110,7 @@ type PyResult<T> = Result<T, PyBulkFlowError>;
 
 #[pyclass(name = "BulkFlow")]
 pub struct PyBulkFlow {
-    inner: BulkFlow<ConcreteLattice>,
+    inner: BulkFlow<BuiltInLattice>,
 }
 
 #[pymethods]

@@ -25,7 +25,7 @@ fn bubble_gw(py: Python, module_parent: &Bound<'_, PyModule>) -> PyResult<()> {
     let module_many_bubbles_nalgebra = PyModule::new(module_parent.py(), "many_bubbles_nalgebra")?;
     module_many_bubbles_nalgebra.add_class::<py_many_bubbles_nalgebra::PyBulkFlow>()?;
     module_many_bubbles_nalgebra.add_class::<py_many_bubbles_nalgebra::PyLatticeBubbles>()?;
-    module_many_bubbles_nalgebra.add_class::<py_many_bubbles_nalgebra::PyConcreteLattice>()?;
+    module_many_bubbles_nalgebra.add_class::<py_many_bubbles_nalgebra::PyBuiltInLattice>()?;
 
     let module_utils = PyModule::new(module_parent.py(), "utils")?;
     module_utils.add_function(wrap_pyfunction!(py_utils::sample, module_parent)?)?;

@@ -10,7 +10,9 @@ pub enum LatticeError {
     #[error("edges are linearly dependent (zero volume)")]
     DegenerateEdges,
 
-    #[error("edges are not pairwise orthogonal")]
+    #[error(
+        "edges are not pairwise orthogonal, maybe you want to use parallelepiped lattice instead?"
+    )]
     NonOrthogonalEdges,
 }
 
@@ -424,14 +426,14 @@ impl LatticeGeometry for SphericalLattice {
 }
 
 #[derive(Clone, Debug)]
-pub enum ConcreteLattice {
+pub enum BuiltInLattice {
     Parallelepiped(ParallelepipedLattice),
     Cartesian(CartesianLattice),
     Sphere(SphericalLattice),
     Empty(EmptyLattice),
 }
 
-impl LatticeGeometry for ConcreteLattice {
+impl LatticeGeometry for BuiltInLattice {
     fn volume(&self) -> f64 {
         match self {
             Self::Parallelepiped(l) => l.volume(),
@@ -469,7 +471,7 @@ impl LatticeGeometry for ConcreteLattice {
     }
 }
 
-impl TransformationIsometry3 for ConcreteLattice {
+impl TransformationIsometry3 for BuiltInLattice {
     fn transform(&self, iso: &Isometry3<f64>) -> Self {
         match self {
             Self::Parallelepiped(l) => Self::Parallelepiped(l.transform(iso)),
@@ -534,33 +536,34 @@ impl GenerateBubblesExterior for SphericalLattice {
     }
 }
 
+// Generate no exterior bubbles as we have no information about the lattice
 impl GenerateBubblesExterior for EmptyLattice {
     fn generate_bubbles_exterior(
         &self,
         bubbles_interior: impl Borrow<Bubbles>,
         boundary_condition: BoundaryConditions,
     ) -> Bubbles {
-        todo!()
+        Bubbles::new(Vec::new())
     }
 }
 
-impl GenerateBubblesExterior for ConcreteLattice {
+impl GenerateBubblesExterior for BuiltInLattice {
     fn generate_bubbles_exterior(
         &self,
         bubbles_interior: impl Borrow<Bubbles>,
         boundary_condition: BoundaryConditions,
     ) -> Bubbles {
         let bubbles = match self {
-            ConcreteLattice::Parallelepiped(lattice) => {
+            BuiltInLattice::Parallelepiped(lattice) => {
                 lattice.generate_bubbles_exterior(bubbles_interior, boundary_condition)
             }
-            ConcreteLattice::Cartesian(lattice) => {
+            BuiltInLattice::Cartesian(lattice) => {
                 lattice.generate_bubbles_exterior(bubbles_interior, boundary_condition)
             }
-            ConcreteLattice::Sphere(lattice) => {
+            BuiltInLattice::Sphere(lattice) => {
                 lattice.generate_bubbles_exterior(bubbles_interior, boundary_condition)
             }
-            ConcreteLattice::Empty(lattice) => {
+            BuiltInLattice::Empty(lattice) => {
                 lattice.generate_bubbles_exterior(bubbles_interior, boundary_condition)
             }
         };

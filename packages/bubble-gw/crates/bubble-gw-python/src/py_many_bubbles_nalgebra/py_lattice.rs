@@ -1,16 +1,46 @@
 use bubble_gw::many_bubbles_nalgebra::lattice::{
-    CartesianLattice, ConcreteLattice, EmptyLattice, LatticeGeometry, ParallelepipedLattice,
-    SphericalLattice, TransformationIsometry3,
+    BuiltInLattice, CartesianLattice, EmptyLattice, LatticeError, LatticeGeometry,
+    ParallelepipedLattice, SphericalLattice, TransformationIsometry3,
 };
-use pyo3::prelude::*;
+use pyo3::{exceptions::PyValueError, prelude::*};
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum PyLatticeError {
+    #[error("edges are linearly dependent (zero volume)")]
+    DegenerateEdges,
+
+    #[error("edges are not pairwise orthogonal")]
+    NonOrthogonalEdges,
+}
+
+impl From<LatticeError> for PyLatticeError {
+    fn from(err: LatticeError) -> Self {
+        match err {
+            LatticeError::DegenerateEdges => PyLatticeError::DegenerateEdges,
+            LatticeError::NonOrthogonalEdges => PyLatticeError::NonOrthogonalEdges,
+        }
+    }
+}
+
+impl From<PyLatticeError> for PyErr {
+    fn from(err: PyLatticeError) -> Self {
+        match err {
+            PyLatticeError::DegenerateEdges { .. } => PyValueError::new_err(err.to_string()),
+            PyLatticeError::NonOrthogonalEdges { .. } => PyValueError::new_err(err.to_string()),
+        }
+    }
+}
+
+type PyResult<T> = Result<T, PyLatticeError>;
 
 #[pyclass(name = "Lattice")]
 #[derive(Clone)]
-pub struct PyConcreteLattice {
-    pub inner: ConcreteLattice,
+pub struct PyBuiltInLattice {
+    pub inner: BuiltInLattice,
 }
 
-impl TransformationIsometry3 for PyConcreteLattice {
+impl TransformationIsometry3 for PyBuiltInLattice {
     fn transform(&self, iso: &nalgebra::Isometry3<f64>) -> Self {
         Self {
             inner: self.inner.transform(iso),
@@ -23,7 +53,7 @@ impl TransformationIsometry3 for PyConcreteLattice {
 }
 
 #[pymethods]
-impl PyConcreteLattice {
+impl PyBuiltInLattice {
     #[staticmethod]
     fn parallelepiped(origin: [f64; 3], edges: [[f64; 3]; 3]) -> PyResult<Self> {
         let origin = nalgebra::Point3::from(origin);
@@ -32,9 +62,9 @@ impl PyConcreteLattice {
             nalgebra::Vector3::from(edges[1]),
             nalgebra::Vector3::from(edges[2]),
         ];
-        let lattice = ParallelepipedLattice::new(origin, edges);
+        let lattice = ParallelepipedLattice::try_new(origin, edges)?;
         Ok(Self {
-            inner: ConcreteLattice::Parallelepiped(lattice),
+            inner: BuiltInLattice::Parallelepiped(lattice),
         })
     }
 
@@ -46,9 +76,9 @@ impl PyConcreteLattice {
             nalgebra::Vector3::from(edges[1]),
             nalgebra::Vector3::from(edges[2]),
         ];
-        let lattice = CartesianLattice::new(origin, edges);
+        let lattice = CartesianLattice::try_new(origin, edges)?;
         Ok(Self {
-            inner: ConcreteLattice::Cartesian(lattice),
+            inner: BuiltInLattice::Cartesian(lattice),
         })
     }
 
@@ -57,14 +87,14 @@ impl PyConcreteLattice {
         let center = nalgebra::Point3::from(center);
         let lattice = SphericalLattice::new(center, radius);
         Ok(Self {
-            inner: ConcreteLattice::Sphere(lattice),
+            inner: BuiltInLattice::Sphere(lattice),
         })
     }
 
     #[staticmethod]
     fn empty() -> Self {
         Self {
-            inner: ConcreteLattice::Empty(EmptyLattice {}),
+            inner: BuiltInLattice::Empty(EmptyLattice {}),
         }
     }
 

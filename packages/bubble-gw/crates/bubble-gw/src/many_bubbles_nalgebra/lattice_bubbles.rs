@@ -21,7 +21,7 @@ pub enum BubbleIndex {
 
 /// Custom error type for `BulkFlow` operations.
 #[derive(Error, Debug)]
-pub enum BubblesError {
+pub enum LatticeBubblesError {
     #[error("Array shape mismatch: {0}")]
     ArrayShapeMismatch(String),
     #[error("Bubble {a} is formed inside bubble {b} at initial time (overlapping light cones)")]
@@ -48,11 +48,16 @@ pub enum BubblesError {
 
     #[error("Empty bubble file: {0}")]
     EmptyFile(String),
+
+    #[error("Interior bubbles outside lattice: {indices:?}")]
+    InteriorBubblesOutsideLattice { indices: Vec<BubbleIndex> },
 }
 
 // TODO: convert the input arguments to type Bubbles
 // Checks if any bubble is contained within another at the initial time.
-pub fn check_bubble_formed_inside_bubble(delta_squared: &DMatrix<f64>) -> Result<(), BubblesError> {
+pub fn check_bubble_formed_inside_bubble(
+    delta_squared: &DMatrix<f64>,
+) -> Result<(), LatticeBubblesError> {
     let (n_interior, n_total) = delta_squared.shape();
     let n_exterior = n_total - n_interior;
 
@@ -60,7 +65,7 @@ pub fn check_bubble_formed_inside_bubble(delta_squared: &DMatrix<f64>) -> Result
     for a_idx in 0..n_interior {
         for b_idx in a_idx + 1..n_interior {
             if delta_squared[(a_idx, b_idx)] < 0.0 {
-                return Err(BubblesError::BubbleFormedInsideBubble {
+                return Err(LatticeBubblesError::BubbleFormedInsideBubble {
                     a: BubbleIndex::Interior(a_idx),
                     b: BubbleIndex::Interior(b_idx),
                 });
@@ -73,7 +78,7 @@ pub fn check_bubble_formed_inside_bubble(delta_squared: &DMatrix<f64>) -> Result
         for b_ex in 0..n_exterior {
             let b_total = n_interior + b_ex;
             if delta_squared[(a_idx, b_total)] < 0.0 {
-                return Err(BubblesError::BubbleFormedInsideBubble {
+                return Err(LatticeBubblesError::BubbleFormedInsideBubble {
                     a: BubbleIndex::Interior(a_idx),
                     b: BubbleIndex::Exterior(b_ex),
                 });
@@ -149,14 +154,42 @@ where
         mut bubbles_exterior: Array2<f64>,
         lattice: L,
         sort_by_time: bool,
-    ) -> Result<LatticeBubbles<L>, BubblesError> {
+    ) -> Result<LatticeBubbles<L>, LatticeBubblesError> {
         // shape validation
         if bubbles_interior.ncols() != 4 || bubbles_exterior.ncols() != 4 {
-            return Err(BubblesError::ArrayShapeMismatch(format!(
+            return Err(LatticeBubblesError::ArrayShapeMismatch(format!(
                 "Expected 4 columns, got {} for interior, {} for exterior",
                 bubbles_interior.ncols(),
                 bubbles_exterior.ncols()
             )));
+        }
+
+        // --- Lattice containment validation for interior bubbles ---
+        let interior_points: Vec<nalgebra::Point3<f64>> = (0..bubbles_interior.nrows())
+            .map(|i| {
+                let row = bubbles_interior.row(i);
+                nalgebra::Point3::new(row[1], row[2], row[3]) // [t, x, y, z] → (x, y, z)
+            })
+            .collect();
+
+        let contained = lattice.contains(&interior_points);
+
+        let outside_indices: Vec<BubbleIndex> = contained
+            .into_iter()
+            .enumerate()
+            .filter_map(|(i, is_inside)| {
+                if !is_inside {
+                    Some(BubbleIndex::Interior(i))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        if !outside_indices.is_empty() {
+            return Err(LatticeBubblesError::InteriorBubblesOutsideLattice {
+                indices: outside_indices,
+            });
         }
 
         // optional sorting by formation time (column 3)
@@ -278,7 +311,7 @@ where
         lattice: L,
         sort_by_time: bool,
         has_headers: bool,
-    ) -> Result<Self, BubblesError> {
+    ) -> Result<Self, LatticeBubblesError> {
         let interior = Self::load_bubbles_from_csv(interior_path, has_headers)?;
         let exterior = Self::load_bubbles_from_csv(exterior_path, has_headers)?;
 
@@ -296,7 +329,7 @@ where
     fn load_bubbles_from_csv<P: AsRef<Path>>(
         path: P,
         has_headers: bool,
-    ) -> Result<Array2<f64>, BubblesError> {
+    ) -> Result<Array2<f64>, LatticeBubblesError> {
         let path = path.as_ref();
         let mut reader = ReaderBuilder::new()
             .has_headers(has_headers)
@@ -305,10 +338,10 @@ where
 
         let array: Array2<f64> = reader
             .deserialize_array2_dynamic()
-            .map_err(BubblesError::DeserializeArray2)?;
+            .map_err(LatticeBubblesError::DeserializeArray2)?;
 
         if array.ncols() != 4 {
-            return Err(BubblesError::InvalidNCols);
+            return Err(LatticeBubblesError::InvalidNCols);
         }
         Ok(array)
     }
@@ -318,7 +351,7 @@ where
         bubbles: &Array2<f64>,
         path: P,
         has_headers: bool,
-    ) -> Result<(), BubblesError> {
+    ) -> Result<(), LatticeBubblesError> {
         let mut writer = Writer::from_path(path)?;
         if has_headers {
             writer.write_record(&["t", "x", "y", "z"])?;
@@ -333,7 +366,7 @@ where
         &self,
         path: P,
         has_headers: bool,
-    ) -> Result<(), BubblesError> {
+    ) -> Result<(), LatticeBubblesError> {
         Self::write_bubbles_to_csv(&self.interior.to_array2(), path, has_headers)
     }
 
@@ -342,7 +375,7 @@ where
         &self,
         path: P,
         has_headers: bool,
-    ) -> Result<(), BubblesError> {
+    ) -> Result<(), LatticeBubblesError> {
         Self::write_bubbles_to_csv(&self.exterior.to_array2(), path, has_headers)
     }
 
@@ -352,7 +385,7 @@ where
         interior_path: P,
         exterior_path: Q,
         has_headers: bool,
-    ) -> Result<(), BubblesError> {
+    ) -> Result<(), LatticeBubblesError> {
         self.write_bubbles_interior_to_csv(&interior_path, has_headers)?;
         self.save_bubbles_exterior_to_csv(&exterior_path, has_headers)?;
         Ok(())

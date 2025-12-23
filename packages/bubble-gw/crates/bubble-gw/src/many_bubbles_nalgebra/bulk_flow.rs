@@ -2,7 +2,9 @@ use crate::many_bubbles_nalgebra::bubbles::Bubbles;
 use crate::many_bubbles_nalgebra::lattice::{
     GenerateBubblesExterior, LatticeGeometry, TransformationIsometry3,
 };
-use crate::many_bubbles_nalgebra::lattice_bubbles::{BubbleIndex, BubblesError, LatticeBubbles};
+use crate::many_bubbles_nalgebra::lattice_bubbles::{
+    BubbleIndex, LatticeBubbles, LatticeBubblesError,
+};
 use nalgebra::{DMatrix, Vector4};
 use nalgebra_spacetime::Lorentzian;
 use ndarray::prelude::*;
@@ -49,7 +51,7 @@ pub enum BulkFlowError {
     BubbleFormedInsideBubble { a: BubbleIndex, b: BubbleIndex },
 
     #[error("Bubbles Error")]
-    BubblesError(#[from] BubblesError),
+    BubblesError(#[from] LatticeBubblesError),
 }
 
 pub struct BulkFlow<L>
