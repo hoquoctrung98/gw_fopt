@@ -54,22 +54,23 @@ pub enum BulkFlowError {
     BubblesError(#[from] LatticeBubblesError),
 }
 
+#[derive(Debug)]
 pub struct BulkFlow<L>
 where
     L: LatticeGeometry + TransformationIsometry3 + GenerateBubblesExterior,
 {
-    bubbles: LatticeBubbles<L>,
-    first_colliding_bubbles: Option<Array3<BubbleIndex>>,
-    coefficients_sets: Array2<f64>,
-    powers_sets: Array2<f64>,
-    damping_width: Option<f64>,
-    active_bubbles: Array1<bool>,
-    thread_pool: ThreadPool,
-    n_cos_thetax: Option<usize>,
-    n_phix: Option<usize>,
-    cos_thetax: Option<Array1<f64>>,
-    phix: Option<Array1<f64>>,
-    direction_vectors: Option<DMatrix<Vector4<f64>>>,
+    pub bubbles: LatticeBubbles<L>,
+    pub first_colliding_bubbles: Option<Array3<BubbleIndex>>,
+    pub coefficients_sets: Array2<f64>,
+    pub powers_sets: Array2<f64>,
+    pub damping_width: Option<f64>,
+    pub active_bubbles: Array1<bool>,
+    pub thread_pool: ThreadPool,
+    pub n_cos_thetax: Option<usize>,
+    pub n_phix: Option<usize>,
+    pub cos_thetax: Option<Array1<f64>>,
+    pub phix: Option<Array1<f64>>,
+    pub direction_vectors: Option<DMatrix<Vector4<f64>>>,
 }
 
 impl<L> BulkFlow<L>
@@ -217,7 +218,7 @@ where
         let direction_vectors: DMatrix<Vector4<f64>> =
             DMatrix::from_fn(n_cos_thetax, n_phix, |i, j| {
                 let cos_theta = cos_thetax[i];
-                let sin_theta = f64::sqrt(1.0 - cos_theta * cos_theta).abs(); // or just .sqrt() if cos_theta ∈ [-1,1]
+                let sin_theta = f64::sqrt(1.0 - cos_theta * cos_theta).abs();
                 let phi = phix[j];
 
                 let sin_phi = phi.sin();
@@ -969,6 +970,6 @@ pub fn check_collision_point(
     let delta_ba_norm = delta_ba.scalar(&delta_ba);
     let delta_ca_norm = delta_ca.scalar(&delta_ca);
 
-    let collision_vec = delta_ba * delta_ba_norm - delta_ca * delta_ca_norm;
+    let collision_vec = delta_ba * delta_ca_norm - delta_ca * delta_ba_norm;
     collision_vec.scalar(&x) > 0.0
 }

@@ -187,6 +187,7 @@ where
     }
 }
 
+// FIXME: the implementation of sort_by_time=true might be incorrect
 impl<L> LatticeBubbles<L>
 where
     L: LatticeGeometry + TransformationIsometry3 + GenerateBubblesExterior,
@@ -311,6 +312,7 @@ where
         // Convert to Bubbles (still using Array2 as intermediate)
         let bubbles_interior = Bubbles::from_array2(bubbles_interior.clone());
         let bubbles_exterior = Bubbles::from_array2(bubbles_exterior.clone());
+
         // Pre-extract bubble positions as slices of Vector4 for fast access
         let int_vecs = &bubbles_interior.spacetime;
         let ext_vecs = &bubbles_exterior.spacetime;
@@ -353,6 +355,66 @@ where
         self.exterior = self
             .lattice
             .generate_bubbles_exterior(&self.interior, boundary_condition);
+
+        // Update delta and delta_squared for the new exterior bubbles
+        let n_interior = self.interior.n_bubbles();
+        let n_exterior = self.exterior.n_bubbles();
+        let n_total_new = n_interior + n_exterior;
+
+        // Create new delta and delta_squared with updated column count
+        let mut delta = DMatrix::from_element(n_interior, n_total_new, Vector4::zeros());
+        let mut delta_squared = DMatrix::zeros(n_interior, n_total_new);
+
+        // // Copy old interior–interior block (upper-left n_interior × n_interior)
+        // // Since interior didn't change, this block is still valid
+        // for a in 0..n_interior {
+        //     for b in 0..n_interior {
+        //         delta[(a, b)] = self.delta[(a, b)];
+        //         delta_squared[(a, b)] = self.delta_squared[(a, b)];
+        //     }
+        // }
+        //
+        // // Recompute interior–exterior block: for each interior a, exterior e
+        // let int_vecs = &self.interior.spacetime;
+        // let ext_vecs = &self.exterior.spacetime;
+        //
+        // for a in 0..n_interior {
+        //     for e in 0..n_exterior {
+        //         let b_total = n_interior + e;
+        //         let da = &ext_vecs[e] - &int_vecs[a]; // Vector4
+        //         delta[(a, b_total)] = da;
+        //         delta_squared[(a, b_total)] = da.scalar(&da);
+        //     }
+        // }
+        // Pre-extract bubble positions as slices of Vector4 for fast access
+        let int_vecs = &self.interior.spacetime;
+        let ext_vecs = &self.exterior.spacetime;
+
+        // Compute delta and delta_squared
+        for a_idx in 0..n_interior {
+            // Interior → Interior (a_idx to b_idx)
+            for b_idx in a_idx..n_interior {
+                let da = &int_vecs[b_idx] - &int_vecs[a_idx]; // Vector4 - Vector4 → Vector4
+                delta[(a_idx, b_idx)] = da;
+                let dsq = da.scalar(&da);
+                delta_squared[(a_idx, b_idx)] = dsq;
+                // Symmetry
+                delta[(b_idx, a_idx)] = -da;
+                delta_squared[(b_idx, a_idx)] = dsq;
+            }
+
+            // Interior → Exterior
+            for b_ex in 0..n_exterior {
+                let b_total = n_interior + b_ex;
+                let da = &ext_vecs[b_ex] - &int_vecs[a_idx];
+                delta[(a_idx, b_total)] = da;
+                delta_squared[(a_idx, b_total)] = da.scalar(&da);
+            }
+        }
+
+        // Update fields
+        self.delta = delta;
+        self.delta_squared = delta_squared;
     }
 
     /// Get the distances between the bubble centers and the origin of the lattice

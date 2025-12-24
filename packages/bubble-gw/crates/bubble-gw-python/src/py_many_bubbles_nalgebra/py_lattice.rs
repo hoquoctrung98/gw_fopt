@@ -8,18 +8,18 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum PyLatticeError {
-    #[error("edges are linearly dependent (zero volume)")]
-    DegenerateEdges,
+    #[error("Basis vectors are linearly dependent (zero volume)")]
+    DegenerateBasis,
 
-    #[error("edges are not pairwise orthogonal")]
-    NonOrthogonalEdges,
+    #[error("Basis vectors are not pairwise orthogonal")]
+    NonOrthogonalBasis,
 }
 
 impl From<LatticeError> for PyLatticeError {
     fn from(err: LatticeError) -> Self {
         match err {
-            LatticeError::DegenerateBasis => PyLatticeError::DegenerateEdges,
-            LatticeError::NonOrthogonalBasis => PyLatticeError::NonOrthogonalEdges,
+            LatticeError::DegenerateBasis => PyLatticeError::DegenerateBasis,
+            LatticeError::NonOrthogonalBasis => PyLatticeError::NonOrthogonalBasis,
         }
     }
 }
@@ -27,8 +27,8 @@ impl From<LatticeError> for PyLatticeError {
 impl From<PyLatticeError> for PyErr {
     fn from(err: PyLatticeError) -> Self {
         match err {
-            PyLatticeError::DegenerateEdges { .. } => PyValueError::new_err(err.to_string()),
-            PyLatticeError::NonOrthogonalEdges { .. } => PyValueError::new_err(err.to_string()),
+            PyLatticeError::DegenerateBasis { .. } => PyValueError::new_err(err.to_string()),
+            PyLatticeError::NonOrthogonalBasis { .. } => PyValueError::new_err(err.to_string()),
         }
     }
 }
@@ -57,14 +57,14 @@ impl TransformationIsometry3 for PyBuiltInLattice {
 impl PyBuiltInLattice {
     #[staticmethod]
     #[pyo3(name = "Parallelepiped")]
-    fn parallelepiped(origin: [f64; 3], edges: [[f64; 3]; 3]) -> PyResult<Self> {
+    fn parallelepiped(origin: [f64; 3], basis: [[f64; 3]; 3]) -> PyResult<Self> {
         let origin = nalgebra::Point3::from(origin);
-        let edges = [
-            nalgebra::Vector3::from(edges[0]),
-            nalgebra::Vector3::from(edges[1]),
-            nalgebra::Vector3::from(edges[2]),
+        let basis = [
+            nalgebra::Vector3::from(basis[0]),
+            nalgebra::Vector3::from(basis[1]),
+            nalgebra::Vector3::from(basis[2]),
         ];
-        let lattice = ParallelepipedLattice::try_new(origin, edges)?;
+        let lattice = ParallelepipedLattice::try_new(origin, basis)?;
         Ok(Self {
             inner: BuiltInLattice::Parallelepiped(lattice),
         })
@@ -72,14 +72,14 @@ impl PyBuiltInLattice {
 
     #[staticmethod]
     #[pyo3(name = "Cartesian")]
-    fn cartesian(origin: [f64; 3], edges: [[f64; 3]; 3]) -> PyResult<Self> {
+    fn cartesian(origin: [f64; 3], basis: [[f64; 3]; 3]) -> PyResult<Self> {
         let origin = nalgebra::Point3::from(origin);
-        let edges = [
-            nalgebra::Vector3::from(edges[0]),
-            nalgebra::Vector3::from(edges[1]),
-            nalgebra::Vector3::from(edges[2]),
+        let basis = [
+            nalgebra::Vector3::from(basis[0]),
+            nalgebra::Vector3::from(basis[1]),
+            nalgebra::Vector3::from(basis[2]),
         ];
-        let lattice = CartesianLattice::try_new(origin, edges)?;
+        let lattice = CartesianLattice::try_new(origin, basis)?;
         Ok(Self {
             inner: BuiltInLattice::Cartesian(lattice),
         })

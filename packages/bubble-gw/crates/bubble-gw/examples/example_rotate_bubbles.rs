@@ -11,9 +11,9 @@ fn main() {
     let rot_z_90 =
         Rotation3::from_axis_angle(&nalgebra::Vector3::z_axis(), std::f64::consts::PI / 2.0);
 
-    let rotated = bubbles.rotate_spatial(rot_z_90);
-    println!("{:?}", rotated);
-    println!("foo");
+    // let rotated = bubbles.rotate_spatial(rot_z_90);
+    // println!("{:?}", rotated);
+    // println!("foo");
     // → [ (1.0, 0.0, 1.0, 0.0), (2.0, -1.0, 0.0, 0.0) ]
 
     // Or in-place:

@@ -118,20 +118,7 @@ impl PyBulkFlow {
     #[new]
     #[pyo3(signature = (lattice))]
     pub fn new(lattice: PyLatticeBubbles) -> PyResult<Self> {
-        let bulk_flow = BulkFlow::new(lattice.inner).unwrap();
-
-        // // TODO: Avoid using unwrap here
-        // let bulk_flow = BulkFlow::new(
-        //     LatticeBubbles::new(
-        //         bubbles_interior,
-        //         bubbles_exterior,
-        //         lattice.inner,
-        //         sort_by_time,
-        //     )
-        //     .unwrap(),
-        // )
-        // .unwrap();
-
+        let bulk_flow = BulkFlow::new(lattice.inner)?;
         Ok(PyBulkFlow { inner: bulk_flow })
     }
 

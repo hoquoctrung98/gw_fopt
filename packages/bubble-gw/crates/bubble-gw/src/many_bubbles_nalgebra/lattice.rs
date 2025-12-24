@@ -328,16 +328,16 @@ impl CartesianLattice {
         let half = Vector3::new(lx / 2.0, ly / 2.0, lz / 2.0);
         let origin = center.coords - half;
 
-        let mut edges = [Vector3::x() * lx, Vector3::y() * ly, Vector3::z() * lz];
+        let mut basis = [Vector3::x() * lx, Vector3::y() * ly, Vector3::z() * lz];
 
         if let Some(rot) = rotation {
-            for e in &mut edges {
+            for e in &mut basis {
                 *e = *rot * *e;
             }
         }
 
         // Since rotation preserves orthogonality, we can use `new_unchecked` safely
-        Self::new_unchecked(Point3::from(origin), edges)
+        Self::new_unchecked(Point3::from(origin), basis)
     }
 
     /// Returns normalized basis vectors (should be orthonormal).
@@ -345,7 +345,7 @@ impl CartesianLattice {
         self.0.basis_vectors()
     }
 
-    /// Returns side lengths (edge norms).
+    /// Returns side lengths (basis norms).
     pub fn side_lengths(&self) -> [f64; 3] {
         self.0.basis.map(|e| e.norm())
     }
@@ -521,8 +521,8 @@ impl GenerateBubblesExterior for ParallelepipedLattice {
                 // Only 6 directions: ±e1, ±e2, ±e3
                 let shifts = [e1, -e1, e2, -e2, e3, -e3];
 
-                for &shift in &shifts {
-                    for &event in &interior.spacetime {
+                for &event in &interior.spacetime {
+                    for &shift in &shifts {
                         let t = event[0];
                         let x = event[1] + shift.x;
                         let y = event[2] + shift.y;
