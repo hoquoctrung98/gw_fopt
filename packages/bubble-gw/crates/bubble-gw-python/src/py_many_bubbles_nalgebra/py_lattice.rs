@@ -2,6 +2,7 @@ use bubble_gw::many_bubbles_nalgebra::lattice::{
     BuiltInLattice, CartesianLattice, EmptyLattice, LatticeError, LatticeGeometry,
     ParallelepipedLattice, SphericalLattice, TransformationIsometry3,
 };
+use nalgebra::Isometry3;
 use pyo3::{exceptions::PyValueError, prelude::*};
 use thiserror::Error;
 
@@ -17,8 +18,8 @@ pub enum PyLatticeError {
 impl From<LatticeError> for PyLatticeError {
     fn from(err: LatticeError) -> Self {
         match err {
-            LatticeError::DegenerateEdges => PyLatticeError::DegenerateEdges,
-            LatticeError::NonOrthogonalEdges => PyLatticeError::NonOrthogonalEdges,
+            LatticeError::DegenerateBasis => PyLatticeError::DegenerateEdges,
+            LatticeError::NonOrthogonalBasis => PyLatticeError::NonOrthogonalEdges,
         }
     }
 }
@@ -41,13 +42,13 @@ pub struct PyBuiltInLattice {
 }
 
 impl TransformationIsometry3 for PyBuiltInLattice {
-    fn transform(&self, iso: &nalgebra::Isometry3<f64>) -> Self {
+    fn transform<I: Into<Isometry3<f64>>>(&self, iso: I) -> Self {
         Self {
             inner: self.inner.transform(iso),
         }
     }
 
-    fn transform_mut(&mut self, iso: &nalgebra::Isometry3<f64>) {
+    fn transform_mut<I: Into<Isometry3<f64>>>(&mut self, iso: I) {
         self.inner.transform_mut(iso);
     }
 }
@@ -55,6 +56,7 @@ impl TransformationIsometry3 for PyBuiltInLattice {
 #[pymethods]
 impl PyBuiltInLattice {
     #[staticmethod]
+    #[pyo3(name = "Parallelepiped")]
     fn parallelepiped(origin: [f64; 3], edges: [[f64; 3]; 3]) -> PyResult<Self> {
         let origin = nalgebra::Point3::from(origin);
         let edges = [
@@ -69,6 +71,7 @@ impl PyBuiltInLattice {
     }
 
     #[staticmethod]
+    #[pyo3(name = "Cartesian")]
     fn cartesian(origin: [f64; 3], edges: [[f64; 3]; 3]) -> PyResult<Self> {
         let origin = nalgebra::Point3::from(origin);
         let edges = [
@@ -83,6 +86,7 @@ impl PyBuiltInLattice {
     }
 
     #[staticmethod]
+    #[pyo3(name = "Sphere")]
     fn sphere(center: [f64; 3], radius: f64) -> PyResult<Self> {
         let center = nalgebra::Point3::from(center);
         let lattice = SphericalLattice::new(center, radius);
@@ -92,6 +96,7 @@ impl PyBuiltInLattice {
     }
 
     #[staticmethod]
+    #[pyo3(name = "Empty")]
     fn empty() -> Self {
         Self {
             inner: BuiltInLattice::Empty(EmptyLattice {}),

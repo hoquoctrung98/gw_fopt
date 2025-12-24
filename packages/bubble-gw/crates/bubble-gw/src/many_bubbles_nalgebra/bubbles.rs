@@ -1,4 +1,5 @@
-use nalgebra::{Rotation3, Vector3, Vector4};
+use crate::many_bubbles_nalgebra::lattice::TransformationIsometry3;
+use nalgebra::{Vector3, Vector4};
 use ndarray::prelude::*;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -36,40 +37,47 @@ impl Bubbles {
             .collect();
         Self::new(mat)
     }
+}
 
-    /// Returns a new `Bubbles` with spatial parts rotated by `rotation`.
-    ///
-    /// The rotation is applied only to the spatial `(x, y, z)` components;
-    /// the time component (`t`) is unchanged.
-    ///
-    /// Accepts any type convertible to `Rotation3<f64>` (e.g., `Matrix3`, `UnitQuaternion`, `Rotation3`, Euler angles via `::from_euler_angles(...)`).
-    pub fn rotate_spatial<R: Into<Rotation3<f64>>>(&self, rotation: R) -> Self {
-        let rot = rotation.into();
-        let rotated_spacetime = self
+impl TransformationIsometry3 for Bubbles {
+    fn transform<I: Into<nalgebra::Isometry3<f64>>>(&self, iso: I) -> Self {
+        let iso = iso.into();
+        let rot = iso.rotation;
+        let trans = iso.translation.vector;
+
+        let spacetime = self
             .spacetime
             .iter()
             .map(|v| {
-                let t = v[0];
-                // Extract spatial: indices 1..4 → [x, y, z]
-                let spatial = Vector3::from_row_slice(&v.as_slice()[1..4]);
-                let rotated = rot * spatial;
-                // Rebuild: [t, x', y', z']
-                Vector4::from_row_slice(&[t, rotated.x, rotated.y, rotated.z])
+                // Extract spatial part (x, y, z)
+                let spatial = Vector3::new(v[1], v[2], v[3]);
+                // Apply isometry: R·p + t
+                let transformed_spatial = rot * spatial + trans;
+                // Reconstruct with unchanged time
+                Vector4::new(
+                    v[0],
+                    transformed_spatial.x,
+                    transformed_spatial.y,
+                    transformed_spatial.z,
+                )
             })
             .collect();
-        Self::new(rotated_spacetime)
+
+        Self { spacetime }
     }
 
-    /// In-place version: rotates the spatial parts of all bubbles.
-    ///
-    /// More efficient when mutation is acceptable.
-    pub fn rotate_spatial_mut<R: Into<Rotation3<f64>>>(&mut self, rotation: R) {
-        let rot = rotation.into();
+    fn transform_mut<I: Into<nalgebra::Isometry3<f64>>>(&mut self, iso: I) {
+        let iso = iso.into();
+        let rot = iso.rotation;
+        let trans = iso.translation.vector;
+
         for v in &mut self.spacetime {
-            let t = v[0];
-            let spatial = Vector3::from_row_slice(&v.as_slice()[1..4]);
-            let rotated = rot * spatial;
-            *v = Vector4::from_row_slice(&[t, rotated.x, rotated.y, rotated.z]);
+            let spatial = Vector3::new(v[1], v[2], v[3]);
+            let transformed = rot * spatial + trans;
+            v[1] = transformed.x;
+            v[2] = transformed.y;
+            v[3] = transformed.z;
+            // v[0] (time) unchanged
         }
     }
 }

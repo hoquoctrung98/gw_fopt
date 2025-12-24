@@ -4,6 +4,7 @@ use crate::many_bubbles_nalgebra::lattice::{
     GenerateBubblesExterior, LatticeGeometry, TransformationIsometry3,
 };
 use csv::{ReaderBuilder, Writer};
+use nalgebra::Vector3;
 use nalgebra::{DMatrix, Vector4};
 use nalgebra_spacetime::Lorentzian;
 use ndarray::prelude::*;
@@ -49,8 +50,11 @@ pub enum LatticeBubblesError {
     #[error("Empty bubble file: {0}")]
     EmptyFile(String),
 
-    #[error("Interior bubbles outside lattice: {indices:?}")]
+    #[error("Interior bubbles formed outside lattice: {indices:?}")]
     InteriorBubblesOutsideLattice { indices: Vec<BubbleIndex> },
+
+    #[error("Exterior bubbles formed inside lattice: {indices:?}")]
+    ExteriorBubblesInsideLattice { indices: Vec<BubbleIndex> },
 }
 
 // TODO: convert the input arguments to type Bubbles
@@ -132,16 +136,54 @@ impl<L> TransformationIsometry3 for LatticeBubbles<L>
 where
     L: LatticeGeometry + TransformationIsometry3 + GenerateBubblesExterior,
 {
-    // TODO: We need to perform the transformation on both the lattice and the bubbles
-    fn transform_mut(&mut self, iso: &nalgebra::Isometry3<f64>) {
-        self.lattice.transform_mut(iso);
-        todo!()
+    fn transform<I: Into<nalgebra::Isometry3<f64>>>(&self, iso: I) -> Self {
+        let iso = iso.into();
+        let lattice = self.lattice.transform(iso);
+        let interior = self.interior.transform(iso);
+        let exterior = self.exterior.transform(iso);
+
+        // Transform delta using rotation only
+        let mut delta = self.delta.clone();
+        let rot = iso.rotation;
+        for da in delta.iter_mut() {
+            let spatial = Vector3::new(da[1], da[2], da[3]);
+            let rotated = rot * spatial;
+            da[1] = rotated.x;
+            da[2] = rotated.y;
+            da[3] = rotated.z;
+        }
+
+        Self {
+            interior,
+            exterior,
+            lattice,
+            delta,
+            delta_squared: self.delta_squared.clone(),
+        }
     }
 
-    // TODO: Avoid unwrap here
-    fn transform(&self, iso: &nalgebra::Isometry3<f64>) -> Self {
-        let lattice = self.lattice.transform(iso);
-        Self::new(self.interior.to_array2(), self.exterior.to_array2(), lattice, false).unwrap()
+    fn transform_mut<I: Into<nalgebra::Isometry3<f64>>>(&mut self, iso: I) {
+        let iso = iso.into();
+        // Transform lattice
+        self.lattice.transform_mut(iso);
+
+        // Transform bubbles
+        self.interior.transform_mut(iso);
+        self.exterior.transform_mut(iso);
+
+        // Update delta: only spatial rotation affects differences
+        // (translation cancels, time unchanged)
+        let rot = iso.rotation;
+        for da in self.delta.iter_mut() {
+            let spatial = Vector3::new(da[1], da[2], da[3]);
+            let rotated = rot * spatial;
+            da[1] = rotated.x;
+            da[2] = rotated.y;
+            da[3] = rotated.z;
+            // da[0] unchanged
+        }
+
+        // delta_squared remains invariant under spatial isometries → no change
     }
 }
 
@@ -171,10 +213,17 @@ where
                 nalgebra::Point3::new(row[1], row[2], row[3]) // [t, x, y, z] → (x, y, z)
             })
             .collect();
+        let exterior_points: Vec<nalgebra::Point3<f64>> = (0..bubbles_exterior.nrows())
+            .map(|i| {
+                let row = bubbles_exterior.row(i);
+                nalgebra::Point3::new(row[1], row[2], row[3]) // [t, x, y, z] → (x, y, z)
+            })
+            .collect();
 
-        let contained = lattice.contains(&interior_points);
+        let interior_contained = lattice.contains(&interior_points);
+        let exterior_contained = lattice.contains(&exterior_points);
 
-        let outside_indices: Vec<BubbleIndex> = contained
+        let outside_interior_indices: Vec<BubbleIndex> = interior_contained
             .into_iter()
             .enumerate()
             .filter_map(|(i, is_inside)| {
@@ -186,9 +235,27 @@ where
             })
             .collect();
 
-        if !outside_indices.is_empty() {
+        let inside_exterior_indices: Vec<BubbleIndex> = exterior_contained
+            .into_iter()
+            .enumerate()
+            .filter_map(|(i, is_inside)| {
+                if is_inside {
+                    Some(BubbleIndex::Exterior(i))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        if !outside_interior_indices.is_empty() {
             return Err(LatticeBubblesError::InteriorBubblesOutsideLattice {
-                indices: outside_indices,
+                indices: outside_interior_indices,
+            });
+        }
+
+        if !inside_exterior_indices.is_empty() {
+            return Err(LatticeBubblesError::ExteriorBubblesInsideLattice {
+                indices: inside_exterior_indices,
             });
         }
 

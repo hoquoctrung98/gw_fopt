@@ -1,5 +1,8 @@
+use crate::py_many_bubbles_nalgebra::py_isometry::PyIsometry3;
 use crate::py_many_bubbles_nalgebra::py_lattice::PyBuiltInLattice;
-use bubble_gw::many_bubbles_nalgebra::lattice::{BuiltInLattice, LatticeGeometry};
+use bubble_gw::many_bubbles_nalgebra::lattice::{
+    BuiltInLattice, LatticeGeometry, TransformationIsometry3,
+};
 use bubble_gw::many_bubbles_nalgebra::lattice_bubbles::LatticeBubbles;
 use ndarray::Array2;
 use numpy::{PyArray2, PyArrayMethods, PyReadonlyArray2};
@@ -9,6 +12,17 @@ use pyo3::prelude::*;
 #[derive(Clone)]
 pub struct PyLatticeBubbles {
     pub inner: LatticeBubbles<BuiltInLattice>,
+}
+
+impl TransformationIsometry3 for PyLatticeBubbles {
+    fn transform<I: Into<nalgebra::Isometry3<f64>>>(&self, iso: I) -> Self {
+        Self {
+            inner: self.inner.transform(iso),
+        }
+    }
+    fn transform_mut<I: Into<nalgebra::Isometry3<f64>>>(&mut self, iso: I) {
+        self.inner.transform_mut(iso);
+    }
 }
 
 // NOTE: Need to add methods to perform Isometry3 on both lattice and bubbles
@@ -48,10 +62,10 @@ impl PyLatticeBubbles {
     #[getter]
     fn lattice_type(&self) -> &'static str {
         match &self.inner.lattice {
-            BuiltInLattice::Parallelepiped(_) => "parallelepiped",
-            BuiltInLattice::Cartesian(_) => "cartesian",
-            BuiltInLattice::Sphere(_) => "sphere",
-            BuiltInLattice::Empty(_) => "empty",
+            BuiltInLattice::Parallelepiped(_) => "Parallelepiped",
+            BuiltInLattice::Cartesian(_) => "Cartesian",
+            BuiltInLattice::Sphere(_) => "Sphere",
+            BuiltInLattice::Empty(_) => "Empty",
         }
     }
 
@@ -73,5 +87,15 @@ impl PyLatticeBubbles {
             points.into_iter().map(nalgebra::Point3::from).collect();
         let result = self.inner.lattice.contains(&points);
         result
+    }
+
+    #[pyo3(name = "transform")]
+    fn py_transform(&self, iso: &PyIsometry3) -> Self {
+        self.transform(iso)
+    }
+
+    #[pyo3(name = "transform_mut")]
+    fn py_transform_mut(&mut self, iso: &PyIsometry3) {
+        self.transform_mut(iso);
     }
 }

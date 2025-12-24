@@ -8,20 +8,20 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum LatticeError {
     #[error("edges are linearly dependent (zero volume)")]
-    DegenerateEdges,
+    DegenerateBasis,
 
     #[error(
         "edges are not pairwise orthogonal, maybe you want to use parallelepiped lattice instead?"
     )]
-    NonOrthogonalEdges,
+    NonOrthogonalBasis,
 }
 
 pub trait TransformationIsometry3: Clone + Sync {
-    /// Applies an isometry, returning a new lattice.
-    fn transform(&self, iso: &Isometry3<f64>) -> Self;
+    /// Transforms self by an isometry, returning a new instance.
+    fn transform<I: Into<Isometry3<f64>>>(&self, iso: I) -> Self;
 
-    /// Applies an isometry in-place.
-    fn transform_mut(&mut self, iso: &Isometry3<f64>);
+    /// Transforms self in-place by an isometry.
+    fn transform_mut<I: Into<Isometry3<f64>>>(&mut self, iso: I);
 }
 
 /// Trait for 3D lattice geometries supporting rigid transformations.
@@ -67,16 +67,17 @@ impl LatticeGeometry for EmptyLattice {
 }
 
 impl TransformationIsometry3 for EmptyLattice {
-    fn transform(&self, _iso: &Isometry3<f64>) -> Self {
+    fn transform<I: Into<Isometry3<f64>>>(&self, iso: I) -> Self {
         EmptyLattice {}
     }
-    fn transform_mut(&mut self, _iso: &Isometry3<f64>) {}
+
+    fn transform_mut<I: Into<Isometry3<f64>>>(&mut self, iso: I) {}
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ParallelepipedLattice {
     pub origin: Point3<f64>,
-    pub edges: [Vector3<f64>; 3],
+    pub basis: [Vector3<f64>; 3],
 }
 
 impl AbsDiffEq for ParallelepipedLattice {
@@ -88,9 +89,9 @@ impl AbsDiffEq for ParallelepipedLattice {
 
     fn abs_diff_eq(&self, other: &Self, epsilon: Self::Epsilon) -> bool {
         self.origin.abs_diff_eq(&other.origin, epsilon)
-            && self.edges[0].abs_diff_eq(&other.edges[0], epsilon)
-            && self.edges[1].abs_diff_eq(&other.edges[1], epsilon)
-            && self.edges[2].abs_diff_eq(&other.edges[2], epsilon)
+            && self.basis[0].abs_diff_eq(&other.basis[0], epsilon)
+            && self.basis[1].abs_diff_eq(&other.basis[1], epsilon)
+            && self.basis[2].abs_diff_eq(&other.basis[2], epsilon)
     }
 }
 
@@ -107,39 +108,39 @@ impl RelativeEq for ParallelepipedLattice {
     ) -> bool {
         self.origin
             .relative_eq(&other.origin, epsilon, max_relative)
-            && self.edges[0].relative_eq(&other.edges[0], epsilon, max_relative)
-            && self.edges[1].relative_eq(&other.edges[1], epsilon, max_relative)
-            && self.edges[2].relative_eq(&other.edges[2], epsilon, max_relative)
+            && self.basis[0].relative_eq(&other.basis[0], epsilon, max_relative)
+            && self.basis[1].relative_eq(&other.basis[1], epsilon, max_relative)
+            && self.basis[2].relative_eq(&other.basis[2], epsilon, max_relative)
     }
 }
 
 impl ParallelepipedLattice {
-    /// Creates a parallelepiped from origin and edge vectors.
+    /// Creates a parallelepiped from origin and basis vectors.
     ///
-    /// Checks that the three edge vectors are linearly independent (non-zero volume).
+    /// Checks that the three basis vectors are linearly independent (non-zero volume).
     /// Panics if invalid (in debug builds; release may skip for performance).
     ///
     /// For fallible version, use `try_new`.
-    pub fn new(origin: Point3<f64>, edges: [Vector3<f64>; 3]) -> Self {
-        match Self::try_new(origin, edges) {
+    pub fn new(origin: Point3<f64>, basis: [Vector3<f64>; 3]) -> Self {
+        match Self::try_new(origin, basis) {
             Ok(l) => l,
             Err(e) => panic!("Invalid ParallelepipedLattice: {}", e),
         }
     }
 
-    /// Fallible constructor: returns `Err` if edges are linearly dependent.
-    pub fn try_new(origin: Point3<f64>, edges: [Vector3<f64>; 3]) -> Result<Self, LatticeError> {
-        let mat = nalgebra::Matrix3::from_columns(&edges);
+    /// Fallible constructor: returns `Err` if basis vectors are linearly dependent.
+    pub fn try_new(origin: Point3<f64>, basis: [Vector3<f64>; 3]) -> Result<Self, LatticeError> {
+        let mat = nalgebra::Matrix3::from_columns(&basis);
         if mat.determinant().abs() <= f64::EPSILON {
-            Err(LatticeError::DegenerateEdges)
+            Err(LatticeError::DegenerateBasis)
         } else {
-            Ok(Self { origin, edges })
+            Ok(Self { origin, basis })
         }
     }
 
     /// Creates without validation — for performance-critical code after verification.
-    pub fn new_unchecked(origin: Point3<f64>, edges: [Vector3<f64>; 3]) -> Self {
-        Self { origin, edges }
+    pub fn new_unchecked(origin: Point3<f64>, basis: [Vector3<f64>; 3]) -> Self {
+        Self { origin, basis }
     }
 
     /// Creates an axis-aligned box `[ox, ox+lx] × [oy, oy+ly] × [oz, oz+lz]`.
@@ -160,9 +161,9 @@ impl ParallelepipedLattice {
         )
     }
 
-    /// Returns normalized edge directions.
+    /// Returns normalized basis vectors directions.
     pub fn basis_vectors(&self) -> [Vector3<f64>; 3] {
-        self.edges.map(|e| {
+        self.basis.map(|e| {
             let n2 = e.norm_squared();
             if n2 > f64::EPSILON {
                 e / n2.sqrt()
@@ -174,28 +175,30 @@ impl ParallelepipedLattice {
 }
 
 impl TransformationIsometry3 for ParallelepipedLattice {
-    fn transform(&self, iso: &Isometry3<f64>) -> Self {
+    fn transform<I: Into<Isometry3<f64>>>(&self, iso: I) -> Self {
+        let iso = iso.into();
         Self {
             origin: iso * self.origin,
-            edges: [
-                iso.rotation * self.edges[0],
-                iso.rotation * self.edges[1],
-                iso.rotation * self.edges[2],
+            basis: [
+                iso.rotation * self.basis[0],
+                iso.rotation * self.basis[1],
+                iso.rotation * self.basis[2],
             ],
         }
     }
 
-    fn transform_mut(&mut self, iso: &Isometry3<f64>) {
+    fn transform_mut<I: Into<Isometry3<f64>>>(&mut self, iso: I) {
+        let iso = iso.into();
         self.origin = iso * self.origin;
-        for edge in &mut self.edges {
-            *edge = iso.rotation * *edge;
+        for v in &mut self.basis {
+            *v = iso.rotation * *v;
         }
     }
 }
 
 impl LatticeGeometry for ParallelepipedLattice {
     fn volume(&self) -> f64 {
-        let mat = nalgebra::Matrix3::from_columns(&self.edges);
+        let mat = nalgebra::Matrix3::from_columns(&self.basis);
         mat.determinant().abs()
     }
 
@@ -205,14 +208,14 @@ impl LatticeGeometry for ParallelepipedLattice {
 
     fn parameters(&self) -> Vec<f64> {
         let o = self.origin.coords;
-        let [e1, e2, e3] = self.edges;
+        let [e1, e2, e3] = self.basis;
         vec![
             o.x, o.y, o.z, e1.x, e1.y, e1.z, e2.x, e2.y, e2.z, e3.x, e3.y, e3.z,
         ]
     }
 
     fn contains(&self, points: &[Point3<f64>]) -> Vec<bool> {
-        let mat = nalgebra::Matrix3::from_columns(&self.edges);
+        let mat = nalgebra::Matrix3::from_columns(&self.basis);
         let inv = match mat.try_inverse() {
             Some(m) => m,
             None => return vec![false; points.len()], // degenerate box
@@ -239,9 +242,9 @@ impl LatticeGeometry for ParallelepipedLattice {
     }
 }
 
-/// An oriented Cartesian box (i.e., a rectangular parallelepiped with orthogonal edges).
+/// An oriented Cartesian box (i.e., a rectangular parallelepiped with orthogonal basis).
 ///
-/// While stored as a `ParallelepipedLattice`, this type implies orthogonality of edges,
+/// While stored as a `ParallelepipedLattice`, this type implies orthogonality of basis,
 /// enabling optimizations (e.g., faster containment, volume = |e1|*|e2|*|e3|).
 #[derive(Clone, Debug, PartialEq)]
 pub struct CartesianLattice(pub ParallelepipedLattice);
@@ -274,36 +277,36 @@ impl RelativeEq for CartesianLattice {
 }
 
 impl CartesianLattice {
-    /// Creates a Cartesian lattice (orthogonal edges) from origin and edges.
+    /// Creates a Cartesian lattice (orthogonal basis) from origin and basis.
     ///
     /// Checks orthogonality and non-degeneracy.
     /// Panics on failure (debug-friendly).
-    pub fn new(origin: Point3<f64>, edges: [Vector3<f64>; 3]) -> Self {
-        match Self::try_new(origin, edges) {
+    pub fn new(origin: Point3<f64>, basis: [Vector3<f64>; 3]) -> Self {
+        match Self::try_new(origin, basis) {
             Ok(l) => l,
             Err(e) => panic!("Invalid CartesianLattice: {}", e),
         }
     }
 
     /// Fallible constructor.
-    pub fn try_new(origin: Point3<f64>, edges: [Vector3<f64>; 3]) -> Result<Self, LatticeError> {
+    pub fn try_new(origin: Point3<f64>, basis: [Vector3<f64>; 3]) -> Result<Self, LatticeError> {
         // First check linear independence (via parallelepiped)
-        ParallelepipedLattice::try_new(origin, edges)?;
+        ParallelepipedLattice::try_new(origin, basis)?;
 
         // Then check orthogonality: e_i · e_j ≈ 0 for i ≠ j
-        let [e1, e2, e3] = edges;
+        let [e1, e2, e3] = basis;
         let eps = 1e-10; // tolerance for floating-point orthogonality
 
         if (e1.dot(&e2)).abs() > eps || (e1.dot(&e3)).abs() > eps || (e2.dot(&e3)).abs() > eps {
-            return Err(LatticeError::NonOrthogonalEdges);
+            return Err(LatticeError::NonOrthogonalBasis);
         }
 
-        Ok(Self(ParallelepipedLattice { origin, edges }))
+        Ok(Self(ParallelepipedLattice { origin, basis }))
     }
 
     /// Fast constructor without checks.
-    pub fn new_unchecked(origin: Point3<f64>, edges: [Vector3<f64>; 3]) -> Self {
-        Self(ParallelepipedLattice::new_unchecked(origin, edges))
+    pub fn new_unchecked(origin: Point3<f64>, basis: [Vector3<f64>; 3]) -> Self {
+        Self(ParallelepipedLattice::new_unchecked(origin, basis))
     }
 
     /// Creates from origin and side lengths (axis-aligned).
@@ -344,7 +347,7 @@ impl CartesianLattice {
 
     /// Returns side lengths (edge norms).
     pub fn side_lengths(&self) -> [f64; 3] {
-        self.0.edges.map(|e| e.norm())
+        self.0.basis.map(|e| e.norm())
     }
 }
 
@@ -367,12 +370,11 @@ impl LatticeGeometry for CartesianLattice {
 }
 
 impl TransformationIsometry3 for CartesianLattice {
-    fn transform(&self, iso: &Isometry3<f64>) -> Self {
+    fn transform<I: Into<Isometry3<f64>>>(&self, iso: I) -> Self {
         Self(self.0.transform(iso))
     }
-
-    fn transform_mut(&mut self, iso: &Isometry3<f64>) {
-        self.0.transform_mut(iso)
+    fn transform_mut<I: Into<Isometry3<f64>>>(&mut self, iso: I) {
+        self.0.transform(iso);
     }
 }
 
@@ -389,16 +391,14 @@ impl SphericalLattice {
 }
 
 impl TransformationIsometry3 for SphericalLattice {
-    fn transform(&self, iso: &Isometry3<f64>) -> Self {
+    fn transform<I: Into<Isometry3<f64>>>(&self, iso: I) -> Self {
         Self {
-            center: iso * self.center,
+            center: iso.into() * self.center,
             radius: self.radius,
         }
     }
-
-    fn transform_mut(&mut self, iso: &Isometry3<f64>) {
-        self.center = iso * self.center;
-        // radius unchanged
+    fn transform_mut<I: Into<Isometry3<f64>>>(&mut self, iso: I) {
+        self.center = iso.into() * self.center;
     }
 }
 
@@ -472,7 +472,7 @@ impl LatticeGeometry for BuiltInLattice {
 }
 
 impl TransformationIsometry3 for BuiltInLattice {
-    fn transform(&self, iso: &Isometry3<f64>) -> Self {
+    fn transform<I: Into<Isometry3<f64>>>(&self, iso: I) -> Self {
         match self {
             Self::Parallelepiped(l) => Self::Parallelepiped(l.transform(iso)),
             Self::Cartesian(l) => Self::Cartesian(l.transform(iso)),
@@ -481,7 +481,7 @@ impl TransformationIsometry3 for BuiltInLattice {
         }
     }
 
-    fn transform_mut(&mut self, iso: &Isometry3<f64>) {
+    fn transform_mut<I: Into<Isometry3<f64>>>(&mut self, iso: I) {
         match self {
             Self::Parallelepiped(l) => l.transform_mut(iso),
             Self::Cartesian(l) => l.transform_mut(iso),
