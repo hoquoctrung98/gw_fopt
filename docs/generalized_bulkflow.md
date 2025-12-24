@@ -1,6 +1,8 @@
 # Generalized bulk-flow approximations
 
 ## Physics Background
+
+The gravitational energy radiated along the $\hat{\textbf{z}}$ direction is
 $$
 \frac{d E_{GW}}{d \omega d \Omega} =  G \omega^2 (|T_{xx}-T_{yy}|^2+2|T_{xy}|^2+2|T_{yx}|^2)\,,\\
 =4 G \Delta V^2 \omega^2 (|C_+|^2 + |C_{\times}|^2),
@@ -32,13 +34,29 @@ The bubble configuration file is given at [input configuration](./examples/input
 The example code to reproduce the results below is [generalized_bulkflow.ipynb](./examples/generalized_bulkflow.ipynb).
 
 ### First collided bubbles
+Below is the colormap which indicates the first collision between the points on the reference bubble (here denoted as bubble 0) versus other bubbles.
+Here we use "Interior" to indicate the bubbles inside the lattice, and "Exterior" to call those outside the lattice, which typically generated using e.g periodic or reflection boundary conditions.
+For all plots generated below, we use no boundary conditions for the case "Two bubbles" and periodic boundary condition for the case "Many bubbles".
 
-![first collided bubbles](examples/figures/many_bubbles/first_collision.png)
+| Two bubbles | Many bubbles |
+|-|-|
+|![first collided bubbles - two bubbles](examples/figures/two_bubbles/first_collision.png) | ![first collided bubbles - many bubbles](examples/figures/many_bubbles/first_collision.png)|
 
 ### Collision time with first collided bubbles
+Below we plot the quantity $t_{n,c}(\phi, \cos \theta)$, which is the moment of the first collision between the point on the reference bubble with coordinates $(\phi, \cos \theta)$ and other bubbles.
+In the case "Two bubbles", since there are no exterior bubbles, the interior bubbles always have a part that never collide with the other bubble, hence we have to manually cut the maximum time at $t=10$ to plot on the colorbar.
+This is not the case in "Many bubbles" where we put the periodic boundary conditions and hence introduced a natural time cut-off in the plot.
 
-![collision time](examples/figures/many_bubbles/collision_time.png)
+| Two bubbles | Many bubbles |
+|-|-|
+| ![collision time - two bubbles](examples/figures/two_bubbles/collision_time.png)| ![collision time - many bubbles](examples/figures/many_bubbles/collision_time.png)|
 
 ### Collision status at a fixed time
 
-![collision status](examples/figures/many_bubbles/collision_status.png)
+| Two bubbles | Many bubbles |
+|-|-|
+| ![collision status - two bubbles](examples/figures/two_bubbles/collision_status.png)| ![collision status - many bubbles](examples/figures/many_bubbles/collision_status.png)|
+
+### GW spectrum via generalized bulk-flow with various powers for two bubbles
+In the following plot, $t_\text{end} = 0.8 d$.
+![gw spectrum approximation](examples/figures/two_bubbles/gw_spectrum_apprx.png)

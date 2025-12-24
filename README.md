@@ -48,11 +48,16 @@ Also from the field evolution, we can compute the surface tension of the wall as
 |-|-|
 |![evolution_field](docs/examples/figures/two_bubbles/evolution_field.png)| ![gw_spectrum](docs/examples/figures/two_bubbles/gw_spectrum.png)|
 
++ [lattice bubbles](./docs/lattice_bubbles.md): Here we show how to define a lattice (Cartesian or Spherical), attach the bubbles into a lattice and generate the exterior bubbles via boundary conditions (currently support "periodic" and "reflection" boundary conditions).
+
 + [generalized bulk-flow](./docs/generalized_bulkflow.md): Here we illustrate how to approximate the GW spectrum using generalized bulk-flow scheme, with the input being the bubbles configuration (i.e a list of four-vectors $(t_c, x_c, y_c, z_c)$ of the center of the nucleated bubbles).
 
 | First collided bubbles | Collision time with first collided bubbles |
 |-|-|
 |![first collided bubbles](docs/examples/figures/many_bubbles/first_collision.png) | ![collision time](docs/examples/figures/many_bubbles/collision_time.png)|
+
+Generalized bulk-flow with various $\xi$-powers for two bubbles system with no boundary conditions
+![gw spectrum approximation](./docs/examples/figures/two_bubbles/gw_spectrum_apprx.png)
 
 ## Some docs for useful utilities
 
