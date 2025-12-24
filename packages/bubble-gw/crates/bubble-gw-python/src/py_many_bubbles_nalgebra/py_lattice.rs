@@ -86,12 +86,12 @@ impl PyBuiltInLattice {
     }
 
     #[staticmethod]
-    #[pyo3(name = "Sphere")]
-    fn sphere(center: [f64; 3], radius: f64) -> PyResult<Self> {
+    #[pyo3(name = "Spherical")]
+    fn spherical(center: [f64; 3], radius: f64) -> PyResult<Self> {
         let center = nalgebra::Point3::from(center);
         let lattice = SphericalLattice::new(center, radius);
         Ok(Self {
-            inner: BuiltInLattice::Sphere(lattice),
+            inner: BuiltInLattice::Spherical(lattice),
         })
     }
 

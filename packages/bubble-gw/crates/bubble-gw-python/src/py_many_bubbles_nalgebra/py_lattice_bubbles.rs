@@ -30,10 +30,11 @@ impl TransformationIsometry3 for PyLatticeBubbles {
 #[pymethods]
 impl PyLatticeBubbles {
     #[new]
+    #[pyo3(signature = (lattice, bubbles_interior, bubbles_exterior = None, sort_by_time = false))]
     fn new(
+        lattice: PyBuiltInLattice,
         bubbles_interior: PyReadonlyArray2<f64>,
         bubbles_exterior: Option<PyReadonlyArray2<f64>>,
-        lattice: PyBuiltInLattice,
         sort_by_time: bool,
     ) -> PyResult<Self> {
         // if bubbles_exterior is None, assuming no exterior bubbles are given
@@ -64,7 +65,7 @@ impl PyLatticeBubbles {
         match &self.inner.lattice {
             BuiltInLattice::Parallelepiped(_) => "Parallelepiped",
             BuiltInLattice::Cartesian(_) => "Cartesian",
-            BuiltInLattice::Sphere(_) => "Sphere",
+            BuiltInLattice::Spherical(_) => "Spherical",
             BuiltInLattice::Empty(_) => "Empty",
         }
     }
@@ -97,5 +98,22 @@ impl PyLatticeBubbles {
     #[pyo3(name = "transform_mut")]
     fn py_transform_mut(&mut self, iso: &PyIsometry3) {
         self.transform_mut(iso);
+    }
+
+    fn with_boundary_condition(&mut self, boundary_condition: &str) -> PyResult<()> {
+        use bubble_gw::many_bubbles_nalgebra::lattice::BoundaryConditions;
+
+        let bc = match boundary_condition.to_lowercase().as_str() {
+            "periodic" => BoundaryConditions::Periodic,
+            "reflection" => BoundaryConditions::Reflection,
+            _ => {
+                return Err(pyo3::exceptions::PyValueError::new_err(
+                    "Invalid boundary condition. Expected 'Periodic' or 'Reflection'.",
+                ));
+            }
+        };
+
+        self.inner.with_boundary_condition(bc);
+        Ok(())
     }
 }

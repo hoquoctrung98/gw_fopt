@@ -7,11 +7,11 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum LatticeError {
-    #[error("edges are linearly dependent (zero volume)")]
+    #[error("Basis vectors are linearly dependent (zero volume)")]
     DegenerateBasis,
 
     #[error(
-        "edges are not pairwise orthogonal, maybe you want to use parallelepiped lattice instead?"
+        "Basis vectors are not pairwise orthogonal, maybe you want to use parallelepiped lattice instead?"
     )]
     NonOrthogonalBasis,
 }
@@ -67,11 +67,11 @@ impl LatticeGeometry for EmptyLattice {
 }
 
 impl TransformationIsometry3 for EmptyLattice {
-    fn transform<I: Into<Isometry3<f64>>>(&self, iso: I) -> Self {
+    fn transform<I: Into<Isometry3<f64>>>(&self, _iso: I) -> Self {
         EmptyLattice {}
     }
 
-    fn transform_mut<I: Into<Isometry3<f64>>>(&mut self, iso: I) {}
+    fn transform_mut<I: Into<Isometry3<f64>>>(&mut self, _iso: I) {}
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -429,7 +429,7 @@ impl LatticeGeometry for SphericalLattice {
 pub enum BuiltInLattice {
     Parallelepiped(ParallelepipedLattice),
     Cartesian(CartesianLattice),
-    Sphere(SphericalLattice),
+    Spherical(SphericalLattice),
     Empty(EmptyLattice),
 }
 
@@ -438,7 +438,7 @@ impl LatticeGeometry for BuiltInLattice {
         match self {
             Self::Parallelepiped(l) => l.volume(),
             Self::Cartesian(l) => l.volume(),
-            Self::Sphere(l) => l.volume(),
+            Self::Spherical(l) => l.volume(),
             Self::Empty(l) => l.volume(),
         }
     }
@@ -447,7 +447,7 @@ impl LatticeGeometry for BuiltInLattice {
         match self {
             Self::Parallelepiped(l) => l.reference_point(),
             Self::Cartesian(l) => l.reference_point(),
-            Self::Sphere(l) => l.reference_point(),
+            Self::Spherical(l) => l.reference_point(),
             Self::Empty(l) => l.reference_point(),
         }
     }
@@ -456,7 +456,7 @@ impl LatticeGeometry for BuiltInLattice {
         match self {
             Self::Parallelepiped(l) => l.parameters(),
             Self::Cartesian(l) => l.parameters(),
-            Self::Sphere(l) => l.parameters(),
+            Self::Spherical(l) => l.parameters(),
             Self::Empty(l) => l.parameters(),
         }
     }
@@ -465,7 +465,7 @@ impl LatticeGeometry for BuiltInLattice {
         match self {
             Self::Parallelepiped(l) => l.contains(points),
             Self::Cartesian(l) => l.contains(points),
-            Self::Sphere(l) => l.contains(points),
+            Self::Spherical(l) => l.contains(points),
             Self::Empty(l) => l.contains(points),
         }
     }
@@ -476,7 +476,7 @@ impl TransformationIsometry3 for BuiltInLattice {
         match self {
             Self::Parallelepiped(l) => Self::Parallelepiped(l.transform(iso)),
             Self::Cartesian(l) => Self::Cartesian(l.transform(iso)),
-            Self::Sphere(l) => Self::Sphere(l.transform(iso)),
+            Self::Spherical(l) => Self::Spherical(l.transform(iso)),
             Self::Empty(l) => Self::Empty(l.transform(iso)),
         }
     }
@@ -485,7 +485,7 @@ impl TransformationIsometry3 for BuiltInLattice {
         match self {
             Self::Parallelepiped(l) => l.transform_mut(iso),
             Self::Cartesian(l) => l.transform_mut(iso),
-            Self::Sphere(l) => l.transform_mut(iso),
+            Self::Spherical(l) => l.transform_mut(iso),
             Self::Empty(l) => l.transform_mut(iso),
         }
     }
@@ -512,7 +512,107 @@ impl GenerateBubblesExterior for ParallelepipedLattice {
         bubbles_interior: impl Borrow<Bubbles>,
         boundary_condition: BoundaryConditions,
     ) -> Bubbles {
-        todo!()
+        let interior = bubbles_interior.borrow();
+        match boundary_condition {
+            BoundaryConditions::Periodic => {
+                let mut exterior_spacetime = Vec::new();
+                let [e1, e2, e3] = self.basis;
+
+                // Only 6 directions: ±e1, ±e2, ±e3
+                let shifts = [e1, -e1, e2, -e2, e3, -e3];
+
+                for &shift in &shifts {
+                    for &event in &interior.spacetime {
+                        let t = event[0];
+                        let x = event[1] + shift.x;
+                        let y = event[2] + shift.y;
+                        let z = event[3] + shift.z;
+                        exterior_spacetime.push(nalgebra::Vector4::new(t, x, y, z));
+                    }
+                }
+
+                Bubbles::new(exterior_spacetime)
+            }
+
+            BoundaryConditions::Reflection => {
+                let mut exterior_spacetime = Vec::new();
+                let [e1, e2, e3] = self.basis;
+
+                // Compute face centers and outward normals (unit)
+                let norm1 = e1.norm();
+                let norm2 = e2.norm();
+                let norm3 = e3.norm();
+
+                // Unit normals
+                let n1 = if norm1 > f64::EPSILON {
+                    e1 / norm1
+                } else {
+                    nalgebra::Vector3::x()
+                };
+                let n2 = if norm2 > f64::EPSILON {
+                    e2 / norm2
+                } else {
+                    nalgebra::Vector3::y()
+                };
+                let n3 = if norm3 > f64::EPSILON {
+                    e3 / norm3
+                } else {
+                    nalgebra::Vector3::z()
+                };
+
+                // Face points (min and max along each axis)
+                let origin = self.origin;
+                let p1_max = nalgebra::Point3::from(origin.coords + e1);
+                let p2_max = nalgebra::Point3::from(origin.coords + e2);
+                let p3_max = nalgebra::Point3::from(origin.coords + e3);
+
+                for &event in &interior.spacetime {
+                    let t = event[0];
+                    let p = nalgebra::Point3::new(event[1], event[2], event[3]);
+
+                    // Reflect across 6 faces: min/max for each axis
+                    // For face with point q and outward normal n: p' = p - 2*((p - q)·n)*n
+                    let reflections = [
+                        // -e1 face (at origin, outward = -n1)
+                        {
+                            let d = (p - origin).dot(&(-n1));
+                            nalgebra::Point3::from(p.coords - 2.0 * d * (-n1))
+                        },
+                        // +e1 face (at p1_max, outward = +n1)
+                        {
+                            let d = (p - p1_max).dot(&n1);
+                            nalgebra::Point3::from(p.coords - 2.0 * d * n1)
+                        },
+                        // -e2 face
+                        {
+                            let d = (p - origin).dot(&(-n2));
+                            nalgebra::Point3::from(p.coords - 2.0 * d * (-n2))
+                        },
+                        // +e2 face
+                        {
+                            let d = (p - p2_max).dot(&n2);
+                            nalgebra::Point3::from(p.coords - 2.0 * d * n2)
+                        },
+                        // -e3 face
+                        {
+                            let d = (p - origin).dot(&(-n3));
+                            nalgebra::Point3::from(p.coords - 2.0 * d * (-n3))
+                        },
+                        // +e3 face
+                        {
+                            let d = (p - p3_max).dot(&n3);
+                            nalgebra::Point3::from(p.coords - 2.0 * d * n3)
+                        },
+                    ];
+
+                    for rp in reflections {
+                        exterior_spacetime.push(nalgebra::Vector4::new(t, rp.x, rp.y, rp.z));
+                    }
+                }
+
+                Bubbles::new(exterior_spacetime)
+            }
+        }
     }
 }
 
@@ -522,7 +622,8 @@ impl GenerateBubblesExterior for CartesianLattice {
         bubbles_interior: impl Borrow<Bubbles>,
         boundary_condition: BoundaryConditions,
     ) -> Bubbles {
-        todo!()
+        self.0
+            .generate_bubbles_exterior(bubbles_interior, boundary_condition)
     }
 }
 
@@ -532,7 +633,47 @@ impl GenerateBubblesExterior for SphericalLattice {
         bubbles_interior: impl Borrow<Bubbles>,
         boundary_condition: BoundaryConditions,
     ) -> Bubbles {
-        todo!()
+        match boundary_condition {
+            BoundaryConditions::Periodic => {
+                // Return empty as requested
+                Bubbles::new(Vec::new())
+            }
+
+            BoundaryConditions::Reflection => {
+                let interior = bubbles_interior.borrow();
+                let mut exterior_spacetime = Vec::with_capacity(interior.spacetime.len());
+
+                let center = self.center;
+                let radius = self.radius;
+
+                for &event in &interior.spacetime {
+                    let t = event[0];
+                    let p = nalgebra::Point3::new(event[1], event[2], event[3]);
+                    let v = p - center; // Vector3
+                    let d = v.norm();
+
+                    let p_exterior = if d < f64::EPSILON {
+                        // At center: reflect along x-axis
+                        nalgebra::Point3::from(
+                            center.coords + nalgebra::Vector3::x() * radius * 2.0,
+                        )
+                    } else {
+                        // Mirror across surface: p' = c + (2*r/d - 1) * (p - c)
+                        let scale = 2.0 * radius / d - 1.0;
+                        nalgebra::Point3::from(center.coords + v * scale)
+                    };
+
+                    exterior_spacetime.push(nalgebra::Vector4::new(
+                        t,
+                        p_exterior.x,
+                        p_exterior.y,
+                        p_exterior.z,
+                    ));
+                }
+
+                Bubbles::new(exterior_spacetime)
+            }
+        }
     }
 }
 
@@ -540,8 +681,8 @@ impl GenerateBubblesExterior for SphericalLattice {
 impl GenerateBubblesExterior for EmptyLattice {
     fn generate_bubbles_exterior(
         &self,
-        bubbles_interior: impl Borrow<Bubbles>,
-        boundary_condition: BoundaryConditions,
+        _bubbles_interior: impl Borrow<Bubbles>,
+        _boundary_condition: BoundaryConditions,
     ) -> Bubbles {
         Bubbles::new(Vec::new())
     }
@@ -560,7 +701,7 @@ impl GenerateBubblesExterior for BuiltInLattice {
             BuiltInLattice::Cartesian(lattice) => {
                 lattice.generate_bubbles_exterior(bubbles_interior, boundary_condition)
             }
-            BuiltInLattice::Sphere(lattice) => {
+            BuiltInLattice::Spherical(lattice) => {
                 lattice.generate_bubbles_exterior(bubbles_interior, boundary_condition)
             }
             BuiltInLattice::Empty(lattice) => {
