@@ -1,4 +1,4 @@
-use crate::many_bubbles::{
+use crate::many_bubbles_legacy::{
     bubbles::{BubblesError, LatticeBubbles},
     lattice::{BoundaryConditions, Lattice, LatticeType, generate_bubbles_exterior},
 };

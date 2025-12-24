@@ -1,11 +1,11 @@
-use bubble_gw::many_bubbles::bubbles::LatticeBubbles;
-use bubble_gw::many_bubbles::bulk_flow::BulkFlow;
-use bubble_gw::many_bubbles::lattice::{
-    BoundaryConditions, Lattice, LatticeType, generate_bubbles_exterior,
-};
-use bubble_gw::many_bubbles_nalgebra::{
+use bubble_gw::many_bubbles::{
     bulk_flow::BulkFlow as BulkFlowNalgebra, lattice::CartesianLattice,
     lattice_bubbles::LatticeBubbles as LatticeBubblesNalgebra,
+};
+use bubble_gw::many_bubbles_legacy::bubbles::LatticeBubbles;
+use bubble_gw::many_bubbles_legacy::bulk_flow::BulkFlow;
+use bubble_gw::many_bubbles_legacy::lattice::{
+    BoundaryConditions, Lattice, LatticeType, generate_bubbles_exterior,
 };
 use nalgebra::{Point3, Vector3};
 use ndarray::{Array2, arr2, s};
@@ -30,9 +30,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         false,
     )
     .unwrap();
-    lattice_bubbles.with_boundary_condition(
-        bubble_gw::many_bubbles_nalgebra::lattice::BoundaryConditions::Periodic,
-    );
+    lattice_bubbles
+        .with_boundary_condition(bubble_gw::many_bubbles::lattice::BoundaryConditions::Periodic);
     let mut bulk_flow_nalgebra = BulkFlowNalgebra::new(lattice_bubbles).unwrap();
     bulk_flow_nalgebra.set_num_threads(1);
     bulk_flow_nalgebra.set_resolution(10, 10, true).unwrap();

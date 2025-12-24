@@ -1,5 +1,5 @@
-use bubble_gw::many_bubbles::bubbles::LatticeBubbles;
-use bubble_gw::many_bubbles::bulk_flow_segment::{BulkFlow, BulkFlowError};
+use bubble_gw::many_bubbles_legacy::bubbles::LatticeBubbles;
+use bubble_gw::many_bubbles_legacy::bulk_flow_segment::{BulkFlow, BulkFlowError};
 use ndarray::{Array1, Array2, arr2, s};
 
 fn main() -> Result<(), BulkFlowError> {

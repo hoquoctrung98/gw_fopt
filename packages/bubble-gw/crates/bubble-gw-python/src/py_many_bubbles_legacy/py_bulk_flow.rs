@@ -1,10 +1,9 @@
-use crate::py_many_bubbles_nalgebra::PyLatticeBubbles;
-use bubble_gw::many_bubbles_nalgebra::bulk_flow::{BulkFlow, BulkFlowError};
-use bubble_gw::many_bubbles_nalgebra::lattice::BuiltInLattice;
-use bubble_gw::many_bubbles_nalgebra::lattice_bubbles::BubbleIndex;
+use bubble_gw::many_bubbles_legacy::bubbles::{BubbleIndex, LatticeBubbles};
+use bubble_gw::many_bubbles_legacy::bulk_flow::{BulkFlow, BulkFlowError};
+use ndarray::Array2;
 use numpy::{
     Complex64 as NumpyComplex64, PyArray1, PyArray2, PyArray3, PyArray4, PyArrayMethods,
-    PyReadonlyArray1, PyReadonlyArray2, ToPyArray,
+    PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3,
 };
 use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
@@ -110,15 +109,27 @@ type PyResult<T> = Result<T, PyBulkFlowError>;
 
 #[pyclass(name = "BulkFlow")]
 pub struct PyBulkFlow {
-    inner: BulkFlow<BuiltInLattice>,
+    inner: BulkFlow,
 }
 
 #[pymethods]
 impl PyBulkFlow {
     #[new]
-    #[pyo3(signature = (lattice))]
-    pub fn new(lattice: PyLatticeBubbles) -> PyResult<Self> {
-        let bulk_flow = BulkFlow::new(lattice.inner)?;
+    #[pyo3(signature = (bubbles_interior, bubbles_exterior = None, sort_by_time = false))]
+    pub fn new(
+        bubbles_interior: PyReadonlyArray2<f64>,
+        bubbles_exterior: Option<PyReadonlyArray2<f64>>,
+        sort_by_time: bool,
+    ) -> PyResult<Self> {
+        let bubbles_interior = bubbles_interior.to_owned_array();
+        let bubbles_exterior = bubbles_exterior
+            .map(|arr| arr.to_owned_array())
+            .unwrap_or_else(|| Array2::zeros((0, 4)));
+
+        let bulk_flow = BulkFlow::new(
+            LatticeBubbles::new(bubbles_interior, bubbles_exterior, sort_by_time)
+                .map_err(|e| BulkFlowError::BubblesError(e))?,
+        )?;
         Ok(PyBulkFlow { inner: bulk_flow })
     }
 
@@ -129,18 +140,26 @@ impl PyBulkFlow {
 
     #[getter]
     pub fn bubbles_interior(&self, py: Python) -> Py<PyArray2<f64>> {
-        PyArray2::from_array(py, &self.inner.bubbles_interior().to_array2()).into()
+        PyArray2::from_array(py, self.inner.bubbles_interior()).into()
     }
 
     #[getter]
     pub fn bubbles_exterior(&self, py: Python) -> Py<PyArray2<f64>> {
-        PyArray2::from_array(py, &self.inner.bubbles_exterior().to_array2()).into()
+        PyArray2::from_array(py, self.inner.bubbles_exterior()).into()
+    }
+
+    #[getter]
+    pub fn delta(&self, py: Python) -> Py<PyArray3<f64>> {
+        PyArray3::from_array(py, self.inner.delta()).into()
     }
 
     #[getter]
     pub fn delta_squared(&self, py: Python) -> Py<PyArray2<f64>> {
-        let foo = self.inner.delta_squared().to_pyarray(py).to_owned_array();
-        PyArray2::from_array(py, &foo).into()
+        PyArray2::from_array(py, self.inner.delta_squared()).into()
+    }
+
+    pub fn set_delta(&mut self, delta: PyReadonlyArray3<f64>) {
+        self.inner.set_delta(delta.to_owned_array());
     }
 
     #[getter]

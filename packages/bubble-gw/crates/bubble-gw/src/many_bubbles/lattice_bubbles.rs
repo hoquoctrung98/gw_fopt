@@ -1,6 +1,6 @@
-use crate::many_bubbles_nalgebra::bubbles::Bubbles;
-use crate::many_bubbles_nalgebra::lattice::BoundaryConditions;
-use crate::many_bubbles_nalgebra::lattice::{
+use crate::many_bubbles::bubbles::Bubbles;
+use crate::many_bubbles::lattice::BoundaryConditions;
+use crate::many_bubbles::lattice::{
     GenerateBubblesExterior, LatticeGeometry, TransformationIsometry3,
 };
 use csv::{ReaderBuilder, Writer};

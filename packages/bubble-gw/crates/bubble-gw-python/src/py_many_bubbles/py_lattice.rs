@@ -1,4 +1,4 @@
-use bubble_gw::many_bubbles_nalgebra::lattice::{
+use bubble_gw::many_bubbles::lattice::{
     BuiltInLattice, CartesianLattice, EmptyLattice, LatticeError, LatticeGeometry,
     ParallelepipedLattice, SphericalLattice, TransformationIsometry3,
 };

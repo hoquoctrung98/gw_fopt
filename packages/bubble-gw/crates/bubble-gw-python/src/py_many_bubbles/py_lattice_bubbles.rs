@@ -1,9 +1,9 @@
-use crate::py_many_bubbles_nalgebra::py_isometry::PyIsometry3;
-use crate::py_many_bubbles_nalgebra::py_lattice::PyBuiltInLattice;
-use bubble_gw::many_bubbles_nalgebra::lattice::{
-    BuiltInLattice, LatticeGeometry, TransformationIsometry3,
+use crate::py_many_bubbles::py_isometry::PyIsometry3;
+use crate::py_many_bubbles::py_lattice::PyBuiltInLattice;
+use bubble_gw::many_bubbles::lattice::{
+    BoundaryConditions, BuiltInLattice, LatticeGeometry, TransformationIsometry3,
 };
-use bubble_gw::many_bubbles_nalgebra::lattice_bubbles::LatticeBubbles;
+use bubble_gw::many_bubbles::lattice_bubbles::LatticeBubbles;
 use ndarray::Array2;
 use numpy::{PyArray2, PyArrayMethods, PyReadonlyArray2};
 use pyo3::prelude::*;
@@ -101,8 +101,6 @@ impl PyLatticeBubbles {
     }
 
     fn with_boundary_condition(&mut self, boundary_condition: &str) -> PyResult<()> {
-        use bubble_gw::many_bubbles_nalgebra::lattice::BoundaryConditions;
-
         let bc = match boundary_condition.to_lowercase().as_str() {
             "periodic" => BoundaryConditions::Periodic,
             "reflection" => BoundaryConditions::Reflection,

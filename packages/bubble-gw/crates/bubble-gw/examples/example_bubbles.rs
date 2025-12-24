@@ -1,6 +1,6 @@
-use bubble_gw::many_bubbles::bubble_formation::generate_random_bubbles;
-use bubble_gw::many_bubbles::bubbles::LatticeBubbles;
-use bubble_gw::many_bubbles::lattice::{BoundaryConditions, Lattice, LatticeType};
+use bubble_gw::many_bubbles_legacy::bubble_formation::generate_random_bubbles;
+use bubble_gw::many_bubbles_legacy::bubbles::LatticeBubbles;
+use bubble_gw::many_bubbles_legacy::lattice::{BoundaryConditions, Lattice, LatticeType};
 use ndarray::arr2;
 use std::error::Error;
 

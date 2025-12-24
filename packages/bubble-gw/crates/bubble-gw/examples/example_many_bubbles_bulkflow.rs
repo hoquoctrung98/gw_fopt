@@ -1,6 +1,6 @@
-use bubble_gw::many_bubbles::bubbles::LatticeBubbles;
-use bubble_gw::many_bubbles::bulk_flow::{BulkFlow, BulkFlowError};
-use bubble_gw::many_bubbles::lattice::{
+use bubble_gw::many_bubbles_legacy::bubbles::LatticeBubbles;
+use bubble_gw::many_bubbles_legacy::bulk_flow::{BulkFlow, BulkFlowError};
+use bubble_gw::many_bubbles_legacy::lattice::{
     BoundaryConditions, Lattice, LatticeType, generate_bubbles_exterior,
 };
 use ndarray::prelude::*;

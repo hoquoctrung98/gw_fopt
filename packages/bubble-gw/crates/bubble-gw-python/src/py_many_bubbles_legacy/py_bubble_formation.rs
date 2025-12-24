@@ -1,7 +1,7 @@
-use bubble_gw::many_bubbles::bubble_formation::{
+use bubble_gw::many_bubbles_legacy::bubble_formation::{
     BubbleFormationSimulator, ManualNucleation, PoissonNucleation, SimulationEndStatus,
 };
-use bubble_gw::many_bubbles::lattice::{
+use bubble_gw::many_bubbles_legacy::lattice::{
     BoundaryConditions, Lattice, LatticeType, generate_bubbles_exterior,
 };
 use ndarray::Array2;

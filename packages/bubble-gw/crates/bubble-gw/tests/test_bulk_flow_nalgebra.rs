@@ -1,6 +1,6 @@
-use bubble_gw::many_bubbles_nalgebra::bulk_flow::BulkFlow;
-use bubble_gw::many_bubbles_nalgebra::lattice::EmptyLattice;
-use bubble_gw::many_bubbles_nalgebra::lattice_bubbles::LatticeBubbles;
+use bubble_gw::many_bubbles::bulk_flow::BulkFlow;
+use bubble_gw::many_bubbles::lattice::EmptyLattice;
+use bubble_gw::many_bubbles::lattice_bubbles::LatticeBubbles;
 use bubble_gw::utils::is_close::IsClose;
 use ndarray::{Array1, Array2, arr2};
 use num::complex::Complex64;
@@ -10,7 +10,7 @@ const ABS_TOL: f64 = 1e-2;
 const REL_TOL: f64 = 1e-2;
 
 #[test]
-fn test_bulk_flow_two_bubbles_nalgebra() -> Result<(), Box<dyn Error>> {
+fn test_bulk_flow_two_bubbles() -> Result<(), Box<dyn Error>> {
     std::env::set_current_dir(env!("CARGO_MANIFEST_DIR")).unwrap();
     let file = File::open("./tests/envelope_2bubbles_scan=n_phix.csv")?;
     let mut rdr = csv::Reader::from_reader(BufReader::new(file));
