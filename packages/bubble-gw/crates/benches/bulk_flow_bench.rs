@@ -1,12 +1,13 @@
-use bubble_gw::many_bubbles::bubbles_nalgebra::LatticeBubbles as LatticeBubblesNalgebra;
 use bubble_gw::many_bubbles::bulk_flow::BulkFlow;
-use bubble_gw::many_bubbles::bulk_flow_nalgebra::BulkFlow as BulkFlowNalgebra;
-use bubble_gw::many_bubbles::bulk_flow_segment::BulkFlow as BulkFlowSegment;
-use bubble_gw::many_bubbles::{bubbles::LatticeBubbles, lattice_nalgebra::EmptyLattice};
+use bubble_gw::many_bubbles::lattice::EmptyLattice;
+use bubble_gw::many_bubbles::lattice_bubbles::LatticeBubbles;
+use bubble_gw::many_bubbles_legacy::bubbles::LatticeBubbles as LatticeBubblesLegacy;
+use bubble_gw::many_bubbles_legacy::bulk_flow::BulkFlow as BulkFlowLegacy;
+use bubble_gw::many_bubbles_legacy::bulk_flow_segment::BulkFlow as BulkFlowSegment;
 use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
 use ndarray::{Array1, Array2, arr2};
 
-fn setup_bulk_flow() -> BulkFlow {
+fn setup_bulk_flow_legacy() -> BulkFlowLegacy {
     let bubbles_interior = arr2(&[
         [0.0, 0.0, 10.0, 0.0],
         [0.0, 0.0, 0.0, 0.0],
@@ -15,11 +16,11 @@ fn setup_bulk_flow() -> BulkFlow {
         [0.0, 0.0, 2.0, 1.0],
     ]);
     let bubbles_exterior = Array2::zeros((0, 4));
-    let mut bf = BulkFlow::new(
-        LatticeBubbles::new(bubbles_interior, bubbles_exterior, true)
+    let mut bf = BulkFlowLegacy::new(
+        LatticeBubblesLegacy::new(bubbles_interior, bubbles_exterior, true)
             .expect("Failed to parse bubbles"),
     )
-    .expect("Failed to create BulkFlow");
+    .expect("Failed to create BulkFlowLegacy");
     bf.set_resolution(50, 100, true)
         .expect("Failed to set resolution");
     let coefficients_sets = vec![vec![0.0], vec![1.0]];
@@ -39,7 +40,7 @@ fn setup_bulk_flow_segment() -> BulkFlowSegment {
     ]);
     let bubbles_exterior = Array2::zeros((0, 4));
     let mut bf = BulkFlowSegment::new(
-        LatticeBubbles::new(bubbles_interior, bubbles_exterior, true).unwrap(),
+        LatticeBubblesLegacy::new(bubbles_interior, bubbles_exterior, true).unwrap(),
     )
     .expect("Failed to create BulkFlowSegment");
     bf.set_resolution(50, 100, true)
@@ -51,7 +52,7 @@ fn setup_bulk_flow_segment() -> BulkFlowSegment {
     bf
 }
 
-fn setup_bulk_flow_nalgebra() -> BulkFlowNalgebra<EmptyLattice> {
+fn setup_bulk_flow() -> BulkFlow<EmptyLattice> {
     let bubbles_interior = arr2(&[
         [0.0, 0.0, 10.0, 0.0],
         [0.0, 0.0, 0.0, 0.0],
@@ -60,9 +61,8 @@ fn setup_bulk_flow_nalgebra() -> BulkFlowNalgebra<EmptyLattice> {
         [0.0, 0.0, 2.0, 1.0],
     ]);
     let bubbles_exterior = Array2::zeros((0, 4));
-    let mut bf = BulkFlowNalgebra::new(
-        LatticeBubblesNalgebra::new(bubbles_interior, bubbles_exterior, EmptyLattice {}, true)
-            .unwrap(),
+    let mut bf = BulkFlow::new(
+        LatticeBubbles::new(bubbles_interior, bubbles_exterior, EmptyLattice {}, true).unwrap(),
     )
     .expect("Failed to create BulkFlowSegment");
     bf.set_resolution(50, 100, true)
@@ -82,7 +82,7 @@ fn bench_compute_c_integral(c: &mut Criterion) {
     // Benchmark nalgebra (optimized)
     group.bench_function(BenchmarkId::new("Nalgebra", "nθ=50 nφ=100 n_t=800"), |b| {
         b.iter_batched(
-            || setup_bulk_flow_nalgebra(),
+            || setup_bulk_flow(),
             |mut bf| {
                 bf.compute_c_integral(&w_arr, Some(0.0), 15.0, 800, None)
                     .expect("Nalgebra failed");
@@ -94,7 +94,7 @@ fn bench_compute_c_integral(c: &mut Criterion) {
     // Benchmark original
     group.bench_function(BenchmarkId::new("Original", "nθ=50 nφ=100 n_t=800"), |b| {
         b.iter_batched(
-            || setup_bulk_flow(),
+            || setup_bulk_flow_legacy(),
             |mut bf| {
                 bf.compute_c_integral(&w_arr, Some(0.0), 15.0, 800, None)
                     .expect("Original failed");

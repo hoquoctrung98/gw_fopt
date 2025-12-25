@@ -137,11 +137,11 @@ impl PyBulkFlow {
         PyArray2::from_array(py, &self.inner.bubbles_exterior().to_array2()).into()
     }
 
-    #[getter]
-    pub fn delta_squared(&self, py: Python) -> Py<PyArray2<f64>> {
-        let foo = self.inner.delta_squared().to_pyarray(py).to_owned_array();
-        PyArray2::from_array(py, &foo).into()
-    }
+    // #[getter]
+    // pub fn delta_squared(&self, py: Python) -> Py<PyArray2<f64>> {
+    //     let foo = self.inner.delta_squared().to_pyarray(py).to_owned_array();
+    //     PyArray2::from_array(py, &foo).into()
+    // }
 
     #[getter]
     pub fn coefficients_sets(&self, py: Python) -> Py<PyArray2<f64>> {

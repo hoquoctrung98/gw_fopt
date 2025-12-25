@@ -1,4 +1,4 @@
-use bubble_gw::utils::{integrate};
+use bubble_gw::utils::integrate;
 use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
 
 use integrate::Integrate as NewIntegrate;

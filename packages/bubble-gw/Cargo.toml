@@ -13,7 +13,7 @@ edition = "2024"
 authors = ["Quoc Trung Ho <hoquoctrung98@gmail.com>"]
 description = "Rust package for computing Gravitational Waves background from First Order Phase Transition"
 readme = "README.md"
-license="MIT"
+license="MIT OR Apache-2.0"
 rust-version = "1.86"
 
 [workspace.dependencies]

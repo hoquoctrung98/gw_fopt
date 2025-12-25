@@ -10,7 +10,7 @@ reorder_modules = true
 trailing_comma = "Vertical"
 
 # always format imports and struct fields vertically when long
-imports_granularity = "Crate"
+imports_granularity = "Module"
 struct_field_align_threshold = 20
 
 # force consistent indentation and alignment
@@ -20,6 +20,8 @@ fn_call_width = 80
 wrap_comments = true
 format_code_in_doc_comments = true
 imports_layout = "HorizontalVertical"
+
+use_field_init_shorthand = true
 
 condense_wildcard_suffixes = true
 edition = "2024"

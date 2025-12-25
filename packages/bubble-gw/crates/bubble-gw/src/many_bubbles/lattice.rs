@@ -61,8 +61,8 @@ impl LatticeGeometry for EmptyLattice {
         Vec::new()
     }
 
-    fn contains(&self, points: &[Point3<f64>]) -> Vec<bool> {
-        vec![true; points.len()]
+    fn contains(&self, _points: &[Point3<f64>]) -> Vec<bool> {
+        Vec::new()
     }
 }
 

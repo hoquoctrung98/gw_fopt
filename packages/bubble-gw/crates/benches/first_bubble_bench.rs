@@ -1,10 +1,10 @@
-use bubble_gw::many_bubbles::bubble_formation::generate_random_bubbles;
-use bubble_gw::many_bubbles::bubbles_nalgebra::LatticeBubbles;
-use bubble_gw::many_bubbles::bulk_flow::BulkFlow;
-use bubble_gw::many_bubbles::bulk_flow_nalgebra::BulkFlow as BulkFlowNalgebra;
-use bubble_gw::many_bubbles::bulk_flow_segment::BulkFlow as BulkFlowSegment;
-use bubble_gw::many_bubbles::lattice::{BoundaryConditions, Lattice, LatticeType};
-use bubble_gw::many_bubbles::lattice_nalgebra::EmptyLattice;
+use bubble_gw::many_bubbles::bulk_flow::BulkFlow as BulkFlowNalgebra;
+use bubble_gw::many_bubbles::lattice::EmptyLattice;
+use bubble_gw::many_bubbles::lattice_bubbles::LatticeBubbles;
+use bubble_gw::many_bubbles_legacy::bubble_formation::generate_random_bubbles;
+use bubble_gw::many_bubbles_legacy::bulk_flow::BulkFlow;
+use bubble_gw::many_bubbles_legacy::bulk_flow_segment::BulkFlow as BulkFlowSegment;
+use bubble_gw::many_bubbles_legacy::lattice::{BoundaryConditions, Lattice, LatticeType};
 use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
 
 fn setup_bulk_flow() -> BulkFlow {

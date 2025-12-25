@@ -45,7 +45,7 @@ pub enum BulkFlowError {
         ThreadPoolBuildError,
     ),
 
-    #[error("Bubble {a} is formed inside bubble {b} at initial time (overlapping light cones)")]
+    #[error("Causality Error: Bubble {a} is formed inside bubble {b}")]
     BubbleFormedInsideBubble { a: BubbleIndex, b: BubbleIndex },
 
     #[error("Bubbles Error")]
