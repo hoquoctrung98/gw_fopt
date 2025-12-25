@@ -49,6 +49,13 @@ impl PyLatticeBubbles {
     }
 
     #[getter]
+    pub fn lattice(&self) -> PyBuiltInLattice {
+        PyBuiltInLattice {
+            inner: self.inner.lattice.clone(),
+        }
+    }
+
+    #[getter]
     pub fn bubbles_interior(&self, py: Python) -> Py<PyArray2<f64>> {
         let interior = self.inner.interior.to_array2();
         PyArray2::from_array(py, &interior).into()

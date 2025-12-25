@@ -50,6 +50,10 @@ Also from the field evolution, we can compute the surface tension of the wall as
 
 + [lattice bubbles](./docs/lattice_bubbles.md): Here we show how to define a lattice (Cartesian or Spherical), attach the bubbles into a lattice and generate the exterior bubbles via boundary conditions (currently support "periodic" and "reflection" boundary conditions).
 
+| Bubbles centers inside a lattice | Bubbles at fixed time with periodic boundary condition|
+|-|-|
+|![bubble centers](./docs/examples/figures/many_bubbles/many_bubbles_centers.png)|![bubble at fixed time](./docs/examples/figures/many_bubbles/many_bubbles_at_time.png)|
+
 + [generalized bulk-flow](./docs/generalized_bulkflow.md): Here we illustrate how to approximate the GW spectrum using generalized bulk-flow scheme, with the input being the bubbles configuration (i.e a list of four-vectors $(t_c, x_c, y_c, z_c)$ of the center of the nucleated bubbles).
 
 | First collided bubbles | Collision time with first collided bubbles |

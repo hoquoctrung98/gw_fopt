@@ -1,5 +1,4 @@
 /target
-docs/**/*.ipynb
 packages/bubble-gw/target
 notebooks/
 .vscode
