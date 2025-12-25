@@ -75,7 +75,7 @@ version = "0.1.0"
 dependencies = [
  "bubble_gw",
  "csv",
- "nalgebra",
+ "nalgebra 0.33.2",
  "ndarray",
  "num",
  "num-complex",
@@ -92,7 +92,7 @@ dependencies = [
  "approx",
  "array-init",
  "csv",
- "nalgebra",
+ "nalgebra 0.33.2",
  "nalgebra-spacetime",
  "ndarray",
  "ndarray-csv",
@@ -124,9 +124,9 @@ dependencies = [
 
 [[package]]
 name = "bumpalo"
-version = "3.19.0"
+version = "3.19.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46c5e41b57b8bba42a04676d81cb89e9ee8e859a1a66f80a5a72e1cb76b34d43"
+checksum = "5dd9dc738b7a8311c7ade152424974d8115f2cdad61e8dab8dac9f2362298510"
 
 [[package]]
 name = "bytemuck"
@@ -521,6 +521,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "nalgebra"
+version = "0.34.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c4d5b3eff5cd580f93da45e64715e8c20a3996342f1e466599cf7a267a0c2f5f"
+dependencies = [
+ "approx",
+ "num-complex",
+ "num-rational",
+ "num-traits",
+ "simba",
+ "typenum",
+]
+
+[[package]]
 name = "nalgebra-macros"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -538,7 +552,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0710899655c0414edbbad25f0ce03b530f7e600c2be4c7a32e09417676e39b33"
 dependencies = [
  "approx",
- "nalgebra",
+ "nalgebra 0.33.2",
 ]
 
 [[package]]
@@ -673,7 +687,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7aac2e6a6e4468ffa092ad43c39b81c79196c2bb773b8db4085f695efe3bba17"
 dependencies = [
  "libc",
- "nalgebra",
+ "nalgebra 0.34.1",
  "ndarray",
  "num-complex",
  "num-integer",
@@ -1080,10 +1094,11 @@ dependencies = [
 
 [[package]]
 name = "scirs2-core"
-version = "0.1.0-rc.3"
+version = "0.1.0-rc.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd141a790d3c08d32536bbf5ea962e74757bbc039fae0e2d3875dfb0ce2fe15c"
+checksum = "6a52b7fea4b168ee421bdc5670d4b8f609940d780edb8d64d853accfd5d4ec53"
 dependencies = [
+ "cc",
  "chrono",
  "ndarray",
  "ndarray-rand",
@@ -1105,9 +1120,9 @@ dependencies = [
 
 [[package]]
 name = "scirs2-special"
-version = "0.1.0-rc.3"
+version = "0.1.0-rc.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0ba66234647fe5ccb3f8ca0880c4b2346632bb8b7a7b97d0d91d000b2369597"
+checksum = "c81a6c86db99d11703956557b91ca1d6b62730d7abd3c540e4dd8c94fa4ecb8f"
 dependencies = [
  "approx",
  "lazy_static",
@@ -1189,7 +1204,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2a3fe7c28c6512e766b0874335db33c94ad7b8f9054228ae1c2abd47ce7d335e"
 dependencies = [
  "approx",
- "nalgebra",
+ "nalgebra 0.33.2",
  "num-traits",
  "rand 0.8.5",
 ]
