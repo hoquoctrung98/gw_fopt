@@ -49,6 +49,7 @@ Also from the field evolution, we can compute the surface tension of the wall as
 |![evolution_field](docs/examples/figures/two_bubbles/evolution_field.png)| ![gw_spectrum](docs/examples/figures/two_bubbles/gw_spectrum.png)|
 
 + [lattice bubbles](./docs/lattice_bubbles.md): Here we show how to define a lattice (Cartesian or Spherical), attach the bubbles into a lattice and generate the exterior bubbles via boundary conditions (currently support "periodic" and "reflection" boundary conditions).
+One can also define an Isometry3 transformation (i.e spatial translation + rotation) and apply to the whole lattice+bubbles system.
 
 | Bubbles centers inside a lattice | Bubbles at fixed time with periodic boundary condition|
 |-|-|
