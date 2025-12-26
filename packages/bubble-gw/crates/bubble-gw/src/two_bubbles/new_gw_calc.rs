@@ -1,11 +1,138 @@
 use ndarray::prelude::*;
 use num_complex::Complex64;
 use peroxide::numerical::integral::{Integral::G30K61, gauss_kronrod_quadrature};
+use puruspe::Jn;
 use rayon::prelude::*;
 use rayon::{ThreadPool, ThreadPoolBuilder};
-
-use super::gw_integrand::{IntegrandCalculator, IntegrandType};
 use thiserror::Error;
+
+pub trait TimeCutoff: Clone + Send + Sync {
+    fn cutoff(&self, t: f64) -> f64;
+    fn u_max(&self, s: f64) -> f64;
+}
+
+/// Configuration for cutoff parameters in the gravitational wave calculator.
+#[derive(Debug, Clone)]
+pub struct ExponentialTimeCutoff {
+    pub t_cut: f64,
+    pub t_0: f64,
+}
+
+impl ExponentialTimeCutoff {
+    pub fn new(smax: f64, ratio_t_cut: Option<f64>, ratio_t_0: Option<f64>) -> Self {
+        let t_cut = ratio_t_cut.unwrap_or(0.999999999) * smax;
+        let t_0 = ratio_t_0.unwrap_or(0.25) * (smax - t_cut);
+        Self { t_cut, t_0 }
+    }
+}
+
+impl TimeCutoff for ExponentialTimeCutoff {
+    #[inline]
+    fn cutoff(&self, t: f64) -> f64 {
+        if t < self.t_cut {
+            1.0
+        } else {
+            let exponent = -((t - self.t_cut).powi(2)) / self.t_0.powi(2);
+            exponent.exp()
+        }
+    }
+
+    /// Cut-off for integral over u
+    #[inline]
+    fn u_max(&self, s: f64) -> f64 {
+        1.0 + (self.t_cut + 7.0 * self.t_0) / s
+    }
+}
+
+/// Enum to represent the type of integrand to compute.
+#[derive(Debug, Clone, Copy)]
+pub enum IntegrandType {
+    XX,
+    YY,
+    ZZ,
+    XZ,
+}
+
+/// Struct to hold integrand parameters and precompute shared terms.
+#[derive(Debug, Clone)]
+pub struct IntegrandCalculator<T>
+where
+    T: TimeCutoff,
+{
+    time_cutoff: T,
+}
+
+impl<T> IntegrandCalculator<T>
+where
+    T: TimeCutoff,
+{
+    pub fn new(time_cutoff: T) -> Self {
+        Self { time_cutoff }
+    }
+
+    /// Computes both the real and imaginary parts of the integrand at point u.
+    #[inline]
+    pub fn compute(
+        &self,
+        w: f64,
+        cos_thetak: f64,
+        s: f64,
+        sign: f64,
+        u: f64,
+        int_type: IntegrandType,
+    ) -> Complex64 {
+        let sin_thetak = (1.0 - cos_thetak * cos_thetak).sqrt();
+        // Precompute common terms
+        let u_squared_plus_sign = u * u + sign;
+        let sqrt_term = u_squared_plus_sign.sqrt();
+        let bessel_arg = w * sin_thetak * s * sqrt_term;
+        let wsu = w * s * u;
+        let exp_term_real = wsu.cos();
+        let exp_term_imag = wsu.sin();
+        let cutoff_val = self.time_cutoff.cutoff(u * s);
+
+        // Precompute Bessel functions
+        let (bessel_0, bessel_1, bessel_2) = match int_type {
+            IntegrandType::XX | IntegrandType::YY => {
+                let b0 = Jn(0, bessel_arg);
+                let b2 = Jn(2, bessel_arg);
+                (b0, 0.0, b2)
+            }
+            IntegrandType::ZZ => (Jn(0, bessel_arg), 0.0, 0.0),
+            IntegrandType::XZ => (0.0, Jn(1, bessel_arg), 0.0),
+        };
+
+        let (real, imag) = match int_type {
+            IntegrandType::XX => {
+                let factor = u_squared_plus_sign;
+                let bessel_diff = bessel_0 - bessel_2;
+                (
+                    factor * exp_term_real * bessel_diff * cutoff_val,
+                    factor * exp_term_imag * bessel_diff * cutoff_val,
+                )
+            }
+            IntegrandType::YY => {
+                let factor = u_squared_plus_sign;
+                let bessel_sum = bessel_0 + bessel_2;
+                (
+                    factor * exp_term_real * bessel_sum * cutoff_val,
+                    factor * exp_term_imag * bessel_sum * cutoff_val,
+                )
+            }
+            IntegrandType::ZZ => {
+                (exp_term_real * bessel_0 * cutoff_val, exp_term_imag * bessel_0 * cutoff_val)
+            }
+            IntegrandType::XZ => {
+                let factor = sign * sqrt_term;
+                (
+                    factor * exp_term_real * bessel_1 * cutoff_val,
+                    factor * exp_term_imag * bessel_1 * cutoff_val,
+                )
+            }
+        };
+        Complex64::new(real, imag)
+    }
+}
 
 #[derive(Error, Debug)]
 pub enum GWCalcError {
@@ -31,27 +158,6 @@ pub enum GWCalcError {
 
     #[error("Invalid cutoff configuration: t_cut={t_cut}, t_0={t_0}, smax={smax}")]
     InvalidCutoff { t_cut: f64, t_0: f64, smax: f64 },
-}
-
-/// Configuration for cutoff parameters in the gravitational wave calculator.
-#[derive(Debug, Clone)]
-pub struct TimeCutoffConfig {
-    pub t_cut: f64,
-    pub t_0: f64,
-}
-
-impl TimeCutoffConfig {
-    pub fn new(smax: f64, ratio_t_cut: Option<f64>, ratio_t_0: Option<f64>) -> Self {
-        let t_cut = ratio_t_cut.unwrap_or(0.999999999) * smax;
-        let t_0 = ratio_t_0.unwrap_or(0.25) * (smax - t_cut);
-        Self { t_cut, t_0 }
-    }
-
-    /// Cut-off for integral over u
-    #[inline]
-    pub fn u_max(&self, s: f64) -> f64 {
-        1.0 + (self.t_cut + 7.0 * self.t_0) / s
-    }
 }
 
 /// Struct to hold precomputed field arrays and weights.
@@ -93,12 +199,15 @@ pub struct LatticeConfig {
 
 /// Gravitational wave calculator for computing the spectrum.
 /// phi1 is the solution for t >= r, phi2 is the solution for t < r.
-pub struct GravitationalWaveCalculator {
+pub struct GravitationalWaveCalculator<T>
+where
+    T: TimeCutoff,
+{
     pub phi1: Array3<f64>,
     pub phi2: Array3<f64>,
     pub precomputed: PrecomputedFieldArrays,
     pub lattice: LatticeConfig,
-    pub config: TimeCutoffConfig,
+    pub integrand: IntegrandCalculator<T>,
     pub tol: f64,
     pub max_iter: u32,
     pub s_offset: Array1<f64>,
@@ -106,22 +215,23 @@ pub struct GravitationalWaveCalculator {
     thread_pool: ThreadPool,
 }
 
-impl GravitationalWaveCalculator {
+impl<T> GravitationalWaveCalculator<T>
+where
+    T: TimeCutoff,
+{
     pub fn new(
         initial_field_status: InitialFieldStatus,
         phi1: Array3<f64>,
         phi2: Array3<f64>,
         z_grid: Array1<f64>,
         ds: f64,
-        ratio_t_cut: Option<f64>,
-        ratio_t_0: Option<f64>,
+        integrand: IntegrandCalculator<T>,
     ) -> Result<Self, GWCalcError> {
         let n_fields = phi1.shape()[0];
         let n_s = phi1.shape()[1];
         let n_z = phi1.shape()[2];
         let dz = (z_grid[1] - z_grid[0]).abs();
         let s_grid: Array1<f64> = (0..n_s).map(|i| i as f64 * ds).collect();
-        let smax = s_grid[n_s - 1];
 
         if phi2.shape() != phi1.shape() {
             return Err(GWCalcError::ShapeMismatch {
@@ -139,7 +249,6 @@ impl GravitationalWaveCalculator {
             n_z,
             initial_field_status,
         };
-        let config = TimeCutoffConfig::new(smax, ratio_t_cut, ratio_t_0);
         let precomputed = Self::compute_precomputed_arrays(&phi1, &phi2, n_fields, &lattice);
 
         let s_offset: Array1<f64> = lattice.s_grid.slice(s![1..]).mapv(|s| s - 0.5 * ds);
@@ -157,7 +266,7 @@ impl GravitationalWaveCalculator {
             phi2,
             precomputed,
             lattice,
-            config,
+            integrand,
             tol: 1e-5,
             max_iter: 20,
             s_offset,
@@ -480,11 +589,10 @@ impl GravitationalWaveCalculator {
         sign: f64,
     ) -> Complex64 {
         let u_min = if sign == -1.0 { 1.0 } else { 0.0 };
-        let u_max = self.config.u_max(s);
+        let u_max = self.integrand.time_cutoff.u_max(s);
 
-        let integrand_calc =
-            IntegrandCalculator::new(w, cos_thetak, s, sign, self.config.t_cut, self.config.t_0);
-        let integrand = |u: f64| -> Complex64 { integrand_calc.compute(u, int_type).unwrap() };
+        let integrand =
+            |u: f64| -> Complex64 { self.integrand.compute(w, cos_thetak, s, sign, u, int_type) };
 
         gauss_kronrod_quadrature(integrand, (u_min, u_max), G30K61(self.tol, self.max_iter))
     }

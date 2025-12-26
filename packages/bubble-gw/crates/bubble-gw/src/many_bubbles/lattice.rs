@@ -162,7 +162,7 @@ impl ParallelepipedLattice {
     }
 
     /// Returns normalized basis vectors directions.
-    pub fn basis_vectors(&self) -> [Vector3<f64>; 3] {
+    pub fn normalized_basis(&self) -> [Vector3<f64>; 3] {
         self.basis.map(|e| {
             let n2 = e.norm_squared();
             if n2 > f64::EPSILON {
@@ -341,8 +341,8 @@ impl CartesianLattice {
     }
 
     /// Returns normalized basis vectors (should be orthonormal).
-    pub fn basis_vectors(&self) -> [Vector3<f64>; 3] {
-        self.0.basis_vectors()
+    pub fn normalized_basis(&self) -> [Vector3<f64>; 3] {
+        self.0.normalized_basis()
     }
 
     /// Returns side lengths (basis norms).
