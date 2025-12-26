@@ -82,7 +82,7 @@ This profile can be use to build the initial condition for the lattice simulatio
 
 ## Example code
 
-An example of working with two bubbles system can be found at [two_bubbles.ipynb](./examples/two_bubbles.ipynb).
+An example of working with two bubbles system can be found at [two_bubbles.py](./examples/two_bubbles.py).
 
 ### Evolution of field profile
 

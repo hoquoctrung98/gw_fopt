@@ -33,6 +33,6 @@ sample(start=1.0, stop=100.0, n_sample=5, n_grid=2, n_iter=0, sample_type="log")
 sample(start=1.0, stop=100.0, n_sample=5, n_grid=2, n_iter=0, sample_type="log", base=2.0)
 ```
 
-To better visualize the usage of this util, run the example [visualize_samples.ipynb](./examples/visualize_samples.ipynb)
+To better visualize the usage of this util, run the example [visualize_samples.py](./examples/visualize_samples.py)
 ![uniform](examples/figures/sample_uniform.png)
 ![log](examples/figures/sample_log.png)
