@@ -4,5 +4,7 @@ pub mod py_lattice;
 pub use py_lattice::*;
 pub mod py_bulk_flow;
 pub use py_bulk_flow::*;
+pub mod py_generalized_bulk_flow;
+pub use py_generalized_bulk_flow::*;
 pub mod py_isometry;
 pub use py_isometry::*;

@@ -23,14 +23,14 @@ fn bubble_gw(py: Python, module_parent: &Bound<'_, PyModule>) -> PyResult<()> {
     )?)?;
 
     let module_many_bubbles = PyModule::new(module_parent.py(), "many_bubbles")?;
-    module_many_bubbles.add_class::<py_many_bubbles::PyBulkFlow>()?;
-    module_many_bubbles.add_class::<py_many_bubbles::PyLatticeBubbles>()?;
-    // module_many_bubbles.add_class::<py_many_bubbles::PyBuiltInLattice>()?;
     module_many_bubbles.add_class::<crate::py_many_bubbles::py_lattice::PyParallelepiped>()?;
     module_many_bubbles.add_class::<crate::py_many_bubbles::py_lattice::PyCartesian>()?;
     module_many_bubbles.add_class::<crate::py_many_bubbles::py_lattice::PySpherical>()?;
     module_many_bubbles.add_class::<crate::py_many_bubbles::py_lattice::PyEmpty>()?;
     module_many_bubbles.add_class::<py_many_bubbles::PyIsometry3>()?;
+    module_many_bubbles.add_class::<py_many_bubbles::PyBulkFlow>()?;
+    module_many_bubbles.add_class::<py_many_bubbles::PyGeneralizedBulkFlow>()?;
+    module_many_bubbles.add_class::<py_many_bubbles::PyLatticeBubbles>()?;
 
     let module_utils = PyModule::new(module_parent.py(), "utils")?;
     module_utils.add_function(wrap_pyfunction!(py_utils::sample, module_parent)?)?;
