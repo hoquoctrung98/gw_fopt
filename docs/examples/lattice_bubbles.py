@@ -1,18 +1,19 @@
 # ---
 # jupyter:
 #   jupytext:
+#     formats: ipynb,py:percent
 #     text_representation:
 #       extension: .py
-#       format_name: light
-#       format_version: '1.5'
-#       jupytext_version: 1.11.2
+#       format_name: percent
+#       format_version: '1.3'
+#       jupytext_version: 1.17.2
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
 #     name: python3
 # ---
 
-# +
+# %%
 # #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -32,7 +33,7 @@ sys.path.append("../")  # add the qball package to the python path
 
 from bubble_gw import many_bubbles
 
-# +
+# %%
 # %matplotlib ipympl
 sns.set(style="ticks", font="Dejavu Sans")
 sns.set_palette("bright")
@@ -61,8 +62,8 @@ plt.ioff()
 
 plt.rc("text", usetex=True)
 plt.rc("text.latex", preamble=r"\usepackage{amsmath}")
-# -
 
+# %%
 L = 10.0
 # An empty lattice is merely a container with no bubbles validation
 lattice_empty = many_bubbles.EmptyLattice()
@@ -73,10 +74,11 @@ lattice_cartesian = many_bubbles.CartesianLattice(
 # A spherical lattice
 lattice_spherical = many_bubbles.SphericalLattice(center=[0.0, 0.0, 0.0], radius=10)
 
+# %%
 print(repr(lattice_cartesian))
 print(str(lattice_spherical))
 
-# +
+# %%
 # The input bubbles_interior and bubbles_exterior is a numpy array of shape (n_bubbles, 4)
 bubbles_interior = np.array([[0.0, 0.0, 0.0, L], [1.0, L, 0.0, 0.0]])
 bubbles_exterior = np.array([[0.0, 0.0, 0.0, 2 * L], [1.0, 3 * L, 0.0, 0.0]])
@@ -105,11 +107,11 @@ lattice_bubbles_spherical = many_bubbles.LatticeBubbles(
 lattice_bubbles_cartesian.with_boundary_condition(boundary_condition="periodic")
 lattice_bubbles_spherical.with_boundary_condition(boundary_condition="reflection")
 
-# +
+# %%
 # Here we perform bubble validation on the lattice, if not satisfied an error is thrown
-# # + bubbles_interior must be inside the lattice
-# # + bubbles_exterior must be outside the lattice
-# # + causality is imposed by all lattice to ensure no bubble is formed inside other bubbles.
+# + bubbles_interior must be inside the lattice
+# + bubbles_exterior must be outside the lattice
+# + causality is imposed by all lattice to ensure no bubble is formed inside other bubbles.
 # Note that the causality checks only applied for (Interior-Interior) and (Interior-Exterior), and not (Exterior-Exterior), as some boundary conditions might violate this
 
 try:
@@ -142,14 +144,16 @@ try:
     )
 except Exception:
     print(traceback.format_exc())
-# -
 
+# %% [markdown]
 # ## Transforming the LatticeBubbles system with an Isometry3
 
+# %% [markdown]
 # Isometry3 is composed of a spatial translation + a spatial rotation (which is specified by either euler_angles or rotation_matrix, but not both).
 #
 # Under Isometry3, both the lattice and the (bubbles_interior + bubbles_exterior) are transformed, in such a way that the relative positions of the system remains the same.
 
+# %%
 bubbles_interior = np.array(
     [[0.0, 10.0, 0.0, 1.0], [1.0, 0.0, 10.0, 0.0], [2.0, 0.0, 0.0, 10.0]]
 )
@@ -162,6 +166,7 @@ lattice_bubbles_cartesian.with_boundary_condition(boundary_condition="periodic")
 print(lattice_bubbles_cartesian.bubbles_interior)
 print(lattice_bubbles_cartesian.bubbles_exterior)
 
+# %%
 # Create an Isometry3 transformation and apply it to LatticeBubbles, which transform both the lattice and the bubbles
 iso = many_bubbles.Isometry3(
     translation=[1.0, 2.0, 3.0], euler_angles=None, rotation_matrix=None
@@ -172,6 +177,7 @@ transformed_lattice_bubbles_cartesian = lattice_bubbles_cartesian.transform(iso)
 print(transformed_lattice_bubbles_cartesian.bubbles_interior)
 print(transformed_lattice_bubbles_cartesian.bubbles_exterior)
 
+# %%
 euler_angles_six_faces = [
     [0.0, 0.0, 0.0],  # +z direction
     [np.pi, 0.0, 0.0],  # -z direction
@@ -185,7 +191,7 @@ for euler_angles in euler_angles_six_faces:
     transformed_lattice_bubbles_cartesian = lattice_bubbles_cartesian.transform(iso)
     print(transformed_lattice_bubbles_cartesian.bubbles_interior)
 
-# +
+# %%
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -545,7 +551,7 @@ class LatticeBubblesVisualizer:
         return artists
 
 
-# +
+# %%
 L = 2.0
 bubbles_interior = np.loadtxt("./inputs/confY.txt")
 bubbles_interior = bubbles_interior[:10]
@@ -559,7 +565,7 @@ lattice_bubbles = many_bubbles.LatticeBubbles(
 )
 lattice_bubbles.with_boundary_condition("periodic")
 
-# +
+# %%
 # Assuming you have a lattice_bubbles object
 visualizer = LatticeBubblesVisualizer(lattice_bubbles)
 
@@ -585,8 +591,8 @@ fig.savefig(
     facecolor="white",
 )
 fig.show()
-# -
 
+# %%
 # Plot actual growing bubbles at a given time
 fig, ax = plt.subplots(subplot_kw={"projection": "3d"}, figsize=(10, 8))
 visualizer.plot_bubbles(fig, ax, t=0.7, show_bubbles_exterior=True, alpha=0.4)

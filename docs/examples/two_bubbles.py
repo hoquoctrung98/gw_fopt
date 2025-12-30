@@ -191,6 +191,7 @@ dE_dlogw_dcosthetak = gw_calc.compute_angular_gw_spectrum(
     w_arr=w_arr, cos_thetak_arr=cos_thetak_arr
 )
 # compute the spectrum dE/dlogw using trapezoidal integrator
+# factor of 2 because we only compute dE_dlogw_dcosthetak for positive cos_thetak_arr
 dE_dlogw = 2 * np.trapezoid(dE_dlogw_dcosthetak, axis=0, x=cos_thetak_arr)
 
 fig, ax = plt.subplots()

@@ -1,19 +1,19 @@
-# -*- coding: utf-8 -*-
 # ---
 # jupyter:
 #   jupytext:
+#     formats: ipynb,py:percent
 #     text_representation:
 #       extension: .py
-#       format_name: light
-#       format_version: '1.5'
-#       jupytext_version: 1.11.2
+#       format_name: percent
+#       format_version: '1.3'
+#       jupytext_version: 1.17.2
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
 #     name: python3
 # ---
 
-# +
+# %%
 # #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -33,7 +33,7 @@ sys.path.append("../")  # add the qball package to the python path
 
 from bubble_gw import many_bubbles
 
-# +
+# %%
 # %matplotlib ipympl
 sns.set(style="ticks", font="Dejavu Sans")
 sns.set_palette("bright")
@@ -63,7 +63,7 @@ plt.ioff()
 plt.rc("text", usetex=True)
 plt.rc("text.latex", preamble=r"\usepackage{amsmath}")
 
-# +
+# %%
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
@@ -350,7 +350,7 @@ class BubbleCollision:
         )
 
 
-# +
+# %%
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import colormaps
@@ -617,11 +617,10 @@ def plot_omega_gw(
     return fig, ax
 
 
-# -
-
+# %% [markdown]
 # ## Two bubbles
 
-# +
+# %%
 L = 2.0
 d = 1.0
 cos_theta_k = 0.0
@@ -640,13 +639,16 @@ lattice_bubbles = many_bubbles.LatticeBubbles(
     lattice=lattice,
     sort_by_time=False,
 )
-bulk_flow = many_bubbles.BulkFlow(lattice_bubbles)
-bulk_flow.set_resolution(n_cos_thetax=1000, n_phix=1000, precompute_first_bubbles=True)
-# -
+generalized_bulk_flow = many_bubbles.GeneralizedBulkFlow(lattice_bubbles)
+generalized_bulk_flow.set_resolution(
+    n_cos_thetax=1000, n_phix=1000, precompute_first_bubbles=True
+)
 
-bubble_collision = BubbleCollision(bulk_flow=bulk_flow)
+# %%
+bubble_collision = BubbleCollision(bulk_flow=generalized_bulk_flow)
 bubble_collision.set_reference_bubble_index(a_idx=0)  # Set the reference bubble index
 
+# %%
 fig, ax = plt.subplots(1, 1, figsize=(8, 6))
 bubble_collision.plot_first_collision_indices(fig, ax)
 ax.grid(True)
@@ -657,6 +659,7 @@ fig.savefig(
 )
 fig
 
+# %%
 fig, ax = plt.subplots(1, 1, figsize=(8, 6))
 bubble_collision.plot_collision_time(fig, ax, vmax=10)
 fig.savefig(
@@ -664,6 +667,7 @@ fig.savefig(
 )
 fig
 
+# %%
 fig, ax = plt.subplots(1, 1, figsize=(8, 6))
 bubble_collision.plot_collision_status(
     fig, ax, t=1, colors=["#000000", "#37ff00", "#ff3025"]
@@ -675,10 +679,11 @@ fig.savefig(
 )
 fig
 
+# %%
 n_t = 1000
 t_end = 0.8 * d
-bulk_flow.set_resolution(1000, 1000)
-bulk_flow.set_gradient_scaling_params(
+generalized_bulk_flow.set_resolution(1000, 1000)
+generalized_bulk_flow.set_gradient_scaling_params(
     coefficients_sets=[
         [0.0],  # Envelope approximation
         [1.0],
@@ -697,8 +702,11 @@ bulk_flow.set_gradient_scaling_params(
     ],
 )
 w_arr = np.geomspace(1e-2, 1e3, 200)
-C_arr = bulk_flow.compute_c_integral(w_arr=w_arr, t_begin=0.0, t_end=t_end, n_t=n_t)
+C_arr = generalized_bulk_flow.compute_c_integral(
+    w_arr=w_arr, t_begin=0.0, t_end=t_end, n_t=n_t
+)
 
+# %%
 # 500, 500
 fig, ax = plt.subplots(1, 1, figsize=(14, 8))
 fig, ax = plot_omega_gw(
@@ -708,8 +716,8 @@ fig, ax = plot_omega_gw(
     C_arr=C_arr,
     ir_range=(1e-2, 1e-1),
     uv_range=(5e1, 5e2),
-    coefficients_sets=bulk_flow.coefficients_sets,
-    powers_sets=bulk_flow.powers_sets,
+    coefficients_sets=generalized_bulk_flow.coefficients_sets,
+    powers_sets=generalized_bulk_flow.powers_sets,
     colormap="Set1",
 )
 ax.yaxis.set_major_locator(mpl.ticker.LogLocator(numticks=999))
@@ -725,9 +733,10 @@ fig.savefig(
 )
 fig
 
+# %% [markdown]
 # ## Many bubbles
 
-# +
+# %%
 L = 2.0
 bubbles_interior = np.loadtxt("./inputs/confY.txt")
 lattice = many_bubbles.CartesianLattice(
@@ -740,13 +749,16 @@ lattice_bubbles = many_bubbles.LatticeBubbles(
     sort_by_time=False,
 )
 lattice_bubbles.with_boundary_condition("periodic")
-bulk_flow = many_bubbles.BulkFlow(lattice_bubbles)
-bulk_flow.set_resolution(n_cos_thetax=1000, n_phix=1000, precompute_first_bubbles=True)
-# -
+generalized_bulk_flow = many_bubbles.GeneralizedBulkFlow(lattice_bubbles)
+generalized_bulk_flow.set_resolution(
+    n_cos_thetax=1000, n_phix=1000, precompute_first_bubbles=True
+)
 
-bubble_collision = BubbleCollision(bulk_flow=bulk_flow)
+# %%
+bubble_collision = BubbleCollision(bulk_flow=generalized_bulk_flow)
 bubble_collision.set_reference_bubble_index(a_idx=0)  # Set the reference bubble index
 
+# %%
 # Get collision info for a specific point on the reference bubble
 info = bubble_collision.get_collision_info(phi=0.0, cos_theta=0.75)
 print(f"(phi, cos(theta)) = ({info['phi']:.3f}, {info['cos_theta']:.3f})")
@@ -756,6 +768,7 @@ else:
     print(f"Index of first bubble in collision = Exterior({-first_bubble_index - 2})")
 print(f"Collision time = {info['collision_time']}")
 
+# %%
 fig, ax = plt.subplots(1, 1, figsize=(8, 6))
 bubble_collision.plot_first_collision_indices(fig, ax)
 ax.grid(True)
@@ -766,6 +779,7 @@ fig.savefig(
 )
 fig
 
+# %%
 fig, ax = plt.subplots(1, 1, figsize=(8, 6))
 bubble_collision.plot_collision_time(fig, ax)
 fig.savefig(
@@ -773,6 +787,7 @@ fig.savefig(
 )
 fig
 
+# %%
 fig, ax = plt.subplots(1, 1, figsize=(8, 6))
 bubble_collision.plot_collision_status(
     fig, ax, t=1, colors=["#000000", "#37ff00", "#ff3025"]
