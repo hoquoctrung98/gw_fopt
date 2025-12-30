@@ -8,8 +8,8 @@ The GW energy radiated along the $\hat{\textbf{z}}$ direction is
 ```math
 \begin{align}
 \frac{d E_{GW}}{d \omega d \Omega}
-    &= 2 G \omega^2 \Lambda_{ij,lm}(\hat{\bm{k}}) \widetilde{T}^{*}_{ij}(\hat{\bm{k}},\omega) \widetilde{T}_{lm}(\hat{\bm{k}},\omega) \nonumber \\
-    &= 2 G \omega^2 \left( \mathrm{Tr}\left[ P_{\hat{\bm{k}}} \widetilde{T}^\ast_{} P_{\hat{\bm{k}}} \widetilde{T} \right] - \dfrac{1}{2} \left\vert \mathrm{Tr}\left[ P_{\hat{\bm{k}}} \widetilde{T} \right] \right\vert^2 \right),
+    &= 2 G \omega^2 \Lambda_{ij,lm}(\hat{\mathbf{k}}) \widetilde{T}^{*}_{ij}(\hat{\mathbf{k}},\omega) \widetilde{T}_{lm}(\hat{\mathbf{k}},\omega) \nonumber \\
+    &= 2 G \omega^2 \left( \mathrm{Tr}\left[ P_{\hat{\mathbf{k}}} \widetilde{T}^\ast_{} P_{\hat{\mathbf{k}}} \widetilde{T} \right] - \dfrac{1}{2} \left\vert \mathrm{Tr}\left[ P_{\hat{\mathbf{k}}} \widetilde{T} \right] \right\vert^2 \right),
 \end{align}
 ```
 
@@ -17,43 +17,43 @@ where
 
 ```math
 \begin{align*}
-    \Lambda_{ij,lm}(\hat{\bm{k}}) &= P_{\hat{\bm{k}}}^{il} P_{\hat{\bm{k}}}^{jm} - \dfrac{1}{2} P_{\hat{\bm{k}}}^{ij} P_{\hat{\bm{k}}}^{lm}, \qquad P_{\hat{\bm{k}}}^{ij} = \delta_{ij} - \hat{\bm{k}}_i \hat{\bm{k}}_j \\
-    T_{ij}(\hat{\bm{k}},\omega) &=\frac{1}{2\pi}\int dt \, d^3x \, e^{i\omega(t-\hat{\bm{k}} \cdot \bm{x})}T_{ij}(\bm{x},t)
-    = \kappa \rho_\text{vac} v_b^3 C_{ij} (\hat{\bm{k}},\omega), \\
-    C_{ij}(\hat{\bm{k}},\omega) &= \dfrac{1}{6 \pi} \sum_n \int dt \, e^{i \omega (t - \hat{\bm{k}} \cdot \bm{x}_n)} A_{n, ij}(\hat{\bm{k}},\omega), \\
-    A_{n, ij}(\hat{\bm{k}},\omega) &= \int_{S_n} d \Omega_x \, e^{-i \omega v_b (t - t_n) \hat{\bm{k}} \cdot \bm{\hat{x}}} \hat{\bm{x}}_i \hat{\bm{x}}_j \left[ (t - t_n)^3  f(t,t_{n,c})\right]
+    \Lambda_{ij,lm}(\hat{\mathbf{k}}) &= P_{\hat{\mathbf{k}}}^{il} P_{\hat{\mathbf{k}}}^{jm} - \dfrac{1}{2} P_{\hat{\mathbf{k}}}^{ij} P_{\hat{\mathbf{k}}}^{lm}, \qquad P_{\hat{\mathbf{k}}}^{ij} = \delta_{ij} - \hat{\mathbf{k}}_i \hat{\mathbf{k}}_j \\
+    T_{ij}(\hat{\mathbf{k}},\omega) &=\frac{1}{2\pi}\int dt \, d^3x \, e^{i\omega(t-\hat{\mathbf{k}} \cdot \mathbf{x})}T_{ij}(\mathbf{x},t)
+    = \kappa \rho_\text{vac} v_b^3 C_{ij} (\hat{\mathbf{k}},\omega), \\
+    C_{ij}(\hat{\mathbf{k}},\omega) &= \dfrac{1}{6 \pi} \sum_n \int dt \, e^{i \omega (t - \hat{\mathbf{k}} \cdot \mathbf{x}_n)} A_{n, ij}(\hat{\mathbf{k}},\omega), \\
+    A_{n, ij}(\hat{\mathbf{k}},\omega) &= \int_{S_n} d \Omega_x \, e^{-i \omega v_b (t - t_n) \hat{\mathbf{k}} \cdot \mathbf{\hat{x}}} \hat{\mathbf{x}}_i \hat{\mathbf{x}}_j \left[ (t - t_n)^3  f(t,t_{n,c})\right]
 \end{align*}
 ```
 
 Where
 
 + $t_{n,c}(\zeta, \phi)$ denotes the time at which the wall element of the $n$-th bubble undergoes a the first collision with other bubbles.
-+ $X_{ij} \equiv \hat{\bm{x}}_i \hat{\bm{x}}_j$ in spherical coordinates reads
++ $X_{ij} \equiv \hat{\mathbf{x}}_i \hat{\mathbf{x}}_j$ in spherical coordinates reads
 
-    ```math
+    $$
     X = \begin{pmatrix}
     \sin^2 \theta_x \cos^2 \phi_x & \sin^2 \theta_x \sin \phi_x \cos \phi_x & \sin \theta_x \cos \theta_x \cos \phi_x \\
     \sin^2 \theta_x \sin \phi_x \cos \phi_x & \sin^2 \theta_x \sin^2 \phi_x & \sin \theta_x \cos \theta_x \sin \phi_x \\
     \sin \theta_x \cos \theta_x \cos \phi_x & \sin \theta_x \cos \theta_x \sin \phi_x & \sin^2 \theta_x
     \end{pmatrix}
-    ```
+    $$
 
 + $f(t, t_n, t_{n, c})$ is the scaling function can be decomposed into the envelope contribution (i.e before first collision) and generalized bulk-flow contribution (i.e after first collision) as follows
 
-    ```math
+    $$
         f_\sigma(t, t_n, t_{n, c}) \equiv
         \Theta(t_{n, c}-t)
         + \Theta(t - t_{n, c}) \left(\frac{t_{n, c}-t_n}{t-t_n}\right)^3 \sum_\xi a_\xi \left(\frac{t_{n, c}-t_n}{t-t_n}\right)^\xi,
-    ```
+    $$
 
     where the coefficients $a_\xi$ can be extracted from fitting the surface tension of the bubble wall from e.g $(1+1)D$ simulation using package **bubble_dynamics**
 
-    ```math
+    $$
         \sigma(t,t_n, t_{n, c}) = \Theta(t_{n, c}-t)\sigma_0 (t-t_n)
         + \Theta(t - t_{n, c}) \sigma_0 (t_{n, c} - t_n) \left(\frac{t_{n, c}-t_n}{t-t_n}\right)^2 \sum_\xi a_\xi \left(\frac{t_{n, c}-t_n}{t-t_n}\right)^\xi,
-    ```
+    $$
 
-With the choice $\hat{\bm{k}} = (0, 0, 1)$, the computations are simplified to
+With the choice $\hat{\mathbf{k}} = (0, 0, 1)$, the computations are simplified to
 
 ```math
 \begin{align}
