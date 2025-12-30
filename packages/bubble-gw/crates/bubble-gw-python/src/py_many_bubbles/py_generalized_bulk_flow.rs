@@ -6,18 +6,48 @@ use bubble_gw::many_bubbles::lattice::BuiltInLattice;
 use bubble_gw::many_bubbles::lattice_bubbles::BubbleIndex;
 use numpy::{
     Complex64 as NumpyComplex64, PyArray1, PyArray2, PyArray3, PyArray4, PyArrayMethods,
-    PyReadonlyArray1, PyReadonlyArray2,
+    PyReadonlyArray1, PyReadonlyArray2, ToPyArray,
 };
 use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
 use thiserror::Error;
 
-// ——————————————————————————————————————————————————————
-// Error conversion
-// ——————————————————————————————————————————————————————
-
+/// Python-facing error
 #[derive(Error, Debug)]
-pub enum PyGeneralizedBulkFlowError {
+pub enum PyBubblesError {
+    #[error("Array shape mismatch: {0}")]
+    ArrayShapeMismatch(String),
+
+    #[error("Bubble {a} is formed inside bubble {b} at initial time (overlapping light cones)")]
+    BubbleFormedInsideBubble { a: BubbleIndex, b: BubbleIndex },
+
+    #[error("CSV error: {0}")]
+    Csv(#[from] csv::Error),
+
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+
+    #[error("Parse float error at {path}:{line}: '{value}'")]
+    ParseFloat {
+        path: String,
+        line: usize,
+        value: String,
+    },
+
+    #[error("Invalid row in {path}:{line}: expected 4 columns, got {got}")]
+    InvalidColumnCount {
+        path: String,
+        line: usize,
+        got: usize,
+    },
+
+    #[error("Empty bubble file: {0}")]
+    EmptyFile(String),
+}
+
+/// Python-facing error
+#[derive(Error, Debug)]
+pub enum PyBulkFlowError {
     #[error("Index {index} out of bounds (max: {max})")]
     InvalidIndex { index: usize, max: usize },
 
@@ -36,7 +66,7 @@ pub enum PyGeneralizedBulkFlowError {
     #[error("Failed to build thread pool: {0}")]
     ThreadPoolBuildError(String),
 
-    #[error("Bubble {a} is formed inside bubble {b}")]
+    #[error("Bubble {a} is formed inside bubble {b} at initial time (overlapping light cones)")]
     BubbleFormedInsideBubble { a: BubbleIndex, b: BubbleIndex },
 
     #[error(transparent)]
@@ -46,64 +76,58 @@ pub enum PyGeneralizedBulkFlowError {
     BubblesError,
 }
 
-impl From<GeneralizedBulkFlowError> for PyGeneralizedBulkFlowError {
+impl From<GeneralizedBulkFlowError> for PyBulkFlowError {
     fn from(err: GeneralizedBulkFlowError) -> Self {
         match err {
             GeneralizedBulkFlowError::InvalidIndex { index, max } => {
-                PyGeneralizedBulkFlowError::InvalidIndex { index, max }
+                PyBulkFlowError::InvalidIndex { index, max }
             }
             GeneralizedBulkFlowError::UninitializedField(field) => {
-                PyGeneralizedBulkFlowError::UninitializedField(field)
+                PyBulkFlowError::UninitializedField(field)
             }
             GeneralizedBulkFlowError::InvalidResolution(msg) => {
-                PyGeneralizedBulkFlowError::InvalidResolution(msg)
+                PyBulkFlowError::InvalidResolution(msg)
             }
             GeneralizedBulkFlowError::InvalidTimeRange { begin, end } => {
-                PyGeneralizedBulkFlowError::InvalidTimeRange { begin, end }
+                PyBulkFlowError::InvalidTimeRange { begin, end }
             }
             GeneralizedBulkFlowError::ArrayShapeMismatch(msg) => {
-                PyGeneralizedBulkFlowError::ArrayShapeMismatch(msg)
+                PyBulkFlowError::ArrayShapeMismatch(msg)
             }
             GeneralizedBulkFlowError::ThreadPoolBuildError(e) => {
-                PyGeneralizedBulkFlowError::ThreadPoolBuildError(e.to_string())
+                PyBulkFlowError::ThreadPoolBuildError(e.to_string())
             }
             GeneralizedBulkFlowError::BubbleFormedInsideBubble { a, b } => {
-                PyGeneralizedBulkFlowError::BubbleFormedInsideBubble { a, b }
+                PyBulkFlowError::BubbleFormedInsideBubble { a, b }
             }
-            GeneralizedBulkFlowError::BubblesError(_) => PyGeneralizedBulkFlowError::BubblesError,
+            GeneralizedBulkFlowError::BubblesError(..) => PyBulkFlowError::BubblesError,
         }
     }
 }
 
-impl From<PyGeneralizedBulkFlowError> for PyErr {
-    fn from(err: PyGeneralizedBulkFlowError) -> Self {
+impl From<PyBulkFlowError> for PyErr {
+    fn from(err: PyBulkFlowError) -> Self {
         match err {
-            PyGeneralizedBulkFlowError::InvalidIndex { .. } => {
-                PyIndexError::new_err(err.to_string())
-            }
+            PyBulkFlowError::InvalidIndex { .. } => PyIndexError::new_err(err.to_string()),
             _ => PyValueError::new_err(err.to_string()),
         }
     }
 }
 
-type PyResult<T> = Result<T, PyGeneralizedBulkFlowError>;
+type PyResult<T> = Result<T, PyBulkFlowError>;
 
-// ——————————————————————————————————————————————————————
-// Python class
-// ——————————————————————————————————————————————————————
-
-#[pyclass(name = "GeneralizedBulkFlow")]
-pub struct PyGeneralizedBulkFlow {
+#[pyclass(name = "BulkFlow")]
+pub struct PyBulkFlow {
     inner: GeneralizedBulkFlow<BuiltInLattice>,
 }
 
 #[pymethods]
-impl PyGeneralizedBulkFlow {
+impl PyBulkFlow {
     #[new]
     #[pyo3(signature = (lattice))]
     pub fn new(lattice: PyLatticeBubbles) -> PyResult<Self> {
         let bulk_flow = GeneralizedBulkFlow::new(lattice.inner)?;
-        Ok(PyGeneralizedBulkFlow { inner: bulk_flow })
+        Ok(PyBulkFlow { inner: bulk_flow })
     }
 
     pub fn set_num_threads(&mut self, num_threads: usize) -> PyResult<()> {
@@ -120,6 +144,12 @@ impl PyGeneralizedBulkFlow {
     pub fn bubbles_exterior(&self, py: Python) -> Py<PyArray2<f64>> {
         PyArray2::from_array(py, &self.inner.bubbles_exterior().to_array2()).into()
     }
+
+    // #[getter]
+    // pub fn delta_squared(&self, py: Python) -> Py<PyArray2<f64>> {
+    //     let foo = self.inner.delta_squared().to_pyarray(py).to_owned_array();
+    //     PyArray2::from_array(py, &foo).into()
+    // }
 
     #[getter]
     pub fn coefficients_sets(&self, py: Python) -> Py<PyArray2<f64>> {
@@ -172,196 +202,6 @@ impl PyGeneralizedBulkFlow {
             .set_gradient_scaling_params(coefficients_sets, powers_sets, damping_factor)?;
         Ok(())
     }
-
-    #[pyo3(signature = (n_cos_thetax, n_phix, precompute_first_bubbles = true))]
-    pub fn set_resolution(
-        &mut self,
-        n_cos_thetax: usize,
-        n_phix: usize,
-        precompute_first_bubbles: bool,
-    ) -> PyResult<()> {
-        self.inner
-            .set_resolution(n_cos_thetax, n_phix, precompute_first_bubbles)?;
-        Ok(())
-    }
-
-    // ————————————————————————————————————————
-    // Tensorized computation methods
-    // ————————————————————————————————————————
-
-    /// Compute the time-integrated C tensor for one bubble.
-    ///
-    /// Returns shape: (6, n_sets, n_w)
-    pub fn compute_c_tensor_fixed_bubble(
-        &mut self,
-        py: Python,
-        a_idx: usize,
-        w_arr: Vec<f64>,
-        t_begin: Option<f64>,
-        t_end: f64,
-        n_t: usize,
-    ) -> PyResult<Py<PyArray3<NumpyComplex64>>> {
-        let c_tensor = self
-            .inner
-            .compute_c_tensor_fixed_bubble(a_idx, &w_arr, t_begin, t_end, n_t)?;
-
-        // Convert HermitianTensor3<Array2<Complex64>> → (6, n_sets, n_w)
-        let n_sets = c_tensor.xx().shape()[0];
-        let n_w = c_tensor.xx().shape()[1];
-        let mut out = Vec::with_capacity(6 * n_sets * n_w);
-        for comp in [
-            c_tensor.xx(),
-            c_tensor.xy(),
-            c_tensor.xz(),
-            c_tensor.yy(),
-            c_tensor.yz(),
-            c_tensor.zz(),
-        ] {
-            out.extend(comp.iter().map(|&c| NumpyComplex64::new(c.re, c.im)));
-        }
-        let out_array = ndarray::Array3::from_shape_vec((6, n_sets, n_w), out)
-            .map_err(|e| PyGeneralizedBulkFlowError::ArrayShapeMismatch(e.to_string()))?;
-        Ok(PyArray3::from_array(py, &out_array).into())
-    }
-
-    /// Compute the time-dependent C tensor integrand for one bubble.
-    ///
-    /// Returns shape: (6, n_sets, n_w, n_t)
-    pub fn compute_c_tensor_integrand_fixed_bubble(
-        &self,
-        py: Python,
-        a_idx: usize,
-        w_arr: Vec<f64>,
-        t_begin: Option<f64>,
-        t_end: f64,
-        n_t: usize,
-    ) -> PyResult<Py<PyArray4<NumpyComplex64>>> {
-        let integrand = self
-            .inner
-            .compute_c_tensor_integrand_fixed_bubble(a_idx, &w_arr, t_begin, t_end, n_t)?;
-
-        // HermitianTensor3<Array3<Complex64>> → (6, n_sets, n_w, n_t)
-        let n_sets = integrand.xx().shape()[0];
-        let n_w = integrand.xx().shape()[1];
-        let n_t = integrand.xx().shape()[2];
-        let mut out = Vec::with_capacity(6 * n_sets * n_w * n_t);
-        for comp in [
-            integrand.xx(),
-            integrand.xy(),
-            integrand.xz(),
-            integrand.yy(),
-            integrand.yz(),
-            integrand.zz(),
-        ] {
-            out.extend(comp.iter().map(|&c| NumpyComplex64::new(c.re, c.im)));
-        }
-        let out_array = ndarray::Array4::from_shape_vec((6, n_sets, n_w, n_t), out)
-            .map_err(|e| PyGeneralizedBulkFlowError::ArrayShapeMismatch(e.to_string()))?;
-        Ok(PyArray4::from_array(py, &out_array).into())
-    }
-
-    /// Compute the time-integrated C tensor, summed over selected bubbles.
-    ///
-    /// Returns shape: (6, n_sets, n_w)
-    #[pyo3(signature = (w_arr, *, t_begin=None, t_end, n_t, selected_bubbles=None))]
-    pub fn compute_c_tensor(
-        &mut self,
-        py: Python,
-        w_arr: Vec<f64>,
-        t_begin: Option<f64>,
-        t_end: f64,
-        n_t: usize,
-        selected_bubbles: Option<PyReadonlyArray1<usize>>,
-    ) -> PyResult<Py<PyArray3<NumpyComplex64>>> {
-        let selected_vec: Option<Vec<usize>> = selected_bubbles
-            .map(|arr| {
-                let array = arr.to_owned_array();
-                if !array.is_standard_layout() {
-                    return Err(PyValueError::new_err(
-                        "selected_bubbles must be a contiguous 1-D array in C order",
-                    ));
-                }
-                Ok(array.to_vec())
-            })
-            .transpose()?;
-
-        let selected_slice: Option<&[usize]> = selected_vec.as_deref();
-
-        let c_tensor = self
-            .inner
-            .compute_c_tensor(&w_arr, t_begin, t_end, n_t, selected_slice)?;
-
-        let n_sets = c_tensor.xx().shape()[0];
-        let n_w = c_tensor.xx().shape()[1];
-        let mut out = Vec::with_capacity(6 * n_sets * n_w);
-        for comp in [
-            c_tensor.xx(),
-            c_tensor.xy(),
-            c_tensor.xz(),
-            c_tensor.yy(),
-            c_tensor.yz(),
-            c_tensor.zz(),
-        ] {
-            out.extend(comp.iter().map(|&c| NumpyComplex64::new(c.re, c.im)));
-        }
-        let out_array = ndarray::Array3::from_shape_vec((6, n_sets, n_w), out)
-            .map_err(|e| PyGeneralizedBulkFlowError::ArrayShapeMismatch(e.to_string()))?;
-        Ok(PyArray3::from_owned_array(py, out_array).into())
-    }
-
-    /// Compute the time-dependent C tensor integrand, summed over selected bubbles.
-    ///
-    /// Returns shape: (6, n_sets, n_w, n_t)
-    #[pyo3(signature = (w_arr, *, t_begin=None, t_end, n_t, selected_bubbles=None))]
-    pub fn compute_c_tensor_integrand(
-        &self,
-        py: Python,
-        w_arr: Vec<f64>,
-        t_begin: Option<f64>,
-        t_end: f64,
-        n_t: usize,
-        selected_bubbles: Option<PyReadonlyArray1<usize>>,
-    ) -> PyResult<Py<PyArray4<NumpyComplex64>>> {
-        let selected_vec: Option<Vec<usize>> = selected_bubbles
-            .map(|arr| {
-                let array = arr.to_owned_array();
-                if !array.is_standard_layout() {
-                    return Err(PyValueError::new_err(
-                        "selected_bubbles must be a contiguous 1-D array in C order",
-                    ));
-                }
-                Ok(array.to_vec())
-            })
-            .transpose()?;
-
-        let selected_slice: Option<&[usize]> = selected_vec.as_deref();
-
-        let integrand =
-            self.inner
-                .compute_c_tensor_integrand(&w_arr, t_begin, t_end, n_t, selected_slice)?;
-
-        let n_sets = integrand.xx().shape()[0];
-        let n_w = integrand.xx().shape()[1];
-        let n_t = integrand.xx().shape()[2];
-        let mut out = Vec::with_capacity(6 * n_sets * n_w * n_t);
-        for comp in [
-            integrand.xx(),
-            integrand.xy(),
-            integrand.xz(),
-            integrand.yy(),
-            integrand.yz(),
-            integrand.zz(),
-        ] {
-            out.extend(comp.iter().map(|&c| NumpyComplex64::new(c.re, c.im)));
-        }
-        let out_array = ndarray::Array4::from_shape_vec((6, n_sets, n_w, n_t), out)
-            .map_err(|e| PyGeneralizedBulkFlowError::ArrayShapeMismatch(e.to_string()))?;
-        Ok(PyArray4::from_owned_array(py, out_array).into())
-    }
-
-    // ————————————————————————————————————————
-    // Legacy compatibility methods
-    // ————————————————————————————————————————
 
     pub fn compute_first_colliding_bubble(
         &self,
@@ -419,5 +259,125 @@ impl PyGeneralizedBulkFlow {
                 .compute_collision_status(a_idx, t, &first_bubble, &delta_tab_grid)?;
         let collision_status_int = collision_status.mapv(|s| s as i32);
         Ok(PyArray2::from_array(py, &collision_status_int).into())
+    }
+
+    pub fn compute_c_integral_fixed_bubble(
+        &mut self,
+        py: Python,
+        a_idx: usize,
+        w_arr: Vec<f64>,
+        t_begin: Option<f64>,
+        t_end: f64,
+        n_t: usize,
+    ) -> PyResult<Py<PyArray3<NumpyComplex64>>> {
+        let c_matrix = self
+            .inner
+            .compute_c_integral_fixed_bubble(a_idx, &w_arr, t_begin, t_end, n_t)?;
+        let c_matrix_numpy = c_matrix.mapv(|c| NumpyComplex64::new(c.re, c.im));
+        Ok(PyArray3::from_array(py, &c_matrix_numpy).into())
+    }
+
+    pub fn compute_c_integrand_fixed_bubble(
+        &self,
+        py: Python,
+        a_idx: usize,
+        w_arr: Vec<f64>,
+        t_begin: Option<f64>,
+        t_end: f64,
+        n_t: usize,
+    ) -> PyResult<Py<PyArray4<NumpyComplex64>>> {
+        let integrand = self
+            .inner
+            .compute_c_integrand_fixed_bubble(a_idx, &w_arr, t_begin, t_end, n_t)?;
+        let integrand_numpy = integrand.mapv(|c| NumpyComplex64::new(c.re, c.im));
+        Ok(PyArray4::from_array(py, &integrand_numpy).into())
+    }
+
+    #[pyo3(signature = (w_arr, *, t_begin=None, t_end, n_t, selected_bubbles=None))]
+    pub fn compute_c_integrand(
+        &self,
+        py: Python,
+        w_arr: Vec<f64>,
+        t_begin: Option<f64>,
+        t_end: f64,
+        n_t: usize,
+        selected_bubbles: Option<PyReadonlyArray1<usize>>,
+    ) -> PyResult<Py<PyArray4<NumpyComplex64>>> {
+        let selected_vec: Option<Vec<usize>> = selected_bubbles
+            .map(|arr| {
+                let array = arr.to_owned_array();
+                if !array.is_standard_layout() {
+                    return Err(PyValueError::new_err(
+                        "selected_bubbles must be a contiguous 1-D array in C order",
+                    ));
+                }
+                Ok(array.to_vec())
+            })
+            .transpose()?;
+
+        let selected_slice: Option<&[usize]> = selected_vec.as_deref();
+
+        let integrand = self
+            .inner
+            .compute_c_integrand(&w_arr, t_begin, t_end, n_t, selected_slice)
+            .map_err(|e| match e {
+                GeneralizedBulkFlowError::InvalidIndex { index, max } => {
+                    PyBulkFlowError::InvalidIndex { index, max }
+                }
+                _ => PyBulkFlowError::from(e),
+            })?;
+
+        let integrand_numpy = integrand.mapv(|c| NumpyComplex64::new(c.re, c.im));
+        Ok(PyArray4::from_owned_array(py, integrand_numpy).into())
+    }
+
+    #[pyo3(signature = (w_arr, *, t_begin=None, t_end, n_t, selected_bubbles=None))]
+    pub fn compute_c_integral(
+        &mut self,
+        py: Python,
+        w_arr: Vec<f64>,
+        t_begin: Option<f64>,
+        t_end: f64,
+        n_t: usize,
+        selected_bubbles: Option<PyReadonlyArray1<usize>>,
+    ) -> PyResult<Py<PyArray3<NumpyComplex64>>> {
+        let selected_vec: Option<Vec<usize>> = selected_bubbles
+            .map(|arr| {
+                let array = arr.to_owned_array();
+                if !array.is_standard_layout() {
+                    return Err(PyValueError::new_err(
+                        "selected_bubbles must be a contiguous 1-D array in C order",
+                    ));
+                }
+                Ok(array.to_vec())
+            })
+            .transpose()?;
+
+        let selected_slice: Option<&[usize]> = selected_vec.as_deref();
+
+        let c_matrix = self
+            .inner
+            .compute_c_integral(&w_arr, t_begin, t_end, n_t, selected_slice)
+            .map_err(|e| match e {
+                GeneralizedBulkFlowError::InvalidIndex { index, max } => {
+                    PyBulkFlowError::InvalidIndex { index, max }
+                }
+                _ => PyBulkFlowError::from(e),
+            })?;
+
+        let c_matrix_numpy = c_matrix.mapv(|c| NumpyComplex64::new(c.re, c.im));
+        Ok(PyArray3::from_owned_array(py, c_matrix_numpy).into())
+    }
+
+    #[pyo3(signature = (n_cos_thetax, n_phix, precompute_first_bubbles = true))]
+    pub fn set_resolution(
+        &mut self,
+        n_cos_thetax: usize,
+        n_phix: usize,
+        precompute_first_bubbles: bool,
+    ) -> PyResult<()> {
+        self.inner
+            .set_resolution(n_cos_thetax, n_phix, precompute_first_bubbles)?;
+        Ok(())
     }
 }

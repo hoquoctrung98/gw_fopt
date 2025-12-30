@@ -1,5 +1,5 @@
 use bubble_gw::many_bubbles::{
-    bulk_flow::BulkFlow as BulkFlowNalgebra, lattice::CartesianLattice,
+    generalized_bulk_flow::GeneralizedBulkFlow as BulkFlowNalgebra, lattice::CartesianLattice,
     lattice_bubbles::LatticeBubbles as LatticeBubblesNalgebra,
 };
 use bubble_gw::many_bubbles_legacy::bubbles::LatticeBubbles;
@@ -8,18 +8,18 @@ use bubble_gw::many_bubbles_legacy::lattice::{
     BoundaryConditions, Lattice, LatticeType, generate_bubbles_exterior,
 };
 use nalgebra::{Point3, Vector3};
-use ndarray::{Array2, arr2, s};
+use ndarray::{Array2, arr2};
 use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let L = 20.;
+    let l_box = 20.;
     let lattice_nalgebra = CartesianLattice::new(
         // Point3::new(L / 2., L / 2., L / 2.),
         Point3::new(0., 0., 0.),
         [
-            Vector3::new(L, 0., 0.),
-            Vector3::new(0., L, 0.),
-            Vector3::new(0., 0., L),
+            Vector3::new(l_box, 0., 0.),
+            Vector3::new(0., l_box, 0.),
+            Vector3::new(0., 0., l_box),
         ],
     );
     let bubbles_interior = arr2(&[[0.0, 5.5, 5.0, 5.0], [0.0, 4.5, 5.0, 10.0]]);
@@ -33,15 +33,21 @@ fn main() -> Result<(), Box<dyn Error>> {
     lattice_bubbles
         .with_boundary_condition(bubble_gw::many_bubbles::lattice::BoundaryConditions::Periodic);
     let mut bulk_flow_nalgebra = BulkFlowNalgebra::new(lattice_bubbles).unwrap();
-    bulk_flow_nalgebra.set_num_threads(1);
-    bulk_flow_nalgebra.set_resolution(10, 10, true).unwrap();
-    bulk_flow_nalgebra.compute_first_colliding_bubble(0);
+    bulk_flow_nalgebra.set_num_threads(1)?;
+    bulk_flow_nalgebra.set_resolution(10, 10, true)?;
+    bulk_flow_nalgebra.compute_first_colliding_bubble(0)?;
 
     let mut bulk_flow_original = BulkFlow::new(
         LatticeBubbles::new(
             bubbles_interior.clone(),
             generate_bubbles_exterior(
-                &Lattice::new(LatticeType::Cartesian { sizes: [L, L, L] }, 10).unwrap(),
+                &Lattice::new(
+                    LatticeType::Cartesian {
+                        sizes: [l_box, l_box, l_box],
+                    },
+                    10,
+                )
+                .unwrap(),
                 &bubbles_interior,
                 BoundaryConditions::Periodic,
             ),
@@ -50,9 +56,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         .unwrap(),
     )
     .unwrap();
-    bulk_flow_original.set_num_threads(1);
+    bulk_flow_original.set_num_threads(1)?;
     bulk_flow_original.set_resolution(10, 10, true).unwrap();
-    let foo = bulk_flow_original.compute_first_colliding_bubble(0);
 
     Ok(())
 }

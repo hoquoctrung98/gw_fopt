@@ -1,4 +1,4 @@
-use bubble_gw::many_bubbles::bulk_flow::BulkFlow;
+use bubble_gw::many_bubbles::generalized_bulk_flow::GeneralizedBulkFlow;
 use bubble_gw::many_bubbles::lattice::EmptyLattice;
 use bubble_gw::many_bubbles::lattice_bubbles::LatticeBubbles;
 use bubble_gw::many_bubbles_legacy::bubbles::LatticeBubbles as LatticeBubblesLegacy;
@@ -52,7 +52,7 @@ fn setup_bulk_flow_segment() -> BulkFlowSegment {
     bf
 }
 
-fn setup_bulk_flow() -> BulkFlow<EmptyLattice> {
+fn setup_bulk_flow() -> GeneralizedBulkFlow<EmptyLattice> {
     let bubbles_interior = arr2(&[
         [0.0, 0.0, 10.0, 0.0],
         [0.0, 0.0, 0.0, 0.0],
@@ -61,7 +61,7 @@ fn setup_bulk_flow() -> BulkFlow<EmptyLattice> {
         [0.0, 0.0, 2.0, 1.0],
     ]);
     let bubbles_exterior = Array2::zeros((0, 4));
-    let mut bf = BulkFlow::new(
+    let mut bf = GeneralizedBulkFlow::new(
         LatticeBubbles::new(bubbles_interior, bubbles_exterior, EmptyLattice {}, true).unwrap(),
     )
     .expect("Failed to create BulkFlowSegment");

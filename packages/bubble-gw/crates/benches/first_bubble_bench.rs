@@ -1,4 +1,4 @@
-use bubble_gw::many_bubbles::bulk_flow::BulkFlow as BulkFlowNalgebra;
+use bubble_gw::many_bubbles::generalized_bulk_flow::GeneralizedBulkFlow as BulkFlowNalgebra;
 use bubble_gw::many_bubbles::lattice::EmptyLattice;
 use bubble_gw::many_bubbles::lattice_bubbles::LatticeBubbles;
 use bubble_gw::many_bubbles_legacy::bubble_formation::generate_random_bubbles;

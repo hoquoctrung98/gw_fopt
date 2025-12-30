@@ -1,4 +1,4 @@
-use bubble_gw::many_bubbles::bulk_flow::BulkFlow;
+use bubble_gw::many_bubbles::generalized_bulk_flow::GeneralizedBulkFlow;
 use bubble_gw::many_bubbles::lattice::EmptyLattice;
 use bubble_gw::many_bubbles::lattice_bubbles::LatticeBubbles;
 use bubble_gw::utils::is_close::IsClose;
@@ -79,7 +79,7 @@ fn test_bulk_flow_two_bubbles() -> Result<(), Box<dyn Error>> {
             })
             .collect();
 
-        let mut bulk = BulkFlow::new(LatticeBubbles::new(
+        let mut bulk = GeneralizedBulkFlow::new(LatticeBubbles::new(
             bubbles_interior.clone(),
             bubbles_exterior.clone(),
             EmptyLattice {},
