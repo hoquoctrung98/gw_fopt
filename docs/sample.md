@@ -6,18 +6,16 @@ A high-performance adaptive sampling tool for generating hierarchical, non-unifo
 - Each refinement level (`n_iter ≥ 1`) adds **only new points** in between existing ones
 - No duplicates → perfect for nested training, multi-fidelity modeling, or progressive sampling
 
-Written in Rust, exposed via PyO3 → extremely fast and memory-efficient.
-
 ## Parameters
 
-| Parameter       | Meaning                                                                 |
-|-----------------|--------------------------------------------------------------------------|
-| `start`, `stop` | Sampling range (inclusive)                                               |
+| Parameter       | Meaning                                                                        |
+| --------------- | ------------------------------------------------------------------------------ |
+| `start`, `stop` | Sampling range (inclusive)                                                     |
 | `n_sample`      | Number of **intervals** in the base grid → `n_sample + 1` points at `n_iter=0` |
-| `n_grid ≥ 2`    | Refinement factor: how many sub-points per parent interval              |
-| `n_iter`        | Refinement level (`0` = base grid only, `>0` = new points at that level) |
-| `sample_type`   | `"uniform"`, `"linear"`, `"log"`, `"exp"`                                |
-| `base`          | Base for log/exp (default: `10.0`)                                       |
+| `n_grid ≥ 2`    | Refinement factor: how many sub-points per parent interval                     |
+| `n_iter`        | Refinement level (`0` = base grid only, `>0` = new points at that level)       |
+| `sample_type`   | `"uniform"`, `"linear"`, `"log"`, `"exp"`                                      |
+| `base`          | Base for log/exp (default: `10.0`)                                             |
 
 ## Basic Examples
 
