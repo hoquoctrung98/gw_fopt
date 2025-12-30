@@ -116,18 +116,18 @@ impl From<PyBulkFlowError> for PyErr {
 
 type PyResult<T> = Result<T, PyBulkFlowError>;
 
-#[pyclass(name = "BulkFlow")]
-pub struct PyBulkFlow {
+#[pyclass(name = "GeneralizedBulkFlow")]
+pub struct PyGeneralizedBulkFlow {
     inner: GeneralizedBulkFlow<BuiltInLattice>,
 }
 
 #[pymethods]
-impl PyBulkFlow {
+impl PyGeneralizedBulkFlow {
     #[new]
     #[pyo3(signature = (lattice))]
     pub fn new(lattice: PyLatticeBubbles) -> PyResult<Self> {
         let bulk_flow = GeneralizedBulkFlow::new(lattice.inner)?;
-        Ok(PyBulkFlow { inner: bulk_flow })
+        Ok(PyGeneralizedBulkFlow { inner: bulk_flow })
     }
 
     pub fn set_num_threads(&mut self, num_threads: usize) -> PyResult<()> {

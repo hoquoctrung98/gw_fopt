@@ -30,13 +30,13 @@ Where
 + $t_{n,c}(\zeta, \phi)$ denotes the time at which the wall element of the $n$-th bubble undergoes a the first collision with other bubbles.
 + $X_{ij} \equiv \hat{\mathbf{x}}_i \hat{\mathbf{x}}_j$ in spherical coordinates reads
 
-    $$
-    X = \begin{pmatrix}
-    \sin^2 \theta_x \cos^2 \phi_x & \sin^2 \theta_x \sin \phi_x \cos \phi_x & \sin \theta_x \cos \theta_x \cos \phi_x \\
-    \sin^2 \theta_x \sin \phi_x \cos \phi_x & \sin^2 \theta_x \sin^2 \phi_x & \sin \theta_x \cos \theta_x \sin \phi_x \\
-    \sin \theta_x \cos \theta_x \cos \phi_x & \sin \theta_x \cos \theta_x \sin \phi_x & \sin^2 \theta_x
-    \end{pmatrix}
-    $$
+$$
+X = \begin{pmatrix}
+\sin^2 \theta_x \cos^2 \phi_x & \sin^2 \theta_x \sin \phi_x \cos \phi_x & \sin \theta_x \cos \theta_x \cos \phi_x \\
+\sin^2 \theta_x \sin \phi_x \cos \phi_x & \sin^2 \theta_x \sin^2 \phi_x & \sin \theta_x \cos \theta_x \sin \phi_x \\
+\sin \theta_x \cos \theta_x \cos \phi_x & \sin \theta_x \cos \theta_x \sin \phi_x & \sin^2 \theta_x
+\end{pmatrix}
+$$
 
 + $f(t, t_n, t_{n, c})$ is the scaling function, which can be decomposed into the envelope contribution (i.e before first collision) and generalized bulk-flow contribution (i.e after first collision) as follows
 
