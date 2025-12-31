@@ -496,6 +496,7 @@ impl TransformationIsometry3 for BuiltInLattice {
 pub enum BoundaryConditions {
     Periodic,
     Reflection,
+    None,
 }
 
 pub trait GenerateBubblesExterior: Clone + Sync {
@@ -532,7 +533,7 @@ impl GenerateBubblesExterior for ParallelepipedLattice {
                 }
 
                 Bubbles::new(exterior_spacetime)
-            }
+            },
 
             BoundaryConditions::Reflection => {
                 let mut exterior_spacetime = Vec::new();
@@ -611,7 +612,9 @@ impl GenerateBubblesExterior for ParallelepipedLattice {
                 }
 
                 Bubbles::new(exterior_spacetime)
-            }
+            },
+
+            BoundaryConditions::None => Bubbles::new(Vec::new()),
         }
     }
 }
@@ -637,7 +640,7 @@ impl GenerateBubblesExterior for SphericalLattice {
             BoundaryConditions::Periodic => {
                 // Return empty as requested
                 Bubbles::new(Vec::new())
-            }
+            },
 
             BoundaryConditions::Reflection => {
                 let interior = bubbles_interior.borrow();
@@ -672,7 +675,9 @@ impl GenerateBubblesExterior for SphericalLattice {
                 }
 
                 Bubbles::new(exterior_spacetime)
-            }
+            },
+
+            BoundaryConditions::None => Bubbles::new(Vec::new()),
         }
     }
 }
@@ -697,16 +702,16 @@ impl GenerateBubblesExterior for BuiltInLattice {
         let bubbles = match self {
             BuiltInLattice::Parallelepiped(lattice) => {
                 lattice.generate_bubbles_exterior(bubbles_interior, boundary_condition)
-            }
+            },
             BuiltInLattice::Cartesian(lattice) => {
                 lattice.generate_bubbles_exterior(bubbles_interior, boundary_condition)
-            }
+            },
             BuiltInLattice::Spherical(lattice) => {
                 lattice.generate_bubbles_exterior(bubbles_interior, boundary_condition)
-            }
+            },
             BuiltInLattice::Empty(lattice) => {
                 lattice.generate_bubbles_exterior(bubbles_interior, boundary_condition)
-            }
+            },
         };
         bubbles
     }

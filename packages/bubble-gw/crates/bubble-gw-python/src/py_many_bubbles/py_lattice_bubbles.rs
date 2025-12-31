@@ -25,18 +25,19 @@ impl PyLatticeBubbles {
         sort_by_time: bool,
     ) -> PyResult<Self> {
         // Convert Array2 (N×4) → Vec<Vector4>
-        let lb = LatticeBubbles::new(interior, exterior, lattice, sort_by_time)
+        let lb = LatticeBubbles::with_bubbles(interior, exterior, lattice, sort_by_time)
             .map_err(|e| PyErr::new::<PyValueError, _>(e.to_string()))?;
 
         Ok(Self { inner: lb })
     }
 }
 
+// TODO: Add method `new` to create an empty LatticeBubbles
 #[pymethods]
 impl PyLatticeBubbles {
     #[new]
     #[pyo3(signature = (lattice, bubbles_interior, bubbles_exterior = None, sort_by_time = false))]
-    fn new(
+    fn with_bubbles(
         lattice: &Bound<'_, PyAny>,
         bubbles_interior: PyReadonlyArray2<f64>,
         bubbles_exterior: Option<PyReadonlyArray2<f64>>,
@@ -84,13 +85,13 @@ impl PyLatticeBubbles {
         let py_obj: Py<PyAny> = match &self.inner.lattice {
             BuiltInLattice::Parallelepiped(l) => {
                 Py::new(py, PyParallelepiped::from_concrete(l.clone()))?.into()
-            }
+            },
             BuiltInLattice::Cartesian(l) => {
                 Py::new(py, PyCartesian::from_concrete(l.clone()))?.into()
-            }
+            },
             BuiltInLattice::Spherical(l) => {
                 Py::new(py, PySpherical::from_concrete(l.clone()))?.into()
-            }
+            },
             BuiltInLattice::Empty(l) => Py::new(py, PyEmpty::from_concrete(l.clone()))?.into(),
         };
         Ok(py_obj)
@@ -150,11 +151,12 @@ impl PyLatticeBubbles {
         let bc = match boundary_condition.to_lowercase().as_str() {
             "periodic" => BoundaryConditions::Periodic,
             "reflection" => BoundaryConditions::Reflection,
+            "none" => BoundaryConditions::None,
             _ => {
                 return Err(PyValueError::new_err(
                     "Invalid boundary condition. Expected 'periodic' or 'reflection'.",
                 ));
-            }
+            },
         };
 
         self.inner.with_boundary_condition(bc);

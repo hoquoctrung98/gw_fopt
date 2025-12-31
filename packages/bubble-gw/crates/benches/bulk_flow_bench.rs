@@ -62,7 +62,8 @@ fn setup_bulk_flow() -> GeneralizedBulkFlow<EmptyLattice> {
     ]);
     let bubbles_exterior = Array2::zeros((0, 4));
     let mut bf = GeneralizedBulkFlow::new(
-        LatticeBubbles::new(bubbles_interior, bubbles_exterior, EmptyLattice {}, true).unwrap(),
+        LatticeBubbles::with_bubbles(bubbles_interior, bubbles_exterior, EmptyLattice {}, true)
+            .unwrap(),
     )
     .expect("Failed to create BulkFlowSegment");
     bf.set_resolution(50, 100, true)

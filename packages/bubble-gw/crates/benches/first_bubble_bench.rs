@@ -56,7 +56,7 @@ fn setup_bulk_flow_nalgebra() -> BulkFlowNalgebra<EmptyLattice> {
     let bubbles_config =
         generate_random_bubbles(lattice, BoundaryConditions::Periodic, -0.1, 0.0, 20, Some(0))
             .expect("Failed to create bubbles_config");
-    let bubbles_config = LatticeBubbles::new(
+    let bubbles_config = LatticeBubbles::with_bubbles(
         bubbles_config.interior,
         bubbles_config.exterior,
         EmptyLattice {},

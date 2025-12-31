@@ -23,7 +23,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         ],
     );
     let bubbles_interior = arr2(&[[0.0, 5.5, 5.0, 5.0], [0.0, 4.5, 5.0, 10.0]]);
-    let mut lattice_bubbles = LatticeBubblesNalgebra::new(
+    let mut lattice_bubbles = LatticeBubblesNalgebra::with_bubbles(
         bubbles_interior.clone(),
         Array2::zeros((0, 4)),
         lattice_nalgebra,

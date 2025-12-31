@@ -8,6 +8,7 @@ reorder_modules = true
 
 # use trailing commas where appropriate (cleaner diffs)
 trailing_comma = "Vertical"
+match_block_trailing_comma = true
 
 # always format imports and struct fields vertically when long
 imports_granularity = "Module"

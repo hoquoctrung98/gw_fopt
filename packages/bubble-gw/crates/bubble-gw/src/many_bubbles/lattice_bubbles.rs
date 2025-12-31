@@ -192,13 +192,33 @@ impl<L> LatticeBubbles<L>
 where
     L: LatticeGeometry + TransformationIsometry3 + GenerateBubblesExterior,
 {
-    pub fn new(
+    /// Creates a new `LatticeBubbles` with an empty set of interior and exterior bubbles.
+    /// `delta` and `delta_squared` are 0×0 matrices.
+    /// Use `set_bubbles` or `with_bubbles` to populate data later.
+    pub fn new(lattice: L) -> Self {
+        let empty_spacetime = Vec::new();
+        LatticeBubbles {
+            interior: Bubbles::new(empty_spacetime.clone()),
+            exterior: Bubbles::new(empty_spacetime),
+            lattice,
+            delta: DMatrix::from_element(0, 0, Vector4::zeros()),
+            delta_squared: DMatrix::zeros(0, 0),
+        }
+    }
+
+    /// Constructs a new `LatticeBubbles` by validating and processing given interior and exterior bubbles.
+    /// Checks:
+    /// - Shape: both arrays must be `(n, 4)` → `[t, x, y, z]`
+    /// - Lattice containment: interior ⊆ lattice, exterior ∩ lattice = ∅
+    /// - Causality: no bubble formed inside another’s past lightcone
+    /// - (Optionally) sorts bubbles by nucleation time `t` (column 0)
+    /// Precomputes pairwise spacetime intervals `delta` and Minkowski norms `delta_squared`.
+    pub fn with_bubbles(
         mut bubbles_interior: Array2<f64>,
         mut bubbles_exterior: Array2<f64>,
         lattice: L,
         sort_by_time: bool,
     ) -> Result<LatticeBubbles<L>, LatticeBubblesError> {
-        // shape validation
         if bubbles_interior.ncols() != 4 || bubbles_exterior.ncols() != 4 {
             return Err(LatticeBubblesError::ArrayShapeMismatch(format!(
                 "Expected 4 columns, got {} for interior, {} for exterior",
@@ -207,17 +227,17 @@ where
             )));
         }
 
-        // --- Lattice containment validation for interior bubbles ---
+        // Lattice containment
         let interior_points: Vec<nalgebra::Point3<f64>> = (0..bubbles_interior.nrows())
             .map(|i| {
                 let row = bubbles_interior.row(i);
-                nalgebra::Point3::new(row[1], row[2], row[3]) // [t, x, y, z] → (x, y, z)
+                nalgebra::Point3::new(row[1], row[2], row[3])
             })
             .collect();
         let exterior_points: Vec<nalgebra::Point3<f64>> = (0..bubbles_exterior.nrows())
             .map(|i| {
                 let row = bubbles_exterior.row(i);
-                nalgebra::Point3::new(row[1], row[2], row[3]) // [t, x, y, z] → (x, y, z)
+                nalgebra::Point3::new(row[1], row[2], row[3])
             })
             .collect();
 
@@ -227,25 +247,13 @@ where
         let outside_interior_indices: Vec<BubbleIndex> = interior_contained
             .into_iter()
             .enumerate()
-            .filter_map(|(i, is_inside)| {
-                if !is_inside {
-                    Some(BubbleIndex::Interior(i))
-                } else {
-                    None
-                }
-            })
+            .filter_map(|(i, inside)| (!inside).then_some(BubbleIndex::Interior(i)))
             .collect();
 
         let inside_exterior_indices: Vec<BubbleIndex> = exterior_contained
             .into_iter()
             .enumerate()
-            .filter_map(|(i, is_inside)| {
-                if is_inside {
-                    Some(BubbleIndex::Exterior(i))
-                } else {
-                    None
-                }
-            })
+            .filter_map(|(i, inside)| inside.then_some(BubbleIndex::Exterior(i)))
             .collect();
 
         if !outside_interior_indices.is_empty() {
@@ -253,49 +261,33 @@ where
                 indices: outside_interior_indices,
             });
         }
-
         if !inside_exterior_indices.is_empty() {
             return Err(LatticeBubblesError::ExteriorBubblesInsideLattice {
                 indices: inside_exterior_indices,
             });
         }
 
-        // optional sorting by formation time (column 3)
+        // Sort by formation time (column 0: t)
         if sort_by_time {
-            // sort interior bubbles
-            let mut rows: Vec<(usize, Array1<f64>)> = bubbles_interior
-                .rows()
-                .into_iter()
-                .map(|r| r.to_owned()) // clone each row
-                .enumerate()
-                .collect();
-
-            rows.sort_by(|a, b| {
-                a.1[3]
-                    .partial_cmp(&b.1[3])
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            });
-
-            for (i, (_, row)) in rows.into_iter().enumerate() {
-                bubbles_interior.row_mut(i).assign(&row);
-            }
-
-            // sort exterior bubbles
-            if !bubbles_exterior.is_empty() {
-                let mut rows: Vec<(usize, Array1<f64>)> = bubbles_exterior
+            if !bubbles_interior.is_empty() {
+                let mut rows: Vec<Array1<f64>> = bubbles_interior
                     .rows()
                     .into_iter()
                     .map(|r| r.to_owned())
-                    .enumerate()
                     .collect();
-
-                rows.sort_by(|a, b| {
-                    a.1[3]
-                        .partial_cmp(&b.1[3])
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                });
-
-                for (i, (_, row)) in rows.into_iter().enumerate() {
+                rows.sort_by(|a, b| a[0].partial_cmp(&b[0]).unwrap_or(std::cmp::Ordering::Equal));
+                for (i, row) in rows.into_iter().enumerate() {
+                    bubbles_interior.row_mut(i).assign(&row);
+                }
+            }
+            if !bubbles_exterior.is_empty() {
+                let mut rows: Vec<Array1<f64>> = bubbles_exterior
+                    .rows()
+                    .into_iter()
+                    .map(|r| r.to_owned())
+                    .collect();
+                rows.sort_by(|a, b| a[0].partial_cmp(&b[0]).unwrap_or(std::cmp::Ordering::Equal));
+                for (i, row) in rows.into_iter().enumerate() {
                     bubbles_exterior.row_mut(i).assign(&row);
                 }
             }
@@ -305,32 +297,28 @@ where
         let n_exterior = bubbles_exterior.nrows();
         let n_total = n_interior + n_exterior;
 
-        // Initialize `delta` and `delta_squared`
+        // Convert via Bubbles::from_array2 (safe, asserts ncols==4)
+        let interior = Bubbles::from_array2(bubbles_interior);
+        let exterior = Bubbles::from_array2(bubbles_exterior);
+
+        // Precompute delta matrices
         let mut delta = DMatrix::from_element(n_interior, n_total, Vector4::zeros());
         let mut delta_squared = DMatrix::zeros(n_interior, n_total);
 
-        // Convert to Bubbles (still using Array2 as intermediate)
-        let bubbles_interior = Bubbles::from_array2(bubbles_interior.clone());
-        let bubbles_exterior = Bubbles::from_array2(bubbles_exterior.clone());
+        let int_vecs = &interior.spacetime;
+        let ext_vecs = &exterior.spacetime;
 
-        // Pre-extract bubble positions as slices of Vector4 for fast access
-        let int_vecs = &bubbles_interior.spacetime;
-        let ext_vecs = &bubbles_exterior.spacetime;
-
-        // Compute delta and delta_squared
         for a_idx in 0..n_interior {
-            // Interior → Interior (a_idx to b_idx)
+            // Interior–Interior (symmetric)
             for b_idx in a_idx..n_interior {
-                let da = &int_vecs[b_idx] - &int_vecs[a_idx]; // Vector4 - Vector4 → Vector4
-                delta[(a_idx, b_idx)] = da;
+                let da = &int_vecs[b_idx] - &int_vecs[a_idx];
                 let dsq = da.scalar(&da);
+                delta[(a_idx, b_idx)] = da;
                 delta_squared[(a_idx, b_idx)] = dsq;
-                // Symmetry
                 delta[(b_idx, a_idx)] = -da;
                 delta_squared[(b_idx, a_idx)] = dsq;
             }
-
-            // Interior → Exterior
+            // Interior–Exterior
             for b_ex in 0..n_exterior {
                 let b_total = n_interior + b_ex;
                 let da = &ext_vecs[b_ex] - &int_vecs[a_idx];
@@ -339,16 +327,34 @@ where
             }
         }
 
-        // Check for bubble containment
         check_bubble_formed_inside_bubble(&delta_squared)?;
 
         Ok(LatticeBubbles {
-            interior: bubbles_interior,
-            exterior: bubbles_exterior,
+            interior,
+            exterior,
             lattice,
             delta,
             delta_squared,
         })
+    }
+
+    /// Replaces the current interior and exterior bubbles in-place.
+    /// Performs the same validation and precomputation as `with_bubbles`.
+    /// Returns error if validation fails; leaves self unchanged on error.
+    pub fn set_bubbles(
+        &mut self,
+        bubbles_interior: Array2<f64>,
+        bubbles_exterior: Array2<f64>,
+        sort_by_time: bool,
+    ) -> Result<(), LatticeBubblesError> {
+        let new_self = Self::with_bubbles(
+            bubbles_interior,
+            bubbles_exterior,
+            self.lattice.clone(),
+            sort_by_time,
+        )?;
+        *self = new_self;
+        Ok(())
     }
 
     pub fn with_boundary_condition(&mut self, boundary_condition: BoundaryConditions) {
@@ -444,7 +450,7 @@ where
         let interior = Self::load_bubbles_from_csv(interior_path, has_headers)?;
         let exterior = Self::load_bubbles_from_csv(exterior_path, has_headers)?;
 
-        Ok(Self::new(interior, exterior, lattice, sort_by_time)?)
+        Ok(Self::with_bubbles(interior, exterior, lattice, sort_by_time)?)
     }
 
     /// Load bubbles from a CSV file.
