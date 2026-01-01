@@ -1,5 +1,7 @@
 pub mod py_lattice_bubbles;
 pub use py_lattice_bubbles::*;
+pub mod py_bubbles_nucleation;
+pub use py_bubbles_nucleation::*;
 pub mod py_lattice;
 pub use py_lattice::*;
 pub mod py_generalized_bulk_flow;

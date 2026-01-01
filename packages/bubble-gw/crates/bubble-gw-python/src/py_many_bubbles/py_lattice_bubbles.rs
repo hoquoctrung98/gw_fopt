@@ -1,3 +1,4 @@
+use crate::py_many_bubbles::py_bubbles_nucleation::PyUniformAtFixedTime;
 use crate::py_many_bubbles::py_isometry::PyIsometry3;
 use crate::py_many_bubbles::py_lattice::{PyCartesian, PyEmpty, PyParallelepiped, PySpherical};
 use bubble_gw::many_bubbles::bubbles::Bubbles;
@@ -209,54 +210,4 @@ fn bubbles_to_array2(bubbles: &Bubbles) -> Array2<f64> {
         data.push(v[3]);
     }
     Array2::from_shape_vec((n, 4), data).unwrap()
-}
-
-use bubble_gw::many_bubbles::lattice_bubbles::UniformAtFixedTime;
-
-#[pyclass(name = "UniformAtFixedTime", module = "bubble_gw")]
-#[derive(Clone)]
-pub struct PyUniformAtFixedTime {
-    pub(crate) inner: UniformAtFixedTime,
-}
-
-#[pymethods]
-impl PyUniformAtFixedTime {
-    #[new]
-    #[pyo3(signature = (n_bubbles, t0 = 0.0, seed = None))]
-    fn new(n_bubbles: usize, t0: f64, seed: Option<u64>) -> Self {
-        Self {
-            inner: UniformAtFixedTime {
-                n_bubbles,
-                t0,
-                seed,
-            },
-        }
-    }
-
-    fn __repr__(&self) -> String {
-        format!(
-            "UniformAtFixedTime(n_bubbles={}, t0={}, seed={})",
-            self.inner.n_bubbles,
-            self.inner.t0,
-            match self.inner.seed {
-                Some(s) => format!("Some({})", s),
-                None => "None".to_string(),
-            }
-        )
-    }
-
-    #[getter]
-    fn n_bubbles(&self) -> usize {
-        self.inner.n_bubbles
-    }
-
-    #[getter]
-    fn t0(&self) -> f64 {
-        self.inner.t0
-    }
-
-    #[getter]
-    fn seed(&self) -> Option<u64> {
-        self.inner.seed
-    }
 }
