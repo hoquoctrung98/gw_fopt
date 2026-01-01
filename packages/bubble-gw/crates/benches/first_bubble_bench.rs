@@ -60,7 +60,6 @@ fn setup_bulk_flow_nalgebra() -> BulkFlowNalgebra<EmptyLattice> {
         bubbles_config.interior,
         bubbles_config.exterior,
         EmptyLattice {},
-        true,
     )
     .unwrap();
     let mut bf = BulkFlowNalgebra::new(bubbles_config).expect("Failed to create BulkFlow");

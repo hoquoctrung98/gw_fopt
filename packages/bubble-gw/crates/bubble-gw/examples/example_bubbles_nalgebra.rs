@@ -27,7 +27,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         bubbles_interior.clone(),
         Array2::zeros((0, 4)),
         lattice_nalgebra,
-        false,
     )
     .unwrap();
     lattice_bubbles

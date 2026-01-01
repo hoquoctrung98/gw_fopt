@@ -22,10 +22,9 @@ impl PyLatticeBubbles {
         lattice: BuiltInLattice,
         interior: Array2<f64>,
         exterior: Array2<f64>,
-        sort_by_time: bool,
     ) -> PyResult<Self> {
         // Convert Array2 (N×4) → Vec<Vector4>
-        let lb = LatticeBubbles::with_bubbles(interior, exterior, lattice, sort_by_time)
+        let lb = LatticeBubbles::with_bubbles(interior, exterior, lattice)
             .map_err(|e| PyErr::new::<PyValueError, _>(e.to_string()))?;
 
         Ok(Self { inner: lb })
@@ -36,12 +35,11 @@ impl PyLatticeBubbles {
 #[pymethods]
 impl PyLatticeBubbles {
     #[new]
-    #[pyo3(signature = (lattice, bubbles_interior, bubbles_exterior = None, sort_by_time = false))]
+    #[pyo3(signature = (lattice, bubbles_interior, bubbles_exterior = None))]
     fn with_bubbles(
         lattice: &Bound<'_, PyAny>,
         bubbles_interior: PyReadonlyArray2<f64>,
         bubbles_exterior: Option<PyReadonlyArray2<f64>>,
-        sort_by_time: bool,
     ) -> PyResult<Self> {
         // Extract builtin lattice from concrete Python object
         let builtin: BuiltInLattice = if let Ok(l) = lattice.extract::<PyParallelepiped>() {
@@ -63,7 +61,44 @@ impl PyLatticeBubbles {
             .map(|a| a.to_owned_array())
             .unwrap_or_else(|| Array2::zeros((0, 4)));
 
-        Self::from_concrete(builtin, interior, exterior, sort_by_time)
+        Self::from_concrete(builtin, interior, exterior)
+    }
+
+    /// Sorts interior and exterior bubbles in-place by nucleation time `t`.
+    fn sort_by_time(&mut self) {
+        self.inner.sort_by_time();
+    }
+
+    #[pyo3(signature = (strategy, boundary_condition = "periodic"))]
+    fn nucleate_and_update(
+        &mut self,
+        strategy: &Bound<'_, PyAny>,
+        boundary_condition: &str,
+    ) -> PyResult<()> {
+        // Parse boundary condition
+        let bc = match boundary_condition.to_lowercase().as_str() {
+            "periodic" => BoundaryConditions::Periodic,
+            "reflection" => BoundaryConditions::Reflection,
+            "none" => BoundaryConditions::None,
+            _ => {
+                return Err(PyValueError::new_err(
+                    "Invalid boundary condition. Expected 'periodic', 'reflection', or 'none'.",
+                ));
+            },
+        };
+
+        // Extract strategy
+        if let Ok(strategy) = strategy.extract::<PyUniformAtFixedTime>() {
+            self.inner
+                .nucleate_and_update(strategy.inner, bc)
+                .map_err(|e| PyErr::new::<PyValueError, _>(e.to_string()))?;
+        } else {
+            return Err(PyValueError::new_err(
+                "Unsupported nucleation strategy. Expected UniformAtFixedTime.",
+            ));
+        }
+
+        Ok(())
     }
 
     fn __repr__(&self) -> String {
@@ -174,4 +209,54 @@ fn bubbles_to_array2(bubbles: &Bubbles) -> Array2<f64> {
         data.push(v[3]);
     }
     Array2::from_shape_vec((n, 4), data).unwrap()
+}
+
+use bubble_gw::many_bubbles::lattice_bubbles::UniformAtFixedTime;
+
+#[pyclass(name = "UniformAtFixedTime", module = "bubble_gw")]
+#[derive(Clone)]
+pub struct PyUniformAtFixedTime {
+    pub(crate) inner: UniformAtFixedTime,
+}
+
+#[pymethods]
+impl PyUniformAtFixedTime {
+    #[new]
+    #[pyo3(signature = (n_bubbles, t0 = 0.0, seed = None))]
+    fn new(n_bubbles: usize, t0: f64, seed: Option<u64>) -> Self {
+        Self {
+            inner: UniformAtFixedTime {
+                n_bubbles,
+                t0,
+                seed,
+            },
+        }
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "UniformAtFixedTime(n_bubbles={}, t0={}, seed={})",
+            self.inner.n_bubbles,
+            self.inner.t0,
+            match self.inner.seed {
+                Some(s) => format!("Some({})", s),
+                None => "None".to_string(),
+            }
+        )
+    }
+
+    #[getter]
+    fn n_bubbles(&self) -> usize {
+        self.inner.n_bubbles
+    }
+
+    #[getter]
+    fn t0(&self) -> f64 {
+        self.inner.t0
+    }
+
+    #[getter]
+    fn seed(&self) -> Option<u64> {
+        self.inner.seed
+    }
 }

@@ -222,7 +222,6 @@ where
     }
 }
 
-// FIXME: the implementation of sort_by_time=true might be incorrect
 impl<L> LatticeBubbles<L>
 where
     L: LatticeGeometry + TransformationIsometry3 + GenerateBubblesExterior + Clone,
@@ -249,10 +248,9 @@ where
     /// - (Optionally) sorts bubbles by nucleation time `t` (column 0)
     /// Precomputes pairwise spacetime intervals `delta` and Minkowski norms `delta_squared`.
     pub fn with_bubbles(
-        mut bubbles_interior: Array2<f64>,
-        mut bubbles_exterior: Array2<f64>,
+        bubbles_interior: Array2<f64>,
+        bubbles_exterior: Array2<f64>,
         lattice: L,
-        sort_by_time: bool,
     ) -> Result<LatticeBubbles<L>, LatticeBubblesError> {
         if bubbles_interior.ncols() != 4 || bubbles_exterior.ncols() != 4 {
             return Err(LatticeBubblesError::ArrayShapeMismatch(format!(
@@ -300,32 +298,6 @@ where
             return Err(LatticeBubblesError::ExteriorBubblesInsideLattice {
                 indices: inside_exterior_indices,
             });
-        }
-
-        // Sort by formation time (column 0: t)
-        if sort_by_time {
-            if !bubbles_interior.is_empty() {
-                let mut rows: Vec<Array1<f64>> = bubbles_interior
-                    .rows()
-                    .into_iter()
-                    .map(|r| r.to_owned())
-                    .collect();
-                rows.sort_by(|a, b| a[0].partial_cmp(&b[0]).unwrap_or(std::cmp::Ordering::Equal));
-                for (i, row) in rows.into_iter().enumerate() {
-                    bubbles_interior.row_mut(i).assign(&row);
-                }
-            }
-            if !bubbles_exterior.is_empty() {
-                let mut rows: Vec<Array1<f64>> = bubbles_exterior
-                    .rows()
-                    .into_iter()
-                    .map(|r| r.to_owned())
-                    .collect();
-                rows.sort_by(|a, b| a[0].partial_cmp(&b[0]).unwrap_or(std::cmp::Ordering::Equal));
-                for (i, row) in rows.into_iter().enumerate() {
-                    bubbles_exterior.row_mut(i).assign(&row);
-                }
-            }
         }
 
         let n_interior = bubbles_interior.nrows();
@@ -380,14 +352,9 @@ where
         &mut self,
         bubbles_interior: Array2<f64>,
         bubbles_exterior: Array2<f64>,
-        sort_by_time: bool,
     ) -> Result<(), LatticeBubblesError> {
-        let new_self = Self::with_bubbles(
-            bubbles_interior,
-            bubbles_exterior,
-            self.lattice.clone(),
-            sort_by_time,
-        )?;
+        let new_self =
+            Self::with_bubbles(bubbles_interior, bubbles_exterior, self.lattice.clone())?;
         *self = new_self;
         Ok(())
     }
@@ -458,6 +425,62 @@ where
         self.delta_squared = delta_squared;
     }
 
+    /// Sorts the interior and exterior bubbles in-place by nucleation time `t` (column 0).
+    /// Uses stable sort to preserve relative order for equal times.
+    pub fn sort_by_time(&mut self) {
+        // Sort interior
+        if !self.interior.spacetime.is_empty() {
+            self.interior
+                .spacetime
+                .sort_by(|a, b| a[0].partial_cmp(&b[0]).unwrap_or(std::cmp::Ordering::Equal));
+            // Recompute delta matrices since order changed
+            self.recompute_delta_matrices();
+        }
+
+        // Sort exterior
+        if !self.exterior.spacetime.is_empty() {
+            self.exterior
+                .spacetime
+                .sort_by(|a, b| a[0].partial_cmp(&b[0]).unwrap_or(std::cmp::Ordering::Equal));
+            // Exterior order doesn’t affect delta (only interior–*), but for consistency:
+            self.recompute_delta_matrices();
+        }
+    }
+
+    fn recompute_delta_matrices(&mut self) {
+        let n_interior = self.interior.n_bubbles();
+        let n_exterior = self.exterior.n_bubbles();
+        let n_total = n_interior + n_exterior;
+
+        let mut delta = DMatrix::from_element(n_interior, n_total, Vector4::zeros());
+        let mut delta_squared = DMatrix::zeros(n_interior, n_total);
+
+        let int_vecs = &self.interior.spacetime;
+        let ext_vecs = &self.exterior.spacetime;
+
+        for a_idx in 0..n_interior {
+            // Interior–Interior (symmetric)
+            for b_idx in a_idx..n_interior {
+                let da = &int_vecs[b_idx] - &int_vecs[a_idx];
+                let dsq = da.scalar(&da);
+                delta[(a_idx, b_idx)] = da;
+                delta_squared[(a_idx, b_idx)] = dsq;
+                delta[(b_idx, a_idx)] = -da;
+                delta_squared[(b_idx, a_idx)] = dsq;
+            }
+            // Interior–Exterior
+            for b_ex in 0..n_exterior {
+                let b_total = n_interior + b_ex;
+                let da = &ext_vecs[b_ex] - &int_vecs[a_idx];
+                delta[(a_idx, b_total)] = da;
+                delta_squared[(a_idx, b_total)] = da.scalar(&da);
+            }
+        }
+
+        self.delta = delta;
+        self.delta_squared = delta_squared;
+    }
+
     /// In-place nucleation: **replaces** current interior/exterior bubbles with those returned by the strategy.
     ///
     /// # Steps
@@ -520,23 +543,23 @@ where
         }
 
         // 4. Rebuild with full validation (causality, etc.)
-        let updated = Self::with_bubbles(new_interior, new_exterior, self.lattice.clone(), false)
+        let updated = Self::with_bubbles(new_interior, new_exterior, self.lattice.clone())
             .map_err(|e| match e {
-            LatticeBubblesError::InteriorBubblesOutsideLattice { .. } => {
-                NucleationError::BubbleOutsideLattice {
-                    x: 0.0,
-                    y: 0.0,
-                    z: 0.0,
-                }
-            },
-            LatticeBubblesError::ExteriorBubblesInsideLattice { .. } => {
-                NucleationError::InvalidConfig("Exterior bubbles inside lattice".into())
-            },
-            LatticeBubblesError::BubbleFormedInsideBubble { .. } => {
-                NucleationError::BubbleInsideExistingBubble
-            },
-            _ => NucleationError::InvalidConfig(format!("Validation failed: {}", e)),
-        })?;
+                LatticeBubblesError::InteriorBubblesOutsideLattice { .. } => {
+                    NucleationError::BubbleOutsideLattice {
+                        x: 0.0,
+                        y: 0.0,
+                        z: 0.0,
+                    }
+                },
+                LatticeBubblesError::ExteriorBubblesInsideLattice { .. } => {
+                    NucleationError::InvalidConfig("Exterior bubbles inside lattice".into())
+                },
+                LatticeBubblesError::BubbleFormedInsideBubble { .. } => {
+                    NucleationError::BubbleInsideExistingBubble
+                },
+                _ => NucleationError::InvalidConfig(format!("Validation failed: {}", e)),
+            })?;
 
         // 5. Commit
         *self = updated;
@@ -564,13 +587,12 @@ where
         interior_path: P,
         exterior_path: P,
         lattice: L,
-        sort_by_time: bool,
         has_headers: bool,
     ) -> Result<Self, LatticeBubblesError> {
         let interior = Self::load_bubbles_from_csv(interior_path, has_headers)?;
         let exterior = Self::load_bubbles_from_csv(exterior_path, has_headers)?;
 
-        Ok(Self::with_bubbles(interior, exterior, lattice, sort_by_time)?)
+        Ok(Self::with_bubbles(interior, exterior, lattice)?)
     }
 
     /// Load bubbles from a CSV file.
