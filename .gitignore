@@ -3,6 +3,8 @@ packages/bubble-gw/target
 notebooks/
 .vscode
 **/*.vim
+**/todo.md
+**/todo/
 **/*.ipynb
 **/*.csv
 .gitignore
