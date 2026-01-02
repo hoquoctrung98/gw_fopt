@@ -1,4 +1,5 @@
 use crate::many_bubbles::bubbles::Bubbles;
+use crate::many_bubbles::bubbles_nucleation::NucleationError;
 use crate::many_bubbles::bubbles_nucleation::NucleationStrategy;
 use crate::many_bubbles::lattice::{
     BoundaryConditions, GenerateBubblesExterior, LatticeGeometry, TransformationIsometry3,
@@ -118,24 +119,6 @@ impl std::fmt::Display for BubbleIndex {
             BubbleIndex::None => write!(f, "None"),
         }
     }
-}
-
-#[derive(Error, Debug)]
-pub enum NucleationError {
-    #[error("Lattice does not support uniform sampling (e.g., EmptyLattice)")]
-    UnsupportedLattice,
-
-    #[error("Failed to generate {requested} bubbles; only {generated} produced")]
-    InsufficientBubbles { requested: usize, generated: usize },
-
-    #[error("Bubble at ({x}, {y}, {z}) is outside lattice")]
-    BubbleOutsideLattice { x: f64, y: f64, z: f64 },
-
-    #[error("Bubble formed inside existing bubble (causality violation)")]
-    BubbleInsideExistingBubble,
-
-    #[error("Strategy configuration error: {0}")]
-    InvalidConfig(String),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -547,11 +530,6 @@ where
         // 5. Commit
         *self = updated;
         Ok(())
-    }
-
-    /// Get the distances between the bubble centers and the origin of the lattice
-    pub fn get_distance_to_origin(&self) -> Vec<f64> {
-        todo!()
     }
 
     /// Create a new `Bubbles` instance by reading interior and exterior bubbles from CSV files.

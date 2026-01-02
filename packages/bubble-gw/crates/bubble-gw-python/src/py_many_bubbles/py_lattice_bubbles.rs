@@ -36,6 +36,26 @@ impl PyLatticeBubbles {
 #[pymethods]
 impl PyLatticeBubbles {
     #[new]
+    fn new(lattice: &Bound<'_, PyAny>) -> PyResult<Self> {
+        // Extract builtin lattice from concrete Python object
+        let builtin: BuiltInLattice = if let Ok(l) = lattice.extract::<PyParallelepiped>() {
+            l.builtin
+        } else if let Ok(l) = lattice.extract::<PyCartesian>() {
+            l.builtin
+        } else if let Ok(l) = lattice.extract::<PySpherical>() {
+            l.builtin
+        } else if let Ok(l) = lattice.extract::<PyEmpty>() {
+            l.builtin
+        } else {
+            return Err(PyValueError::new_err(
+                "Expected a lattice instance: ParallelepipedLattice, CartesianLattice, SphericalLattice, or EmptyLattice",
+            ));
+        };
+        let lb = LatticeBubbles::new(builtin);
+        Ok(Self { inner: lb })
+    }
+
+    #[staticmethod]
     #[pyo3(signature = (lattice, bubbles_interior, bubbles_exterior = None))]
     fn with_bubbles(
         lattice: &Bound<'_, PyAny>,

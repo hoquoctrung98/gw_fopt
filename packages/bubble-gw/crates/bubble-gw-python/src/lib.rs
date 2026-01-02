@@ -30,6 +30,7 @@ fn bubble_gw(py: Python, module_parent: &Bound<'_, PyModule>) -> PyResult<()> {
     module_many_bubbles.add_class::<py_many_bubbles::PyIsometry3>()?;
     module_many_bubbles.add_class::<py_many_bubbles::PyGeneralizedBulkFlow>()?;
     module_many_bubbles.add_class::<py_many_bubbles::PyLatticeBubbles>()?;
+    module_many_bubbles.add_class::<py_many_bubbles::PyUniformAtFixedTime>()?;
 
     let module_utils = PyModule::new(module_parent.py(), "utils")?;
     module_utils.add_function(wrap_pyfunction!(py_utils::sample, module_parent)?)?;
