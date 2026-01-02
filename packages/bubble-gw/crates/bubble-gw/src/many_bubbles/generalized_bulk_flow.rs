@@ -1,7 +1,5 @@
 use crate::many_bubbles::bubbles::Bubbles;
-use crate::many_bubbles::lattice::{
-    GenerateBubblesExterior, LatticeGeometry, TransformationIsometry3,
-};
+use crate::many_bubbles::lattice::GeneralLatticeProperties;
 use crate::many_bubbles::lattice_bubbles::{BubbleIndex, LatticeBubbles, LatticeBubblesError};
 use nalgebra::{DMatrix, Vector4};
 use nalgebra_spacetime::Lorentzian;
@@ -63,7 +61,7 @@ pub enum GeneralizedBulkFlowError {
 #[derive(Debug)]
 pub struct GeneralizedBulkFlow<L>
 where
-    L: LatticeGeometry + TransformationIsometry3 + GenerateBubblesExterior,
+    L: GeneralLatticeProperties,
 {
     pub bubbles: LatticeBubbles<L>,
     pub first_colliding_bubbles: Option<Array3<BubbleIndex>>,
@@ -81,7 +79,7 @@ where
 
 impl<L> GeneralizedBulkFlow<L>
 where
-    L: LatticeGeometry + TransformationIsometry3 + GenerateBubblesExterior,
+    L: GeneralLatticeProperties,
 {
     /// Create a new `BulkFlow`.
     ///
@@ -469,7 +467,7 @@ where
                 let b_total = match first_bubble[[i, j]] {
                     BubbleIndex::None => {
                         continue;
-                    }
+                    },
                     BubbleIndex::Interior(b_idx) => b_idx,
                     BubbleIndex::Exterior(b_idx) => n_interior + b_idx,
                 };
@@ -920,7 +918,7 @@ where
                     }
                 }
                 ids.to_vec()
-            }
+            },
             None => (0..n_interior).collect(),
         };
 
@@ -975,7 +973,7 @@ where
                     }
                 }
                 ids.to_vec()
-            }
+            },
             None => (0..n_interior).collect(),
         };
 

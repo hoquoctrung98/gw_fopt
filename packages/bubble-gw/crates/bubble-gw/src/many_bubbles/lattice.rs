@@ -716,3 +716,132 @@ impl GenerateBubblesExterior for BuiltInLattice {
         bubbles
     }
 }
+
+use rand::{Rng, rngs::StdRng};
+
+/// Ability to sample points uniformly from the interior of a lattice.
+pub trait SamplePointsInsideLattice:
+    LatticeGeometry + TransformationIsometry3 + GenerateBubblesExterior
+{
+    /// Sample `n_points` points uniformly from the lattice volume.
+    ///
+    /// Uses rejection sampling internally: generates candidate points,
+    /// accepts only those satisfying `self.contains([p]) == [true]`.
+    ///
+    /// May panic if lattice has zero volume or sampling fails after too many attempts.
+    ///
+    /// # Parameters
+    /// - `n_points`: number of points to sample
+    /// - `rng`: random number generator
+    ///
+    /// # Returns
+    /// `Vec<Point3<f64>>` of length `n_points`.
+    fn sample_points(&self, n_points: usize, rng: &mut StdRng) -> Vec<Point3<f64>>;
+}
+
+impl SamplePointsInsideLattice for ParallelepipedLattice {
+    fn sample_points(&self, n_points: usize, rng: &mut StdRng) -> Vec<Point3<f64>> {
+        let mut points = Vec::with_capacity(n_points);
+        let max_attempts = n_points * 1000;
+
+        for _ in 0..max_attempts {
+            if points.len() >= n_points {
+                break;
+            }
+            let u = rng.random::<f64>();
+            let v = rng.random::<f64>();
+            let w = rng.random::<f64>();
+            let pt = Point3::from(
+                self.origin.coords + u * self.basis[0] + v * self.basis[1] + w * self.basis[2],
+            );
+            // In parallelepiped, u,v,w∈[0,1] ⇒ pt∈lattice — no rejection needed
+            points.push(pt);
+        }
+
+        if points.len() != n_points {
+            panic!(
+                "Failed to sample {} points in ParallelepipedLattice (volume={})",
+                n_points,
+                self.volume()
+            );
+        }
+        points
+    }
+}
+
+impl SamplePointsInsideLattice for CartesianLattice {
+    fn sample_points(&self, n_points: usize, rng: &mut StdRng) -> Vec<Point3<f64>> {
+        self.0.sample_points(n_points, rng) // delegate
+    }
+}
+
+impl SamplePointsInsideLattice for SphericalLattice {
+    fn sample_points(&self, n_points: usize, rng: &mut StdRng) -> Vec<Point3<f64>> {
+        let mut points = Vec::with_capacity(n_points);
+        let max_attempts = n_points * 1000;
+
+        for _ in 0..max_attempts {
+            if points.len() >= n_points {
+                break;
+            }
+            // Uniform in ball: r = R * cbrt(u), direction uniform
+            let u = rng.random::<f64>();
+            let r = self.radius * u.cbrt();
+            let z = rng.random::<f64>() * 2.0 - 1.0;
+            let phi = rng.random::<f64>() * 2.0 * std::f64::consts::PI;
+            let sin_theta = f64::sqrt(1.0 - z * z);
+            let x = r * sin_theta * phi.cos();
+            let y = r * sin_theta * phi.sin();
+            let z_coord = r * z;
+            let pt = Point3::new(self.center.x + x, self.center.y + y, self.center.z + z_coord);
+            // Theoretically always inside, but check for floating-point safety
+            if self.contains(&[pt])[0] {
+                points.push(pt);
+            }
+        }
+
+        if points.len() != n_points {
+            panic!(
+                "Failed to sample {} points in SphericalLattice (radius={})",
+                n_points, self.radius
+            );
+        }
+        points
+    }
+}
+
+impl SamplePointsInsideLattice for EmptyLattice {
+    fn sample_points(&self, n_points: usize, _rng: &mut StdRng) -> Vec<Point3<f64>> {
+        if n_points == 0 {
+            Vec::new()
+        } else {
+            panic!("Cannot sample points from EmptyLattice (volume = 0)");
+        }
+    }
+}
+
+impl SamplePointsInsideLattice for BuiltInLattice {
+    fn sample_points(&self, n_points: usize, rng: &mut StdRng) -> Vec<Point3<f64>> {
+        match self {
+            Self::Parallelepiped(l) => l.sample_points(n_points, rng),
+            Self::Cartesian(l) => l.sample_points(n_points, rng),
+            Self::Spherical(l) => l.sample_points(n_points, rng),
+            Self::Empty(l) => l.sample_points(n_points, rng),
+        }
+    }
+}
+
+/// Common lattice properties bundled into a trait, useful to reduce boilerplate
+pub trait GeneralLatticeProperties:
+    LatticeGeometry + TransformationIsometry3 + GenerateBubblesExterior + SamplePointsInsideLattice
+{
+}
+
+// Blanket impl
+impl<T> GeneralLatticeProperties for T where
+    T: LatticeGeometry
+        + TransformationIsometry3
+        + GenerateBubblesExterior
+        + SamplePointsInsideLattice
+{
+}

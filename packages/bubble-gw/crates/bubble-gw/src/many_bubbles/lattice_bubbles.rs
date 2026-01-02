@@ -1,9 +1,8 @@
 use crate::many_bubbles::bubbles::Bubbles;
 use crate::many_bubbles::bubbles_nucleation::NucleationError;
 use crate::many_bubbles::bubbles_nucleation::NucleationStrategy;
-use crate::many_bubbles::lattice::{
-    BoundaryConditions, GenerateBubblesExterior, LatticeGeometry, TransformationIsometry3,
-};
+use crate::many_bubbles::lattice::GeneralLatticeProperties;
+use crate::many_bubbles::lattice::{BoundaryConditions, TransformationIsometry3};
 
 use csv::{ReaderBuilder, Writer};
 use nalgebra::{DMatrix, Point3, Vector3, Vector4};
@@ -124,7 +123,7 @@ impl std::fmt::Display for BubbleIndex {
 #[derive(Clone, Debug, PartialEq)]
 pub struct LatticeBubbles<L>
 where
-    L: LatticeGeometry + TransformationIsometry3 + GenerateBubblesExterior,
+    L: GeneralLatticeProperties,
 {
     pub interior: Bubbles,
     pub exterior: Bubbles,
@@ -135,7 +134,7 @@ where
 
 impl<L> TransformationIsometry3 for LatticeBubbles<L>
 where
-    L: LatticeGeometry + TransformationIsometry3 + GenerateBubblesExterior + Clone,
+    L: GeneralLatticeProperties + Clone,
 {
     fn transform<I: Into<nalgebra::Isometry3<f64>>>(&self, iso: I) -> Self {
         let iso = iso.into();
@@ -190,7 +189,7 @@ where
 
 impl<L> LatticeBubbles<L>
 where
-    L: LatticeGeometry + TransformationIsometry3 + GenerateBubblesExterior + Clone,
+    L: GeneralLatticeProperties + Clone,
 {
     /// Creates a new `LatticeBubbles` with an empty set of interior and exterior bubbles.
     /// `delta` and `delta_squared` are 0×0 matrices.
