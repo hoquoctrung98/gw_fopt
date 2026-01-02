@@ -1,9 +1,9 @@
-use crate::py_many_bubbles::py_bubbles_nucleation::PyUniformAtFixedTime;
-use crate::py_many_bubbles::py_isometry::PyIsometry3;
-use crate::py_many_bubbles::py_lattice::{PyCartesian, PyEmpty, PyParallelepiped, PySpherical};
 use bubble_gw::many_bubbles::bubbles::Bubbles;
 use bubble_gw::many_bubbles::lattice::{
-    BoundaryConditions, BuiltInLattice, LatticeGeometry, TransformationIsometry3,
+    BoundaryConditions,
+    BuiltInLattice,
+    LatticeGeometry,
+    TransformationIsometry3,
 };
 use bubble_gw::many_bubbles::lattice_bubbles::LatticeBubbles;
 use ndarray::Array2;
@@ -11,6 +11,10 @@ use numpy::{PyArray2, PyArrayMethods, PyReadonlyArray2};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyAnyMethods;
+
+use crate::py_many_bubbles::py_bubbles_nucleation::PyUniformAtFixedTime;
+use crate::py_many_bubbles::py_isometry::PyIsometry3;
+use crate::py_many_bubbles::py_lattice::{PyCartesian, PyEmpty, PyParallelepiped, PySpherical};
 
 #[pyclass(name = "LatticeBubbles", module = "bubble_gw")]
 #[derive(Clone)]

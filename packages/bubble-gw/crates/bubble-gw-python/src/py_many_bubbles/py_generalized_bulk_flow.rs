@@ -1,16 +1,24 @@
-use crate::py_many_bubbles::PyLatticeBubbles;
 use bubble_gw::many_bubbles::generalized_bulk_flow::{
-    GeneralizedBulkFlow, GeneralizedBulkFlowError,
+    GeneralizedBulkFlow,
+    GeneralizedBulkFlowError,
 };
 use bubble_gw::many_bubbles::lattice::BuiltInLattice;
 use bubble_gw::many_bubbles::lattice_bubbles::BubbleIndex;
 use numpy::{
-    Complex64 as NumpyComplex64, PyArray1, PyArray2, PyArray3, PyArray4, PyArrayMethods,
-    PyReadonlyArray1, PyReadonlyArray2, ToPyArray,
+    Complex64 as NumpyComplex64,
+    PyArray1,
+    PyArray2,
+    PyArray3,
+    PyArray4,
+    PyArrayMethods,
+    PyReadonlyArray1,
+    PyReadonlyArray2,
 };
 use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
 use thiserror::Error;
+
+use crate::py_many_bubbles::py_lattice_bubbles::PyLatticeBubbles;
 
 /// Python-facing error
 #[derive(Error, Debug)]
@@ -81,25 +89,25 @@ impl From<GeneralizedBulkFlowError> for PyBulkFlowError {
         match err {
             GeneralizedBulkFlowError::InvalidIndex { index, max } => {
                 PyBulkFlowError::InvalidIndex { index, max }
-            }
+            },
             GeneralizedBulkFlowError::UninitializedField(field) => {
                 PyBulkFlowError::UninitializedField(field)
-            }
+            },
             GeneralizedBulkFlowError::InvalidResolution(msg) => {
                 PyBulkFlowError::InvalidResolution(msg)
-            }
+            },
             GeneralizedBulkFlowError::InvalidTimeRange { begin, end } => {
                 PyBulkFlowError::InvalidTimeRange { begin, end }
-            }
+            },
             GeneralizedBulkFlowError::ArrayShapeMismatch(msg) => {
                 PyBulkFlowError::ArrayShapeMismatch(msg)
-            }
+            },
             GeneralizedBulkFlowError::ThreadPoolBuildError(e) => {
                 PyBulkFlowError::ThreadPoolBuildError(e.to_string())
-            }
+            },
             GeneralizedBulkFlowError::BubbleFormedInsideBubble { a, b } => {
                 PyBulkFlowError::BubbleFormedInsideBubble { a, b }
-            }
+            },
             GeneralizedBulkFlowError::BubblesError(..) => PyBulkFlowError::BubblesError,
         }
     }
@@ -323,7 +331,7 @@ impl PyGeneralizedBulkFlow {
             .map_err(|e| match e {
                 GeneralizedBulkFlowError::InvalidIndex { index, max } => {
                     PyBulkFlowError::InvalidIndex { index, max }
-                }
+                },
                 _ => PyBulkFlowError::from(e),
             })?;
 
@@ -361,7 +369,7 @@ impl PyGeneralizedBulkFlow {
             .map_err(|e| match e {
                 GeneralizedBulkFlowError::InvalidIndex { index, max } => {
                     PyBulkFlowError::InvalidIndex { index, max }
-                }
+                },
                 _ => PyBulkFlowError::from(e),
             })?;
 

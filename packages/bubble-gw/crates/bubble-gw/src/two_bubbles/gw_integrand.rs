@@ -52,7 +52,7 @@ impl IntegrandCalculator {
                 let b0 = Jn(0, bessel_arg);
                 let b2 = Jn(2, bessel_arg);
                 (b0, 0.0, b2)
-            }
+            },
             IntegrandType::ZZ => (Jn(0, bessel_arg), 0.0, 0.0),
             IntegrandType::XZ => (0.0, Jn(1, bessel_arg), 0.0),
         };
@@ -65,7 +65,7 @@ impl IntegrandCalculator {
                     factor * exp_term_real * bessel_diff * c1_val,
                     factor * exp_term_imag * bessel_diff * c1_val,
                 )
-            }
+            },
             IntegrandType::YY => {
                 let factor = u_squared_plus_sign;
                 let bessel_sum = bessel_0 + bessel_2;
@@ -73,17 +73,17 @@ impl IntegrandCalculator {
                     factor * exp_term_real * bessel_sum * c1_val,
                     factor * exp_term_imag * bessel_sum * c1_val,
                 )
-            }
+            },
             IntegrandType::ZZ => {
                 (exp_term_real * bessel_0 * c1_val, exp_term_imag * bessel_0 * c1_val)
-            }
+            },
             IntegrandType::XZ => {
                 let factor = self.sign * sqrt_term;
                 (
                     factor * exp_term_real * bessel_1 * c1_val,
                     factor * exp_term_imag * bessel_1 * c1_val,
                 )
-            }
+            },
         };
         Ok(Complex64::new(real, imag))
     }

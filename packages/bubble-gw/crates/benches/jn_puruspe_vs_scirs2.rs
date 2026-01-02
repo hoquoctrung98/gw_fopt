@@ -1,7 +1,8 @@
-use rand::{Rng, SeedableRng, rngs::StdRng};
 use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
+use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
 
 pub fn bench_jn_puruspe_vs_scirs2_j0(c: &mut Criterion) {
     let mut rng = StdRng::seed_from_u64(0);

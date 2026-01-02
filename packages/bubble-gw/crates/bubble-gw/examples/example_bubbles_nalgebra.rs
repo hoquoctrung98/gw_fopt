@@ -1,15 +1,18 @@
-use bubble_gw::many_bubbles::{
-    generalized_bulk_flow::GeneralizedBulkFlow as BulkFlowNalgebra, lattice::CartesianLattice,
-    lattice_bubbles::LatticeBubbles as LatticeBubblesNalgebra,
-};
+use std::error::Error;
+
+use bubble_gw::many_bubbles::generalized_bulk_flow::GeneralizedBulkFlow as BulkFlowNalgebra;
+use bubble_gw::many_bubbles::lattice::CartesianLattice;
+use bubble_gw::many_bubbles::lattice_bubbles::LatticeBubbles as LatticeBubblesNalgebra;
 use bubble_gw::many_bubbles_legacy::bubbles::LatticeBubbles;
 use bubble_gw::many_bubbles_legacy::bulk_flow::BulkFlow;
 use bubble_gw::many_bubbles_legacy::lattice::{
-    BoundaryConditions, Lattice, LatticeType, generate_bubbles_exterior,
+    BoundaryConditions,
+    Lattice,
+    LatticeType,
+    generate_bubbles_exterior,
 };
 use nalgebra::{Point3, Vector3};
 use ndarray::{Array2, arr2};
-use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let l_box = 20.;

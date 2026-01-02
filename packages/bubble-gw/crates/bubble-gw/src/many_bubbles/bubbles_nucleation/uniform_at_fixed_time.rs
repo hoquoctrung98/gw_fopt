@@ -1,17 +1,25 @@
-use super::{NucleationError, NucleationStrategy};
-use crate::many_bubbles::bubbles::Bubbles;
-use crate::many_bubbles::lattice::{
-    BoundaryConditions, BuiltInLattice, CartesianLattice, GenerateBubblesExterior, LatticeGeometry,
-    ParallelepipedLattice, SphericalLattice,
-};
-use crate::many_bubbles::lattice_bubbles::LatticeBubbles;
 use nalgebra::{Point3, Vector4};
 use nalgebra_spacetime::Lorentzian;
 use ndarray::Array2;
-use rand::{Rng, SeedableRng, random, rngs::StdRng};
+use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng, random};
 
-/// Nucleates `n_bubbles` bubbles at fixed time `t0`, uniformly distributed within the lattice.
-/// Ensures no two *newly nucleated* bubbles violate causality (i.e., no overlap at formation).
+use super::{NucleationError, NucleationStrategy};
+use crate::many_bubbles::bubbles::Bubbles;
+use crate::many_bubbles::lattice::{
+    BoundaryConditions,
+    BuiltInLattice,
+    CartesianLattice,
+    GenerateBubblesExterior,
+    LatticeGeometry,
+    ParallelepipedLattice,
+    SphericalLattice,
+};
+use crate::many_bubbles::lattice_bubbles::LatticeBubbles;
+
+/// Nucleates `n_bubbles` bubbles at fixed time `t0`, uniformly distributed
+/// within the lattice. Ensures no two *newly nucleated* bubbles violate
+/// causality (i.e., no overlap at formation).
 #[derive(Clone, Debug)]
 pub struct UniformAtFixedTime {
     pub n_bubbles: usize,

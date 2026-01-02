@@ -100,7 +100,8 @@ where
     }
 }
 
-/* ============================= Built-in constraints ============================= */
+/* ============================= Built-in constraints
+ * ============================= */
 
 #[derive(Clone, Debug)]
 pub struct Unconstrained;

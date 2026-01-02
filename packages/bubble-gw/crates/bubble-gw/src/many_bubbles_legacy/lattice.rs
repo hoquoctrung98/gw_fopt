@@ -1,11 +1,13 @@
-use ndarray::{Array2, ArrayRef2};
 use std::collections::HashSet;
+
+use ndarray::{Array2, ArrayRef2};
 
 /// A helper struct for hashing quantized 3D coordinates to ensure uniqueness.
 ///
-/// This struct converts floating-point coordinates to integers by scaling and rounding,
-/// enabling efficient storage and comparison in a `HashSet`. It is used primarily for
-/// handling periodic boundary conditions in Cartesian lattices.
+/// This struct converts floating-point coordinates to integers by scaling and
+/// rounding, enabling efficient storage and comparison in a `HashSet`. It is
+/// used primarily for handling periodic boundary conditions in Cartesian
+/// lattices.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct QuantizedPoint(i64, i64, i64);
 
@@ -14,11 +16,13 @@ impl QuantizedPoint {
     ///
     /// # Arguments
     ///
-    /// * `coords` - A tuple of three `f64` values representing the (x, y, z) coordinates.
+    /// * `coords` - A tuple of three `f64` values representing the (x, y, z)
+    ///   coordinates.
     ///
     /// # Returns
     ///
-    /// A `QuantizedPoint` with coordinates scaled by \(10^{10}\) and rounded to integers.
+    /// A `QuantizedPoint` with coordinates scaled by \(10^{10}\) and rounded to
+    /// integers.
     fn new(coords: (f64, f64, f64)) -> Self {
         let quantize = |x: f64| (x * 1e10).round() as i64;
         QuantizedPoint(quantize(coords.0), quantize(coords.1), quantize(coords.2))
@@ -42,8 +46,9 @@ pub enum LatticeType {
 
 /// Represents the simulation domain, either a Cartesian box or a sphere.
 ///
-/// The lattice defines the spatial boundaries and grid resolution for the bubble
-/// formation simulation. It supports volume calculations and grid point generation.
+/// The lattice defines the spatial boundaries and grid resolution for the
+/// bubble formation simulation. It supports volume calculations and grid point
+/// generation.
 #[derive(Debug, Clone, Copy)]
 pub struct Lattice {
     pub lattice_type: LatticeType,
@@ -51,18 +56,21 @@ pub struct Lattice {
 }
 
 impl Lattice {
-    /// Creates a new lattice with the specified type, sizes, and grid resolution.
+    /// Creates a new lattice with the specified type, sizes, and grid
+    /// resolution.
     ///
     /// # Arguments
     ///
     /// * `lattice_type` - ("Cartesian" or "Sphere").
-    /// * `sizes` - A vector of dimensions: `[lx, ly, lz]` for Cartesian, `[r]` for Sphere.
+    /// * `sizes` - A vector of dimensions: `[lx, ly, lz]` for Cartesian, `[r]`
+    ///   for Sphere.
     /// * `n` - The number of grid points along each dimension.
     ///
     /// # Returns
     ///
     /// * `Ok(Lattice)` - A new `Lattice` instance.
-    /// * `Err(String)` - An error message if the lattice type is invalid or sizes are incorrect.
+    /// * `Err(String)` - An error message if the lattice type is invalid or
+    ///   sizes are incorrect.
     pub fn new(lattice_type: LatticeType, n_grid: usize) -> Result<Self, String> {
         Ok(Lattice {
             lattice_type,
@@ -87,9 +95,12 @@ impl Lattice {
     ///
     /// # Returns
     ///
-    /// An `Array2<f64>` with shape `(N, 3)`, where each row is a point `[x, y, z]`.
-    /// * For Cartesian: A uniform \( n \times n \times n \) grid spanning `[0, lx] × [0, ly] × [0, lz]`.
-    /// * For Sphere: Points within a cube \([-r, r]^3\), filtered to lie within the sphere (\( x^2 + y^2 + z^2 \leq r^2 \)).
+    /// An `Array2<f64>` with shape `(N, 3)`, where each row is a point `[x, y,
+    /// z]`.
+    /// * For Cartesian: A uniform \( n \times n \times n \) grid spanning `[0,
+    ///   lx] × [0, ly] × [0, lz]`.
+    /// * For Sphere: Points within a cube \([-r, r]^3\), filtered to lie within
+    ///   the sphere (\( x^2 + y^2 + z^2 \leq r^2 \)).
     pub fn generate_grid(&self) -> Array2<f64> {
         match self.lattice_type {
             LatticeType::Cartesian { sizes } => {
@@ -109,7 +120,7 @@ impl Lattice {
                     }
                 }
                 Array2::from_shape_vec((n * n * n, 3), grid_points).unwrap()
-            }
+            },
             LatticeType::Sphere { radius } => {
                 let n_grid = self.n_grid;
                 let x: Vec<f64> = (0..n_grid)
@@ -127,7 +138,7 @@ impl Lattice {
                     }
                 }
                 Array2::from_shape_vec((grid_points.len() / 3, 3), grid_points).unwrap()
-            }
+            },
         }
     }
 
@@ -142,7 +153,7 @@ impl Lattice {
         match self.lattice_type {
             LatticeType::Cartesian { sizes } => {
                 vec![(0.0, sizes[0]), (0.0, sizes[1]), (0.0, sizes[2])]
-            }
+            },
             LatticeType::Sphere { radius } => vec![(0.0, radius)],
         }
     }
@@ -158,7 +169,8 @@ pub enum BoundaryConditions {
 /// Generates exterior (image) bubbles for handling boundary conditions.
 ///
 /// For **Periodic**: creates 6 translated copies (±lx, ±ly, ±lz).
-/// For **Reflective**: creates 6 mirrored copies across each face via refletions
+/// For **Reflective**: creates 6 mirrored copies across each face via
+/// refletions
 ///
 /// Only works for `LatticeType::Cartesian`. Returns empty array otherwise.
 ///
@@ -208,7 +220,7 @@ pub fn generate_bubbles_exterior(
                             }
                         }
                     }
-                }
+                },
 
                 BoundaryConditions::Reflection => {
                     // 6 faces → 6 independent reflections
@@ -242,7 +254,7 @@ pub fn generate_bubbles_exterior(
                             center[axis] = -center[axis];
                         }
                     }
-                }
+                },
             }
 
             if exterior.is_empty() {
@@ -250,7 +262,7 @@ pub fn generate_bubbles_exterior(
             } else {
                 Array2::from_shape_vec((exterior.len() / 4, 4), exterior).unwrap()
             }
-        }
+        },
 
         //TODO: implement exterior bubbles generation for the Sphere lattice
         LatticeType::Sphere { .. } => return Array2::zeros((0, 4)),

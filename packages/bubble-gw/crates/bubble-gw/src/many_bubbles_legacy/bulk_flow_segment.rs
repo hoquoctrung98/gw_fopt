@@ -1,6 +1,3 @@
-use crate::many_bubbles_legacy::bubbles::BubblesError;
-use crate::many_bubbles_legacy::bubbles::{BubbleIndex, LatticeBubbles, dot_minkowski_vec};
-use crate::utils::segment::{TryIntoConstrainedSegment, Unconstrained};
 use ndarray::prelude::*;
 use ndarray::{Zip, stack};
 use num_complex::Complex64;
@@ -8,7 +5,16 @@ use rayon::ThreadPool;
 use rayon::prelude::*;
 use thiserror::Error;
 
-/// Represents the collision status of a direction relative to a reference bubble.
+use crate::many_bubbles_legacy::bubbles::{
+    BubbleIndex,
+    BubblesError,
+    LatticeBubbles,
+    dot_minkowski_vec,
+};
+use crate::utils::segment::{TryIntoConstrainedSegment, Unconstrained};
+
+/// Represents the collision status of a direction relative to a reference
+/// bubble.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum CollisionStatus {
     NeverCollided = 0,
@@ -66,8 +72,10 @@ pub struct BulkFlow {
 impl BulkFlow {
     /// Create a new `BulkFlow`.
     ///
-    /// * `bubbles` – spacetime coordinates of nucleated bubbles inside and outside the lattice
-    /// * `sort_by_time`    – if `true` the two bubble lists are sorted by formation time
+    /// * `bubbles` – spacetime coordinates of nucleated bubbles inside and
+    ///   outside the lattice
+    /// * `sort_by_time`    – if `true` the two bubble lists are sorted by
+    ///   formation time
     pub fn new(bubbles: LatticeBubbles) -> Result<Self, BulkFlowError> {
         let default = std::thread::available_parallelism()
             .map(|n| n.get())
@@ -450,7 +458,7 @@ impl BulkFlow {
                     BubbleIndex::None => {
                         pos = end;
                         continue;
-                    }
+                    },
                     BubbleIndex::Interior(b) => b,
                     BubbleIndex::Exterior(b) => n_interior + b,
                 };
@@ -556,7 +564,8 @@ impl BulkFlow {
             .try_into_constrained_segment(&Unconstrained)
             .expect("collision_status must be piecewise constant");
 
-        // Per-segment data: (start, len, status, delta_tab, sin_sum, cos_sum, delta_is_constant)
+        // Per-segment data: (start, len, status, delta_tab, sin_sum, cos_sum,
+        // delta_is_constant)
         let mut segment_data = Vec::with_capacity(64);
         let mut seg_sin_sum = Vec::with_capacity(64);
         let mut seg_cos_sum = Vec::with_capacity(64);
@@ -624,7 +633,7 @@ impl BulkFlow {
                                 }
                                 f
                             }
-                        }
+                        },
                     };
                     (factor * seg_cos_sum[idx], factor * seg_sin_sum[idx])
                 } else {
@@ -650,7 +659,7 @@ impl BulkFlow {
                                     }
                                     val
                                 }
-                            }
+                            },
                         };
                         plus += f * cos_2phi[i] * weights[i];
                         minus += f * sin_2phi[i] * weights[i];
@@ -981,7 +990,7 @@ impl BulkFlow {
                     }
                 }
                 ids.to_vec()
-            }
+            },
             None => (0..n_interior).collect(),
         };
 
@@ -1030,7 +1039,7 @@ impl BulkFlow {
                     }
                 }
                 ids.to_vec()
-            }
+            },
             None => (0..n_interior).collect(),
         };
 

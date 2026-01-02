@@ -1,6 +1,7 @@
 use ndarray::prelude::*;
 use num_complex::Complex64;
-use peroxide::numerical::integral::{Integral::G30K61, gauss_kronrod_quadrature};
+use peroxide::numerical::integral::Integral::G30K61;
+use peroxide::numerical::integral::gauss_kronrod_quadrature;
 use puruspe::Jn;
 use rayon::prelude::*;
 use rayon::{ThreadPool, ThreadPoolBuilder};
@@ -97,7 +98,7 @@ where
                 let b0 = Jn(0, bessel_arg);
                 let b2 = Jn(2, bessel_arg);
                 (b0, 0.0, b2)
-            }
+            },
             IntegrandType::ZZ => (Jn(0, bessel_arg), 0.0, 0.0),
             IntegrandType::XZ => (0.0, Jn(1, bessel_arg), 0.0),
         };
@@ -110,7 +111,7 @@ where
                     factor * exp_term_real * bessel_diff * cutoff_val,
                     factor * exp_term_imag * bessel_diff * cutoff_val,
                 )
-            }
+            },
             IntegrandType::YY => {
                 let factor = u_squared_plus_sign;
                 let bessel_sum = bessel_0 + bessel_2;
@@ -118,17 +119,17 @@ where
                     factor * exp_term_real * bessel_sum * cutoff_val,
                     factor * exp_term_imag * bessel_sum * cutoff_val,
                 )
-            }
+            },
             IntegrandType::ZZ => {
                 (exp_term_real * bessel_0 * cutoff_val, exp_term_imag * bessel_0 * cutoff_val)
-            }
+            },
             IntegrandType::XZ => {
                 let factor = sign * sqrt_term;
                 (
                     factor * exp_term_real * bessel_1 * cutoff_val,
                     factor * exp_term_imag * bessel_1 * cutoff_val,
                 )
-            }
+            },
         };
         Complex64::new(real, imag)
     }
@@ -177,8 +178,8 @@ pub struct PrecomputedFieldArrays {
 }
 
 // Enum to hold the number of bubbles in the simulation.
-// Depending on whether we have OneBubble or TwoBubbles, the computation of GW spectrum should be
-// scaled differently.
+// Depending on whether we have OneBubble or TwoBubbles, the computation of GW
+// spectrum should be scaled differently.
 #[derive(Debug, Clone, PartialEq)]
 pub enum InitialFieldStatus {
     OneBubble,
@@ -434,7 +435,8 @@ where
         t_zz
     }
 
-    /// Computes the xx component of the energy-momentum tensor after Fourier transform.
+    /// Computes the xx component of the energy-momentum tensor after Fourier
+    /// transform.
     #[inline]
     pub fn compute_t_xx(&self, w: f64, cos_thetak: f64, exp_wkz: &Array1<Complex64>) -> Complex64 {
         let dz_factor = match self.lattice.initial_field_status {
@@ -482,7 +484,8 @@ where
         t_xx
     }
 
-    /// Computes the yy component of the energy-momentum tensor after Fourier transform.
+    /// Computes the yy component of the energy-momentum tensor after Fourier
+    /// transform.
     #[inline]
     pub fn compute_t_yy(&self, w: f64, cos_thetak: f64, exp_wkz: &Array1<Complex64>) -> Complex64 {
         let dz_factor = match self.lattice.initial_field_status {
@@ -695,7 +698,8 @@ where
 
     /// Computes the gravitational wave spectrum on a full (w × cosθ_k) grid.
     /// Returns an Array2<f64> of shape (n_cos_thetak, n_w) where:
-    ///   result[i_k, i_w] = dE/(dlogω dcosθ_k) at cos_thetak_arr[i_k] and w_arr[i_w]
+    ///   result[i_k, i_w] = dE/(dlogω dcosθ_k) at cos_thetak_arr[i_k] and
+    /// w_arr[i_w]
     #[inline]
     pub fn compute_angular_gw_spectrum<W, C>(
         &self,

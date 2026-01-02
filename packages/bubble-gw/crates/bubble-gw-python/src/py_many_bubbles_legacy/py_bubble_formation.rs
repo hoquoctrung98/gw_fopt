@@ -1,8 +1,14 @@
 use bubble_gw::many_bubbles_legacy::bubble_formation::{
-    BubbleFormationSimulator, ManualNucleation, PoissonNucleation, SimulationEndStatus,
+    BubbleFormationSimulator,
+    ManualNucleation,
+    PoissonNucleation,
+    SimulationEndStatus,
 };
 use bubble_gw::many_bubbles_legacy::lattice::{
-    BoundaryConditions, Lattice, LatticeType, generate_bubbles_exterior,
+    BoundaryConditions,
+    Lattice,
+    LatticeType,
+    generate_bubbles_exterior,
 };
 use ndarray::Array2;
 use numpy::{PyArray2, PyArrayMethods, PyReadonlyArray2};
@@ -28,14 +34,14 @@ impl PyLattice {
                 LatticeType::Cartesian {
                     sizes: [sizes[0], sizes[1], sizes[2]],
                 }
-            }
+            },
             "sphere" => {
                 if sizes.len() != 1 {
                     return Err("For sphere lattice, sizes must have length 1".to_string())
                         .map_err(PyValueError::new_err);
                 }
                 LatticeType::Sphere { radius: sizes[0] }
-            }
+            },
             _ => return Err("Invalid lattice_type".to_string()).map_err(PyValueError::new_err),
         };
         let inner = Lattice::new(lattice_type, n_grid).map_err(PyValueError::new_err)?;
@@ -93,7 +99,7 @@ pub fn py_generate_bubbles_exterior(
             return Err(PyValueError::new_err(
                 "boundary_condition must be 'periodic' or 'reflective'",
             ));
-        }
+        },
     };
 
     // Validate bubbles
@@ -209,7 +215,7 @@ impl PyBubbleFormationSimulator {
                         "nucleation_strategy must be PoissonNucleation or ManualNucleation",
                     ));
                 }
-            }
+            },
             None => {
                 let poisson =
                     PoissonNucleation::new(0.1, 1.0, 0.0, 0.1).map_err(PyValueError::new_err)?;
@@ -217,7 +223,7 @@ impl PyBubbleFormationSimulator {
                     BubbleFormationSimulator::new(lattice.inner.clone(), vw, poisson, seed)
                         .map_err(PyValueError::new_err)?;
                 BubbleFormationSimulatorWrapper::Poisson(simulator)
-            }
+            },
         };
         Ok(PyBubbleFormationSimulator { inner })
     }
@@ -239,10 +245,10 @@ impl PyBubbleFormationSimulator {
         match self.get_inner_mut() {
             BubbleFormationSimulatorWrapper::Poisson(sim) => {
                 sim.run_simulation(t_end, min_volume_remaining_fraction, max_time_iterations);
-            }
+            },
             BubbleFormationSimulatorWrapper::Manual(sim) => {
                 sim.run_simulation(t_end, min_volume_remaining_fraction, max_time_iterations);
-            }
+            },
         }
     }
 
@@ -265,7 +271,7 @@ impl PyBubbleFormationSimulator {
                         dict.set_item("t_end", t_end)?;
                         dict.set_item("volume_remaining_fraction", volume_remaining_fraction)?;
                         dict.set_item("time_iteration", time_iteration)?;
-                    }
+                    },
                     SimulationEndStatus::VolumeFractionReached {
                         t_end,
                         volume_remaining_fraction,
@@ -275,7 +281,7 @@ impl PyBubbleFormationSimulator {
                         dict.set_item("t_end", t_end)?;
                         dict.set_item("volume_remaining_fraction", volume_remaining_fraction)?;
                         dict.set_item("time_iteration", time_iteration)?;
-                    }
+                    },
                     SimulationEndStatus::MaxTimeIterationsReached {
                         t_end,
                         volume_remaining_fraction,
@@ -285,7 +291,7 @@ impl PyBubbleFormationSimulator {
                         dict.set_item("t_end", t_end)?;
                         dict.set_item("volume_remaining_fraction", volume_remaining_fraction)?;
                         dict.set_item("time_iteration", time_iteration)?;
-                    }
+                    },
                     SimulationEndStatus::VolumeDepleted {
                         t_end,
                         volume_remaining_fraction,
@@ -295,10 +301,10 @@ impl PyBubbleFormationSimulator {
                         dict.set_item("t_end", t_end)?;
                         dict.set_item("volume_remaining_fraction", volume_remaining_fraction)?;
                         dict.set_item("time_iteration", time_iteration)?;
-                    }
+                    },
                 }
                 Ok(Some(dict.into()))
-            }
+            },
             None => Ok(None),
         }
     }

@@ -1,14 +1,20 @@
+use bubble_gw::two_bubbles::gw_calc::{
+    GWCalcError,
+    GravitationalWaveCalculator,
+    InitialFieldStatus,
+};
 use numpy::{
-    Complex64 as NumpyComplex64, PyArray1, PyArray2, PyArray3, PyArrayMethods, PyReadonlyArray1,
+    Complex64 as NumpyComplex64,
+    PyArray1,
+    PyArray2,
+    PyArray3,
+    PyArrayMethods,
+    PyReadonlyArray1,
     PyReadonlyArray3,
 };
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use thiserror::Error;
-
-use bubble_gw::two_bubbles::gw_calc::{
-    GWCalcError, GravitationalWaveCalculator, InitialFieldStatus,
-};
 
 #[derive(Error, Debug)]
 pub enum PyGWCalcError {
@@ -42,17 +48,17 @@ impl From<GWCalcError> for PyGWCalcError {
         match err {
             GWCalcError::ShapeMismatch { phi1, phi2 } => {
                 PyGWCalcError::ShapeMismatch { phi1, phi2 }
-            }
+            },
             GWCalcError::LengthMismatch { w_len, k_len } => {
                 PyGWCalcError::LengthMismatch { w_len, k_len }
-            }
+            },
             GWCalcError::InvalidTolerance(t) => PyGWCalcError::InvalidTolerance(t),
             GWCalcError::InvalidMaxIter(n) => PyGWCalcError::InvalidMaxIter(n),
             GWCalcError::ThreadPoolBuildError(e) => PyGWCalcError::ThreadPoolBuild(e.to_string()),
             GWCalcError::IntegrationFailed(s) => PyGWCalcError::IntegrationFailed(s),
             GWCalcError::InvalidCutoff { t_cut, t_0, smax } => {
                 PyGWCalcError::InvalidCutoff { t_cut, t_0, smax }
-            }
+            },
         }
     }
 }
@@ -68,7 +74,7 @@ impl From<PyGWCalcError> for PyErr {
             | PyGWCalcError::InvalidInitialFieldStatus(_) => PyValueError::new_err(err.to_string()),
             PyGWCalcError::ThreadPoolBuild(_) | PyGWCalcError::IntegrationFailed(_) => {
                 PyRuntimeError::new_err(err.to_string())
-            }
+            },
         }
     }
 }
@@ -104,7 +110,7 @@ impl PyGravitationalWaveCalculator {
                 return Err(PyGWCalcError::InvalidInitialFieldStatus(
                     initial_field_status.to_string(),
                 ));
-            }
+            },
         };
 
         let inner = GravitationalWaveCalculator::new(

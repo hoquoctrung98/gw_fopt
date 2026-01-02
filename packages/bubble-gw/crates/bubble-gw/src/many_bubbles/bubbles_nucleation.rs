@@ -1,7 +1,8 @@
-use crate::many_bubbles::lattice::{BoundaryConditions, GeneralLatticeProperties};
-use crate::many_bubbles::lattice_bubbles::LatticeBubbles;
 use ndarray::Array2;
 use thiserror::Error;
+
+use crate::many_bubbles::lattice::{BoundaryConditions, GeneralLatticeProperties};
+use crate::many_bubbles::lattice_bubbles::LatticeBubbles;
 pub mod fixed_nucleation_rate;
 pub use fixed_nucleation_rate::FixedNucleationRate;
 pub mod uniform_at_fixed_time;

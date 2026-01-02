@@ -1,8 +1,11 @@
+use std::f64;
+use std::fmt::Debug;
+
 use num::traits::{Float, FromPrimitive, ToPrimitive};
-use std::{f64, fmt::Debug};
 use thiserror::Error;
 
-/// Errors that can occur during sampling parameter validation or numeric conversion.
+/// Errors that can occur during sampling parameter validation or numeric
+/// conversion.
 #[derive(Error, Debug)]
 pub enum SampleError {
     #[error("Invalid range: start ({start}) >= stop ({stop})")]
@@ -21,7 +24,8 @@ pub enum SampleError {
     ConversionError,
 }
 
-/// Type of sampling distribution to use when generating points between `start` and `stop`.
+/// Type of sampling distribution to use when generating points between `start`
+/// and `stop`.
 ///
 /// This enum defines how points are distributed in the output space:
 /// - `Uniform` and `Linear`: identical behavior (linear spacing in value space)
@@ -54,7 +58,7 @@ impl<T: Float + PartialEq> PartialEq for SampleType<T> {
             (SampleType::Logarithmic { base: b1 }, SampleType::Logarithmic { base: b2 })
             | (SampleType::Exponential { base: b1 }, SampleType::Exponential { base: b2 }) => {
                 b1 == b2
-            }
+            },
             (SampleType::Distribution { .. }, SampleType::Distribution { .. }) => false,
             _ => false,
         }
@@ -68,7 +72,8 @@ impl<T: Float + PartialEq> PartialEq for SampleType<T> {
 ///
 /// # Constraints
 /// - `start < stop`
-/// - For `Logarithmic` and `Exponential`: `base > 0` and `start > 0`, `stop > 0`
+/// - For `Logarithmic` and `Exponential`: `base > 0` and `start > 0`, `stop >
+///   0`
 /// - `start` and `stop` must not be NaN
 #[derive(Clone, Debug, PartialEq)]
 pub struct SampleParams<T: Float>
@@ -96,8 +101,8 @@ where
     /// ```rust
     /// use bubble_gw::utils::sample::{SampleParams, SampleType};
     /// fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// let params = SampleParams::new(1.0, 100.0, SampleType::Logarithmic { base: 10.0 })?;
-    /// Ok(())
+    ///     let params = SampleParams::new(1.0, 100.0, SampleType::Logarithmic { base: 10.0 })?;
+    ///     Ok(())
     /// }
     /// ```
     pub fn new(start: T, stop: T, sample_type: SampleType<T>) -> Result<Self, SampleError> {
@@ -136,8 +141,8 @@ where
                         stop: stop_f64,
                     });
                 }
-            }
-            _ => {}
+            },
+            _ => {},
         }
 
         Ok(Self {
@@ -147,14 +152,18 @@ where
         })
     }
 
-    /// Generate `n_sample + 1` points (inclusive) using the configured sampling strategy.
+    /// Generate `n_sample + 1` points (inclusive) using the configured sampling
+    /// strategy.
     ///
-    /// If `n_iter > 0`, uses adaptive grid refinement with `n_grid` subdivisions per iteration.
+    /// If `n_iter > 0`, uses adaptive grid refinement with `n_grid`
+    /// subdivisions per iteration.
     ///
     /// # Parameters
     /// - `n_sample`: Number of intervals (result has `n_sample + 1` points)
-    /// - `n_grid`: Number of sub-grid points per refinement level (must be ≥ 2 if `n_iter > 0`)
-    /// - `n_iter`: Number of refinement iterations (0 = simple uniform sampling)
+    /// - `n_grid`: Number of sub-grid points per refinement level (must be ≥ 2
+    ///   if `n_iter > 0`)
+    /// - `n_iter`: Number of refinement iterations (0 = simple uniform
+    ///   sampling)
     ///
     /// # Returns
     /// A `Vec<T>` of sampled points, always including `start` and `stop`.
@@ -187,7 +196,7 @@ where
                 } else {
                     self.distribution_sample_grid(n_sample, n_grid, n_iter, &dist, &dist)
                 }
-            }
+            },
             SampleType::Logarithmic { base } => {
                 let dist = |x: T| x.log(*base);
                 let dist_inv = |x: T| base.powf(x);
@@ -196,7 +205,7 @@ where
                 } else {
                     self.distribution_sample_grid(n_sample, n_grid, n_iter, &dist, &dist_inv)
                 }
-            }
+            },
             SampleType::Exponential { base } => {
                 let dist = |x: T| x;
                 let dist_inv = |x: T| base.powf(x);
@@ -205,14 +214,14 @@ where
                 } else {
                     self.distribution_sample_grid(n_sample, n_grid, n_iter, &dist, &dist_inv)
                 }
-            }
+            },
             SampleType::Distribution { dist, dist_inv } => {
                 if n_iter == 0 {
                     self.distribution_sample_simple(n_sample, dist, dist_inv)
                 } else {
                     self.distribution_sample_grid(n_sample, n_grid, n_iter, dist, dist_inv)
                 }
-            }
+            },
         }
     }
 
@@ -255,10 +264,12 @@ where
         Ok(v)
     }
 
-    /// Adaptive grid sampling — returns **only the new interior points** at refinement level `n_iter`
+    /// Adaptive grid sampling — returns **only the new interior points** at
+    /// refinement level `n_iter`
     ///
-    /// This produces points that fill in the gaps between the grid at iteration `n_iter - 1`.
-    /// The full nested grid is obtained by concatenating results from `iter = 0..=n_iter` via `sample_arr`.
+    /// This produces points that fill in the gaps between the grid at iteration
+    /// `n_iter - 1`. The full nested grid is obtained by concatenating
+    /// results from `iter = 0..=n_iter` via `sample_arr`.
     fn distribution_sample_grid(
         &self,
         n_sample: usize,

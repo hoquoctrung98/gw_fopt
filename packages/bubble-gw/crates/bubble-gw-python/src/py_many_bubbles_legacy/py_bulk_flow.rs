@@ -2,8 +2,15 @@ use bubble_gw::many_bubbles_legacy::bubbles::{BubbleIndex, LatticeBubbles};
 use bubble_gw::many_bubbles_legacy::bulk_flow::{BulkFlow, BulkFlowError};
 use ndarray::Array2;
 use numpy::{
-    Complex64 as NumpyComplex64, PyArray1, PyArray2, PyArray3, PyArray4, PyArrayMethods,
-    PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3,
+    Complex64 as NumpyComplex64,
+    PyArray1,
+    PyArray2,
+    PyArray3,
+    PyArray4,
+    PyArrayMethods,
+    PyReadonlyArray1,
+    PyReadonlyArray2,
+    PyReadonlyArray3,
 };
 use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
@@ -78,19 +85,19 @@ impl From<BulkFlowError> for PyBulkFlowError {
         match err {
             BulkFlowError::InvalidIndex { index, max } => {
                 PyBulkFlowError::InvalidIndex { index, max }
-            }
+            },
             BulkFlowError::UninitializedField(field) => PyBulkFlowError::UninitializedField(field),
             BulkFlowError::InvalidResolution(msg) => PyBulkFlowError::InvalidResolution(msg),
             BulkFlowError::InvalidTimeRange { begin, end } => {
                 PyBulkFlowError::InvalidTimeRange { begin, end }
-            }
+            },
             BulkFlowError::ArrayShapeMismatch(msg) => PyBulkFlowError::ArrayShapeMismatch(msg),
             BulkFlowError::ThreadPoolBuildError(e) => {
                 PyBulkFlowError::ThreadPoolBuildError(e.to_string())
-            }
+            },
             BulkFlowError::BubbleFormedInsideBubble { a, b } => {
                 PyBulkFlowError::BubbleFormedInsideBubble { a, b }
-            }
+            },
             BulkFlowError::BubblesError(..) => PyBulkFlowError::BubblesError,
         }
     }
@@ -334,7 +341,7 @@ impl PyBulkFlow {
             .map_err(|e| match e {
                 BulkFlowError::InvalidIndex { index, max } => {
                     PyBulkFlowError::InvalidIndex { index, max }
-                }
+                },
                 _ => PyBulkFlowError::from(e),
             })?;
 
@@ -372,7 +379,7 @@ impl PyBulkFlow {
             .map_err(|e| match e {
                 BulkFlowError::InvalidIndex { index, max } => {
                     PyBulkFlowError::InvalidIndex { index, max }
-                }
+                },
                 _ => PyBulkFlowError::from(e),
             })?;
 

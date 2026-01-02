@@ -12,7 +12,7 @@ match_block_trailing_comma = true
 
 # always format imports and struct fields vertically when long
 imports_granularity = "Module"
-struct_field_align_threshold = 20
+struct_field_align_threshold = 0
 
 # force consistent indentation and alignment
 indent_style = "Block"

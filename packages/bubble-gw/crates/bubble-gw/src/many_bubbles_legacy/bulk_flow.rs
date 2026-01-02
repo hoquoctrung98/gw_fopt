@@ -1,5 +1,3 @@
-use crate::many_bubbles_legacy::bubbles::BubblesError;
-use crate::many_bubbles_legacy::bubbles::{BubbleIndex, LatticeBubbles, dot_minkowski_vec};
 use ndarray::prelude::*;
 use ndarray::{Zip, stack};
 use num_complex::Complex64;
@@ -7,7 +5,15 @@ use rayon::prelude::*;
 use rayon::{ThreadPool, ThreadPoolBuildError, ThreadPoolBuilder};
 use thiserror::Error;
 
-/// Represents the collision status of a direction relative to a reference bubble.
+use crate::many_bubbles_legacy::bubbles::{
+    BubbleIndex,
+    BubblesError,
+    LatticeBubbles,
+    dot_minkowski_vec,
+};
+
+/// Represents the collision status of a direction relative to a reference
+/// bubble.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum CollisionStatus {
     NeverCollided = 0,
@@ -65,8 +71,10 @@ pub struct BulkFlow {
 impl BulkFlow {
     /// Create a new `BulkFlow`.
     ///
-    /// * `bubbles` – spacetime coordinates of nucleated bubbles inside and outside the lattice
-    /// * `sort_by_time`    – if `true` the two bubble lists are sorted by formation time
+    /// * `bubbles` – spacetime coordinates of nucleated bubbles inside and
+    ///   outside the lattice
+    /// * `sort_by_time`    – if `true` the two bubble lists are sorted by
+    ///   formation time
     pub fn new(bubbles: LatticeBubbles) -> Result<Self, BulkFlowError> {
         let default_num_threads = std::thread::available_parallelism()
             .map(|n| n.get())
@@ -437,12 +445,13 @@ impl BulkFlow {
         let mut delta_tab_grid = Array2::zeros((n_cos_thetax, n_phix));
 
         for i in 0..n_cos_thetax {
-            // TODO: This loop can be replaced by iterating over segment with const BubbleIndex
+            // TODO: This loop can be replaced by iterating over segment with const
+            // BubbleIndex
             for j in 0..n_phix {
                 let b_total = match first_bubble[[i, j]] {
                     BubbleIndex::None => {
                         continue;
-                    }
+                    },
                     BubbleIndex::Interior(b_idx) => b_idx,
                     BubbleIndex::Exterior(b_idx) => n_interior + b_idx,
                 };
@@ -882,7 +891,7 @@ impl BulkFlow {
                     }
                 }
                 ids.to_vec()
-            }
+            },
             None => (0..n_interior).collect(),
         };
 
@@ -931,7 +940,7 @@ impl BulkFlow {
                     }
                 }
                 ids.to_vec()
-            }
+            },
             None => (0..n_interior).collect(),
         };
 

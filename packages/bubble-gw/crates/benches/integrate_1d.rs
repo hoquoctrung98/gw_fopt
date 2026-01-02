@@ -1,9 +1,8 @@
 use bubble_gw::utils::integrate;
 use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
-
 use integrate::Integrate as NewIntegrate;
 
-fn bench_1d_slice<T, F>(c: &mut Criterion, name: &str, data_size: usize, mut setup: F)
+fn bench_1d_slice<T, F>(c: &mut Criterion, name: &str, data_size: usize, setup: F)
 where
     T: Copy + num_traits::Float + From<f64> + Send + Sync + 'static,
     F: Fn(usize) -> (Vec<T>, Option<Vec<T>>),
@@ -27,7 +26,7 @@ where
                                 None,
                             )
                             .unwrap();
-                        }
+                        },
                         "simpson" => {
                             let _ = <&[T] as NewIntegrate<T>>::simpson(
                                 y_ref, // <-- pass &y_slice
@@ -36,7 +35,7 @@ where
                                 None,
                             )
                             .unwrap();
-                        }
+                        },
                         _ => unreachable!(),
                     }
                 },

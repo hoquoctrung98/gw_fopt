@@ -1,8 +1,9 @@
+use std::error::Error;
+
 use bubble_gw::many_bubbles_legacy::bubble_formation::generate_random_bubbles;
 use bubble_gw::many_bubbles_legacy::bubbles::LatticeBubbles;
 use bubble_gw::many_bubbles_legacy::lattice::{BoundaryConditions, Lattice, LatticeType};
 use ndarray::arr2;
-use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let lattice = Lattice::new(

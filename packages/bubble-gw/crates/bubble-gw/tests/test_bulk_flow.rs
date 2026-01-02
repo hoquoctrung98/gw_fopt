@@ -1,9 +1,13 @@
+use std::collections::HashMap;
+use std::error::Error;
+use std::fs::File;
+use std::io::BufReader;
+
 use bubble_gw::many_bubbles_legacy::bubbles::LatticeBubbles;
 use bubble_gw::many_bubbles_legacy::bulk_flow::BulkFlow;
 use bubble_gw::utils::is_close::IsClose;
 use ndarray::{Array1, Array2, arr2};
 use num::complex::Complex64;
-use std::{collections::HashMap, error::Error, fs::File, io::BufReader};
 
 const ABS_TOL: f64 = 1e-2;
 const REL_TOL: f64 = 1e-2;

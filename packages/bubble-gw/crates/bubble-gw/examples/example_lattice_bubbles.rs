@@ -1,6 +1,7 @@
+use std::error::Error;
+
 use bubble_gw::many_bubbles;
 use nalgebra::{Point3, Vector3};
-use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let lbox = 10.;

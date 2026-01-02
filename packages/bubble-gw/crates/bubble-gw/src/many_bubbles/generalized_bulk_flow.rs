@@ -1,6 +1,3 @@
-use crate::many_bubbles::bubbles::Bubbles;
-use crate::many_bubbles::lattice::GeneralLatticeProperties;
-use crate::many_bubbles::lattice_bubbles::{BubbleIndex, LatticeBubbles, LatticeBubblesError};
 use nalgebra::{DMatrix, Vector4};
 use nalgebra_spacetime::Lorentzian;
 use ndarray::prelude::*;
@@ -10,8 +7,14 @@ use rayon::prelude::*;
 use rayon::{ThreadPool, ThreadPoolBuildError, ThreadPoolBuilder};
 use thiserror::Error;
 
-/// Represents the causal collision status of a direction $(\cos\theta, \phi)$ relative to a reference bubble $n$,
-/// used to evaluate the Heaviside functions $\Theta(t_{n,c} - t)$ and $\Theta(t - t_{n,c})$ in the scaling function $f(t, t_n, t_{n, c})$.
+use crate::many_bubbles::bubbles::Bubbles;
+use crate::many_bubbles::lattice::GeneralLatticeProperties;
+use crate::many_bubbles::lattice_bubbles::{BubbleIndex, LatticeBubbles, LatticeBubblesError};
+
+/// Represents the causal collision status of a direction $(\cos\theta, \phi)$
+/// relative to a reference bubble $n$, used to evaluate the Heaviside functions
+/// $\Theta(t_{n,c} - t)$ and $\Theta(t - t_{n,c})$ in the scaling function
+/// $f(t, t_n, t_{n, c})$.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum CollisionStatus {
     NeverCollided = 0,
@@ -50,14 +53,17 @@ pub enum GeneralizedBulkFlowError {
     #[error("Bubbles Error")]
     BubblesError(#[from] LatticeBubblesError),
 }
-/// Computes the frequency-domain bulk-flow integrals $C_{+}(\omega)$ and $C_{\times}(\omega)$ for gravitational-wave emission
-/// from colliding vacuum bubbles in a first-order phase transition. Implements the triple integral:
+/// Computes the frequency-domain bulk-flow integrals $C_{+}(\omega)$ and
+/// $C_{\times}(\omega)$ for gravitational-wave emission from colliding vacuum
+/// bubbles in a first-order phase transition. Implements the triple integral:
 /// $$
-/// C_{+,\times}(\omega) = \frac{1}{6\pi} \sum_n \int dt\ e^{i\omega(t - z_n)} A_{n,\pm}(\omega, t), \\
-/// A_{n,\pm}(\omega, t) = \int_{-1}^{1} d\zeta\ e^{-i\omega(t-t_n)\zeta} B_{n,\pm}(\zeta, t), \\
-/// B_{n,\pm}(\zeta, t) = \frac{1-\zeta^2}{2} \int_0^{2\pi} d\phi\ g_{\pm}(\phi)\ (t-t_n)^3 f(t, t_n, t_{n,c}),
-/// $$
-/// where $g_{+} = \cos 2\phi$, $g_{\times} = \sin 2\phi$, $\zeta = \cos\theta$, and $f$ is the collision-aware scaling function.
+/// C_{+,\times}(\omega) = \frac{1}{6\pi} \sum_n \int dt\ e^{i\omega(t - z_n)}
+/// A_{n,\pm}(\omega, t), \\ A_{n,\pm}(\omega, t) = \int_{-1}^{1} d\zeta\
+/// e^{-i\omega(t-t_n)\zeta} B_{n,\pm}(\zeta, t), \\ B_{n,\pm}(\zeta, t) =
+/// \frac{1-\zeta^2}{2} \int_0^{2\pi} d\phi\ g_{\pm}(\phi)\ (t-t_n)^3 f(t, t_n,
+/// t_{n,c}), $$
+/// where $g_{+} = \cos 2\phi$, $g_{\times} = \sin 2\phi$, $\zeta = \cos\theta$,
+/// and $f$ is the collision-aware scaling function.
 #[derive(Debug)]
 pub struct GeneralizedBulkFlow<L>
 where
@@ -83,8 +89,10 @@ where
 {
     /// Create a new `BulkFlow`.
     ///
-    /// * `bubbles` – spacetime coordinates of nucleated bubbles inside and outside the lattice
-    /// * `sort_by_time`    – if `true` the two bubble lists are sorted by formation time
+    /// * `bubbles` – spacetime coordinates of nucleated bubbles inside and
+    ///   outside the lattice
+    /// * `sort_by_time`    – if `true` the two bubble lists are sorted by
+    ///   formation time
     pub fn new(bubbles: LatticeBubbles<L>) -> Result<Self, GeneralizedBulkFlowError> {
         let default_num_threads = std::thread::available_parallelism()
             .map(|n| n.get())
@@ -123,8 +131,10 @@ where
     }
 
     /// For reference bubble $n$, computes $t_{n,c}(\theta,\phi)$,
-    /// the index of the first bubble that collides with bubble $n$ along each direction $(\cos\theta, \phi)$.
-    /// This defines the collision time function $t_{n,c}(\cos\theta, \phi)$ required for the scaling function $f$.
+    /// the index of the first bubble that collides with bubble $n$ along each
+    /// direction $(\cos\theta, \phi)$. This defines the collision time
+    /// function $t_{n,c}(\cos\theta, \phi)$ required for the scaling function
+    /// $f$.
     pub fn compute_first_colliding_bubble(
         &self,
         a_idx: usize,
@@ -318,8 +328,9 @@ where
     /// $$
     /// f = \sum_\xi a_\xi \left(\frac{t_{n,c} - t_n}{t - t_n}\right)^\xi,
     /// $$
-    /// where `coefficients_sets[s][k] = a_\xi`, `powers_sets[s][k] = \xi` for model set `s`.
-    /// Enforces physical constraints: coefficients=0 (no flow) or  or sum to 1 (full bulk-flow).
+    /// where `coefficients_sets[s][k] = a_\xi`, `powers_sets[s][k] = \xi` for
+    /// model set `s`. Enforces physical constraints: coefficients=0 (no
+    /// flow) or  or sum to 1 (full bulk-flow).
     pub fn set_gradient_scaling_params(
         &mut self,
         coefficients_sets: Vec<Vec<f64>>,
@@ -383,9 +394,10 @@ where
         Ok(())
     }
 
-    /// Evaluates the Heaviside conditions $\Theta(t_{n,c} - t)$ and $\Theta(t - t_{n,c})$
-    /// by comparing current time $t$ to collision time $t_{n,c} = t_n + \Delta t_{n,c}$,
-    /// returning `NeverCollided`, `NotYetCollided`, or `AlreadyCollided` per direction.
+    /// Evaluates the Heaviside conditions $\Theta(t_{n,c} - t)$ and $\Theta(t -
+    /// t_{n,c})$ by comparing current time $t$ to collision time $t_{n,c} =
+    /// t_n + \Delta t_{n,c}$, returning `NeverCollided`, `NotYetCollided`,
+    /// or `AlreadyCollided` per direction.
     pub fn compute_collision_status(
         &self,
         a_idx: usize,
@@ -433,9 +445,11 @@ where
         Ok(collision_status)
     }
 
-    /// Computes the collision time delay $\Delta t_{n,c} = t_{n,c} - t_n$ on a $(\cos\theta, \phi)$ grid,
-    /// where $t_{n,c} - t_n = \frac{1}{2} \frac{(x_c - x_n)^2}{(x_c - x_n) \cdot \hat{x}}$
-    /// is the solution to the null-intersection condition for bubbles $n$ and $c$ along direction $\hat{x} = (1,\sin\theta\cos\phi,\sin\theta\sin\phi,\cos\theta)$.
+    /// Computes the collision time delay $\Delta t_{n,c} = t_{n,c} - t_n$ on a
+    /// $(\cos\theta, \phi)$ grid, where $t_{n,c} - t_n = \frac{1}{2}
+    /// \frac{(x_c - x_n)^2}{(x_c - x_n) \cdot \hat{x}}$ is the solution to
+    /// the null-intersection condition for bubbles $n$ and $c$ along direction
+    /// $\hat{x} = (1,\sin\theta\cos\phi,\sin\theta\sin\phi,\cos\theta)$.
     pub fn compute_delta_tab(
         &self,
         a_idx: usize,
@@ -462,7 +476,8 @@ where
         let mut delta_tab_grid = Array2::zeros((n_cos_thetax, n_phix));
 
         for i in 0..n_cos_thetax {
-            // TODO: This loop can be replaced by iterating over segment with const BubbleIndex
+            // TODO: This loop can be replaced by iterating over segment with const
+            // BubbleIndex
             for j in 0..n_phix {
                 let b_total = match first_bubble[[i, j]] {
                     BubbleIndex::None => {
@@ -487,13 +502,14 @@ where
         Ok(delta_tab_grid)
     }
 
-    /// Computes $B_{n,\pm}(\zeta, t)$ for fixed $\zeta = \cos\theta$ by numerically evaluating:
-    /// $$
-    /// B_{n,\pm} = \frac{1-\zeta^2}{2} \int_0^{2\pi} g_{\pm}(\phi)\ (t - t_n)^3 f(t, t_n, t_{n,c})\, d\phi,
-    /// $$
-    /// where $f$ switches between pre-collision ($f=1$) and post-collision profiles
-    /// using user-defined coefficients $a_\xi$ and powers $\xi$ (stored in `coefficients_sets`, `powers_sets`),
-    /// with optional exponential damping.
+    /// Computes $B_{n,\pm}(\zeta, t)$ for fixed $\zeta = \cos\theta$ by
+    /// numerically evaluating: $$
+    /// B_{n,\pm} = \frac{1-\zeta^2}{2} \int_0^{2\pi} g_{\pm}(\phi)\ (t - t_n)^3
+    /// f(t, t_n, t_{n,c})\, d\phi, $$
+    /// where $f$ switches between pre-collision ($f=1$) and post-collision
+    /// profiles using user-defined coefficients $a_\xi$ and powers $\xi$
+    /// (stored in `coefficients_sets`, `powers_sets`), with optional
+    /// exponential damping.
     pub fn compute_b_integral(
         &self,
         cos_thetax_idx: usize,
@@ -784,10 +800,10 @@ where
 
     /// Computes the bubble-specific contribution to $C_{+,\times}(\omega)$:
     /// $$
-    /// C_{n,\pm}(\omega) = \frac{1}{6\pi} \int_{t_n}^{t_{\text{end}}} e^{i\omega(t - z_n)} A_{n,\pm}(\omega, t)\, dt,
-    /// $$
-    /// using trapezoidal integration over time with parallel evaluation of $A_{n,\pm}$.
-    /// Returns stacked $[C_{n,+}, C_{n,\times}]$.
+    /// C_{n,\pm}(\omega) = \frac{1}{6\pi} \int_{t_n}^{t_{\text{end}}}
+    /// e^{i\omega(t - z_n)} A_{n,\pm}(\omega, t)\, dt, $$
+    /// using trapezoidal integration over time with parallel evaluation of
+    /// $A_{n,\pm}$. Returns stacked $[C_{n,+}, C_{n,\times}]$.
     pub fn compute_c_integral_fixed_bubble<W>(
         &mut self,
         a_idx: usize,
@@ -930,8 +946,8 @@ where
         Ok(total)
     }
 
-    /// Computes the total $C_{+}(\omega)$ and $C_{\times}(\omega)$ by summing contributions from selected bubbles:
-    /// $$
+    /// Computes the total $C_{+}(\omega)$ and $C_{\times}(\omega)$ by summing
+    /// contributions from selected bubbles: $$
     /// C_{\pm}(\omega) = \sum_{n \in \text{selected}} C_{n,\pm}(\omega),
     /// $$
     /// where $C_{n,\pm}$ are computed via `compute_c_integral_fixed_bubble`.
@@ -998,9 +1014,10 @@ where
     }
 }
 
-/// Determines if bubble $c$ blocks the collision between bubbles $a$ and $b$ along direction $\hat{x}$,
-/// by verifying whether the collision event of $a$–$b$ lies outside the lightcone of $a$–$c$.
-/// Returns `true` iff $b$ is the *first* colliding bubble along $\hat{x}$.
+/// Determines if bubble $c$ blocks the collision between bubbles $a$ and $b$
+/// along direction $\hat{x}$, by verifying whether the collision event of
+/// $a$–$b$ lies outside the lightcone of $a$–$c$. Returns `true` iff $b$ is the
+/// *first* colliding bubble along $\hat{x}$.
 pub fn check_collision_point(
     delta_ba: &Vector4<f64>,
     delta_ca: &Vector4<f64>,

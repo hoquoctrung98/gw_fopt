@@ -1,12 +1,14 @@
-use super::GeneralLatticeProperties;
-use crate::many_bubbles::lattice_bubbles::LatticeBubbles;
 use nalgebra::{Point3, Vector4};
 use nalgebra_spacetime::Lorentzian;
 use ndarray::Array2;
-use rand::{Rng, rngs::StdRng};
+use rand::Rng;
+use rand::rngs::StdRng;
 
-/// Nucleation strategy with fixed exponential nucleation rate per unit volume-time:
-/// Γ(t) = γ₀ · exp(β (t − t₀))
+use super::GeneralLatticeProperties;
+use crate::many_bubbles::lattice_bubbles::LatticeBubbles;
+
+/// Nucleation strategy with fixed exponential nucleation rate per unit
+/// volume-time: Γ(t) = γ₀ · exp(β (t − t₀))
 ///
 /// At each call, nucleates *zero or one* bubble, advancing time implicitly via
 /// dt = d_p0 / (Γ(t) · V_rem(t)).
@@ -28,7 +30,8 @@ pub struct FixedNucleationRate {
 
 impl FixedNucleationRate {
     /// Compute remaining volume: V_lattice − Σ V_bubble(t)
-    /// Approximation: V_bubble(t) = (4π/3) (t − t_n)³ for bubble nucleated at t_n.
+    /// Approximation: V_bubble(t) = (4π/3) (t − t_n)³ for bubble nucleated at
+    /// t_n.
     pub fn volume_remaining<L: GeneralLatticeProperties>(
         &self,
         lattice_bubbles: &LatticeBubbles<L>,
@@ -77,8 +80,9 @@ impl FixedNucleationRate {
         true
     }
 
-    /// Sample a point uniformly in lattice, rejecting if inside existing bubbles.
-    /// Returns `Some(point)` on success, `None` if too many attempts or no volume left.
+    /// Sample a point uniformly in lattice, rejecting if inside existing
+    /// bubbles. Returns `Some(point)` on success, `None` if too many
+    /// attempts or no volume left.
     pub fn sample_valid_point<L: GeneralLatticeProperties>(
         &self,
         lattice_bubbles: &LatticeBubbles<L>,

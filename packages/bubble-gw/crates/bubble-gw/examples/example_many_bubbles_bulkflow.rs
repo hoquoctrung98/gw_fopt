@@ -1,10 +1,14 @@
+use std::error::Error;
+
 use bubble_gw::many_bubbles_legacy::bubbles::LatticeBubbles;
 use bubble_gw::many_bubbles_legacy::bulk_flow::{BulkFlow, BulkFlowError};
 use bubble_gw::many_bubbles_legacy::lattice::{
-    BoundaryConditions, Lattice, LatticeType, generate_bubbles_exterior,
+    BoundaryConditions,
+    Lattice,
+    LatticeType,
+    generate_bubbles_exterior,
 };
 use ndarray::prelude::*;
-use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let bubbles_interior = arr2(&[

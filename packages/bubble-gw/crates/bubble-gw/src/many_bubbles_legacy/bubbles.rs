@@ -1,7 +1,8 @@
+use std::path::Path;
+
 use csv::{ReaderBuilder, Writer};
 use ndarray::prelude::*;
 use ndarray_csv::{Array2Reader, Array2Writer, ReadError};
-use std::path::Path;
 use thiserror::Error;
 
 #[inline]
@@ -21,7 +22,8 @@ pub fn dot_minkowski_vec(v1: &ArrayRef1<f64>, v2: &ArrayRef1<f64>) -> f64 {
     sum
 }
 
-/// Represents a bubble index, distinguishing between an interior index, exterior index, and no collision.
+/// Represents a bubble index, distinguishing between an interior index,
+/// exterior index, and no collision.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum BubbleIndex {
     Interior(usize),
@@ -100,8 +102,8 @@ pub fn check_bubble_formed_inside_bubble(
     //     for b_ex in (a_ex + 1)..n_exterior {
     //         let delta_ba = bubbles_exterior.slice(s![b_ex, ..]).to_owned()
     //             - bubbles_exterior.slice(s![a_ex, ..]).to_owned();
-    //         let delta_ba_squared = dot_minkowski_vec(delta_ba.view(), delta_ba.view());
-    //         if delta_ba_squared < 0.0 {
+    //         let delta_ba_squared = dot_minkowski_vec(delta_ba.view(),
+    // delta_ba.view());         if delta_ba_squared < 0.0 {
     //             return Err(BubblesError::BubbleFormedInsideBubble {
     //                 a: BubbleIndex::Exterior(a_ex),
     //                 b: BubbleIndex::Exterior(b_ex),
@@ -231,15 +233,17 @@ impl LatticeBubbles {
         })
     }
 
-    /// Create a new `Bubbles` instance by reading interior and exterior bubbles from CSV files.
+    /// Create a new `Bubbles` instance by reading interior and exterior bubbles
+    /// from CSV files.
     ///
-    /// Each CSV file must have exactly 4 columns: `t,x,y,z` (formation time first).
-    /// No header row is required or expected.
+    /// Each CSV file must have exactly 4 columns: `t,x,y,z` (formation time
+    /// first). No header row is required or expected.
     ///
     /// # Arguments
     /// * `interior_path` - Path to CSV with real (interior) bubbles
     /// * `exterior_path` - Path to CSV with periodic image (exterior) bubbles
-    /// * `sort_by_time`  - Whether to sort bubbles by formation time after loading
+    /// * `sort_by_time`  - Whether to sort bubbles by formation time after
+    ///   loading
     ///
     /// # Returns
     /// `Ok(Bubbles)` on success, or a descriptive error
@@ -259,7 +263,8 @@ impl LatticeBubbles {
     ///
     /// # Arguments
     /// - `path`: Path to CSV file
-    /// - `has_headers`: Set to `true` if the file has a header row (will be skipped)
+    /// - `has_headers`: Set to `true` if the file has a header row (will be
+    ///   skipped)
     ///
     /// # Returns
     /// `Array2<f64>` with shape `(n_bubbles, 4)` → [t, x, y, z]
@@ -328,8 +333,8 @@ impl LatticeBubbles {
         Ok(())
     }
 
-    /// Add new interior bubbles, optionally checking causality only if requested.
-    /// This is much faster when adding many safe bubbles.
+    /// Add new interior bubbles, optionally checking causality only if
+    /// requested. This is much faster when adding many safe bubbles.
     pub fn add_interior_bubbles(
         &mut self,
         new_bubbles: Bubbles,
@@ -437,7 +442,8 @@ impl LatticeBubbles {
         Ok(())
     }
 
-    /// Add new exterior (periodic image) bubbles, optionally skipping causality checks.
+    /// Add new exterior (periodic image) bubbles, optionally skipping causality
+    /// checks.
     pub fn add_exterior_bubbles(
         &mut self,
         new_bubbles: Bubbles,

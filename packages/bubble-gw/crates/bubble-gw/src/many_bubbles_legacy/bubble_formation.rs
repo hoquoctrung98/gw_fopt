@@ -1,11 +1,17 @@
-use crate::many_bubbles_legacy::{
-    bubbles::{BubblesError, LatticeBubbles},
-    lattice::{BoundaryConditions, Lattice, LatticeType, generate_bubbles_exterior},
-};
-use ndarray::Array2;
-use rand::{Rng, SeedableRng, random, rngs::StdRng};
-use rayon::prelude::*;
 use std::borrow::Borrow;
+
+use ndarray::Array2;
+use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng, random};
+use rayon::prelude::*;
+
+use crate::many_bubbles_legacy::bubbles::{BubblesError, LatticeBubbles};
+use crate::many_bubbles_legacy::lattice::{
+    BoundaryConditions,
+    Lattice,
+    LatticeType,
+    generate_bubbles_exterior,
+};
 
 /// Enum representing the reason why the simulation stopped.
 #[derive(Debug, Clone, PartialEq)]
@@ -16,19 +22,22 @@ pub enum SimulationEndStatus {
         volume_remaining_fraction: f64,
         time_iteration: usize,
     },
-    /// The simulation stopped because the remaining volume fraction fell below `min_volume_remaining_fraction`.
+    /// The simulation stopped because the remaining volume fraction fell below
+    /// `min_volume_remaining_fraction`.
     VolumeFractionReached {
         t_end: f64,
         volume_remaining_fraction: f64,
         time_iteration: usize,
     },
-    /// The simulation stopped because the maximum number of iterations was reached.
+    /// The simulation stopped because the maximum number of iterations was
+    /// reached.
     MaxTimeIterationsReached {
         t_end: f64,
         volume_remaining_fraction: f64,
         time_iteration: usize,
     },
-    /// The simulation stopped because the remaining volume is below the threshold (1e-6) or no valid points remain.
+    /// The simulation stopped because the remaining volume is below the
+    /// threshold (1e-6) or no valid points remain.
     VolumeDepleted {
         t_end: f64,
         volume_remaining_fraction: f64,
@@ -106,7 +115,8 @@ impl PoissonNucleation {
         })
     }
 
-    /// Checks if a point is valid for nucleation by ensuring it is not inside existing bubbles.
+    /// Checks if a point is valid for nucleation by ensuring it is not inside
+    /// existing bubbles.
     ///
     /// # Arguments
     ///
@@ -117,7 +127,8 @@ impl PoissonNucleation {
     ///
     /// # Returns
     ///
-    /// * `true` if the point is outside all existing bubbles, `false` otherwise.
+    /// * `true` if the point is outside all existing bubbles, `false`
+    ///   otherwise.
     fn is_point_valid(&self, point: &[f64], t: f64, existing_bubbles: &[Bubble], vw: f64) -> bool {
         for bubble in existing_bubbles {
             let tn = bubble.time;
@@ -196,13 +207,15 @@ impl ManualNucleation {
     ///
     /// # Arguments
     ///
-    /// * `schedule` - A vector of tuples `(time, centers)`, where `centers` is a list of `[x, y, z]` coordinates.
+    /// * `schedule` - A vector of tuples `(time, centers)`, where `centers` is
+    ///   a list of `[x, y, z]` coordinates.
     /// * `dt` - The time step for advancing the simulation (must be positive).
     ///
     /// # Returns
     ///
     /// * `Ok(ManualNucleation)` - A new instance.
-    /// * `Err(String)` - If the schedule is empty, `dt <= 0`, or any nucleation time is negative.
+    /// * `Err(String)` - If the schedule is empty, `dt <= 0`, or any nucleation
+    ///   time is negative.
     pub fn new(schedule: Vec<(f64, Vec<[f64; 3]>)>, dt: f64) -> Result<Self, String> {
         if schedule.is_empty() {
             return Err("Manual nucleation requires a non-empty schedule".to_string());
@@ -349,7 +362,8 @@ pub struct BubbleFormationSimulator<S: NucleationStrategy> {
     outside_points: Vec<usize>,
     /// Random number generator for reproducibility.
     rng: StdRng,
-    /// History of volume remaining over time as `(dt, volume_remaining)` tuples.
+    /// History of volume remaining over time as `(dt, volume_remaining)`
+    /// tuples.
     volume_history: Vec<(f64, f64)>,
     /// The status indicating why the simulation stopped.
     pub end_status: Option<SimulationEndStatus>,
@@ -368,7 +382,8 @@ impl<S: NucleationStrategy> BubbleFormationSimulator<S> {
     /// # Returns
     ///
     /// * `Ok(BubbleFormationSimulator)` - A new simulator instance.
-    /// * `Err(String)` - If `vw` is invalid or the nucleation strategy fails validation.
+    /// * `Err(String)` - If `vw` is invalid or the nucleation strategy fails
+    ///   validation.
     pub fn new(lattice: Lattice, vw: f64, strategy: S, seed: Option<u64>) -> Result<Self, String> {
         if vw <= 0.0 || vw > 1.0 {
             return Err("Wall velocity must be in (0, 1]".to_string());
@@ -420,22 +435,26 @@ impl<S: NucleationStrategy> BubbleFormationSimulator<S> {
         self.rng = StdRng::seed_from_u64(seed);
     }
 
-    /// Validates the simulation setup, ensuring manual nucleation centers do not overlap.
+    /// Validates the simulation setup, ensuring manual nucleation centers do
+    /// not overlap.
     ///
     /// # Returns
     ///
     /// * `Ok(())` - If the setup is valid.
-    /// * `Err(String)` - If any manual nucleation centers overlap with existing bubbles.
+    /// * `Err(String)` - If any manual nucleation centers overlap with existing
+    ///   bubbles.
     fn validate(&self) -> Result<(), String> {
         self.strategy
             .validate_schedule(&self.lattice, self.params.vw)
     }
 
-    /// Updates the mask of points outside bubbles based on new bubbles at time `t`.
+    /// Updates the mask of points outside bubbles based on new bubbles at time
+    /// `t`.
     ///
     /// # Arguments
     ///
-    /// * `new_bubbles` - A vector of tuples `(center, nucleation_time)` for new bubbles.
+    /// * `new_bubbles` - A vector of tuples `(center, nucleation_time)` for new
+    ///   bubbles.
     /// * `t` - The current simulation time.
     fn update_outside_mask(&mut self, new_bubbles: &Vec<([f64; 3], f64)>, t: f64) {
         if new_bubbles.is_empty() {
@@ -476,14 +495,17 @@ impl<S: NucleationStrategy> BubbleFormationSimulator<S> {
         self.params.last_update_time = t;
     }
 
-    /// Runs the bubble formation simulation until the specified termination conditions.
+    /// Runs the bubble formation simulation until the specified termination
+    /// conditions.
     ///
     /// # Arguments
     ///
     /// * `t_end` - An optional maximum simulation time.
-    /// * `min_volume_remaining_fraction` - An optional minimum fraction of the total volume.
-    ///   Defaults to 0.0 if not provided. The simulation stops if the remaining volume falls below this fraction.
-    /// * `max_time_iterations` - An optional maximum number of time iterations for Poisson nucleation.
+    /// * `min_volume_remaining_fraction` - An optional minimum fraction of the
+    ///   total volume. Defaults to 0.0 if not provided. The simulation stops if
+    ///   the remaining volume falls below this fraction.
+    /// * `max_time_iterations` - An optional maximum number of time iterations
+    ///   for Poisson nucleation.
     ///
     /// The simulation's end status is stored in the `end_status` field.
     pub fn run_simulation(
@@ -579,15 +601,18 @@ impl<S: NucleationStrategy> BubbleFormationSimulator<S> {
         self.params.volume_remaining
     }
 
-    /// Returns the valid grid points not yet consumed by bubbles at the specified time.
+    /// Returns the valid grid points not yet consumed by bubbles at the
+    /// specified time.
     ///
     /// # Arguments
     ///
-    /// * `t` - An optional time to evaluate valid points. If `None`, uses the last update time.
+    /// * `t` - An optional time to evaluate valid points. If `None`, uses the
+    ///   last update time.
     ///
     /// # Returns
     ///
-    /// An `Array2<f64>` with shape `(N, 3)`, where each row is a valid point `[x, y, z]`.
+    /// An `Array2<f64>` with shape `(N, 3)`, where each row is a valid point
+    /// `[x, y, z]`.
     pub fn get_valid_points(&mut self, t: f64) -> Array2<f64> {
         let last_t = self.params.last_update_time;
         let valid_coords: Vec<[f64; 3]>;
@@ -669,7 +694,8 @@ impl<S: NucleationStrategy> BubbleFormationSimulator<S> {
     /// Updates and returns the remaining volume based on valid points.
     ///
     /// The remaining volume is calculated as:
-    /// \( V_{\text{remaining}} = V_{\text{total}} \times \frac{\text{number of valid points}}{\text{total grid points}} \).
+    /// \( V_{\text{remaining}} = V_{\text{total}} \times \frac{\text{number of
+    /// valid points}}{\text{total grid points}} \).
     ///
     /// # Arguments
     ///
@@ -684,7 +710,8 @@ impl<S: NucleationStrategy> BubbleFormationSimulator<S> {
         self.params.volume_remaining
     }
 
-    /// Identifies bubbles that intersect the lattice boundaries at the specified time.
+    /// Identifies bubbles that intersect the lattice boundaries at the
+    /// specified time.
     ///
     /// # Arguments
     ///
@@ -692,7 +719,8 @@ impl<S: NucleationStrategy> BubbleFormationSimulator<S> {
     ///
     /// # Returns
     ///
-    /// A vector of tuples `(index, nucleation_time)` for bubbles intersecting the boundaries.
+    /// A vector of tuples `(index, nucleation_time)` for bubbles intersecting
+    /// the boundaries.
     pub fn boundary_intersecting_bubbles(&self, t: f64) -> Vec<(usize, f64)> {
         let mut boundary_bubbles = Vec::new();
         for (i, bubble) in self.bubbles_interior.iter().enumerate() {
@@ -715,14 +743,14 @@ impl<S: NucleationStrategy> BubbleFormationSimulator<S> {
                     {
                         boundary_bubbles.push((i, tn));
                     }
-                }
+                },
                 LatticeType::Sphere { radius } => {
                     let center_dist = (x * x + y * y + z * z).sqrt();
                     let max_radius = radius - center_dist;
                     if max_radius < 0.0 || radius > max_radius {
                         boundary_bubbles.push((i, tn));
                     }
-                }
+                },
             }
         }
         boundary_bubbles
@@ -765,7 +793,8 @@ impl<S: NucleationStrategy> BubbleFormationSimulator<S> {
     ///
     /// # Returns
     ///
-    /// An `Array2<f64>` with shape `(N, 4)`, where each row is `[time, x, y, z]`.
+    /// An `Array2<f64>` with shape `(N, 4)`, where each row is `[time, x, y,
+    /// z]`.
     pub fn bubbles_interior(&self) -> Array2<f64> {
         let num_bubbles = self.bubbles_interior.len();
         if num_bubbles == 0 {

@@ -1,18 +1,22 @@
-use crate::many_bubbles::bubbles::Bubbles;
-use crate::many_bubbles::bubbles_nucleation::NucleationError;
-use crate::many_bubbles::bubbles_nucleation::NucleationStrategy;
-use crate::many_bubbles::lattice::GeneralLatticeProperties;
-use crate::many_bubbles::lattice::{BoundaryConditions, TransformationIsometry3};
+use std::path::Path;
 
 use csv::{ReaderBuilder, Writer};
 use nalgebra::{DMatrix, Point3, Vector3, Vector4};
 use nalgebra_spacetime::Lorentzian;
 use ndarray::prelude::*;
 use ndarray_csv::{Array2Reader, Array2Writer, ReadError};
-use std::path::Path;
 use thiserror::Error;
 
-/// Represents a bubble index, distinguishing between an interior index, exterior index, and no collision.
+use crate::many_bubbles::bubbles::Bubbles;
+use crate::many_bubbles::bubbles_nucleation::{NucleationError, NucleationStrategy};
+use crate::many_bubbles::lattice::{
+    BoundaryConditions,
+    GeneralLatticeProperties,
+    TransformationIsometry3,
+};
+
+/// Represents a bubble index, distinguishing between an interior index,
+/// exterior index, and no collision.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum BubbleIndex {
     Interior(usize),
@@ -96,8 +100,8 @@ pub fn check_bubble_formed_inside_bubble(
     //     for b_ex in (a_ex + 1)..n_exterior {
     //         let delta_ba = bubbles_exterior.slice(s![b_ex, ..]).to_owned()
     //             - bubbles_exterior.slice(s![a_ex, ..]).to_owned();
-    //         let delta_ba_squared = dot_minkowski_vec(delta_ba.view(), delta_ba.view());
-    //         if delta_ba_squared < 0.0 {
+    //         let delta_ba_squared = dot_minkowski_vec(delta_ba.view(),
+    // delta_ba.view());         if delta_ba_squared < 0.0 {
     //             return Err(BubblesError::BubbleFormedInsideBubble {
     //                 a: BubbleIndex::Exterior(a_ex),
     //                 b: BubbleIndex::Exterior(b_ex),
@@ -191,8 +195,8 @@ impl<L> LatticeBubbles<L>
 where
     L: GeneralLatticeProperties + Clone,
 {
-    /// Creates a new `LatticeBubbles` with an empty set of interior and exterior bubbles.
-    /// `delta` and `delta_squared` are 0×0 matrices.
+    /// Creates a new `LatticeBubbles` with an empty set of interior and
+    /// exterior bubbles. `delta` and `delta_squared` are 0×0 matrices.
     /// Use `set_bubbles` or `with_bubbles` to populate data later.
     pub fn new(lattice: L) -> Self {
         let empty_spacetime = Vec::new();
@@ -205,13 +209,14 @@ where
         }
     }
 
-    /// Constructs a new `LatticeBubbles` by validating and processing given interior and exterior bubbles.
-    /// Checks:
+    /// Constructs a new `LatticeBubbles` by validating and processing given
+    /// interior and exterior bubbles. Checks:
     /// - Shape: both arrays must be `(n, 4)` → `[t, x, y, z]`
     /// - Lattice containment: interior ⊆ lattice, exterior ∩ lattice = ∅
     /// - Causality: no bubble formed inside another’s past lightcone
     /// - (Optionally) sorts bubbles by nucleation time `t` (column 0)
-    /// Precomputes pairwise spacetime intervals `delta` and Minkowski norms `delta_squared`.
+    /// Precomputes pairwise spacetime intervals `delta` and Minkowski norms
+    /// `delta_squared`.
     pub fn with_bubbles(
         bubbles_interior: Array2<f64>,
         bubbles_exterior: Array2<f64>,
@@ -283,19 +288,19 @@ where
         for a_idx in 0..n_interior {
             // Interior–Interior (symmetric)
             for b_idx in a_idx..n_interior {
-                let da = &int_vecs[b_idx] - &int_vecs[a_idx];
-                let dsq = da.scalar(&da);
-                delta[(a_idx, b_idx)] = da;
-                delta_squared[(a_idx, b_idx)] = dsq;
-                delta[(b_idx, a_idx)] = -da;
-                delta_squared[(b_idx, a_idx)] = dsq;
+                let delta_ab = &int_vecs[b_idx] - &int_vecs[a_idx];
+                let delta_squared_ab = delta_ab.scalar(&delta_ab);
+                delta[(a_idx, b_idx)] = delta_ab;
+                delta_squared[(a_idx, b_idx)] = delta_squared_ab;
+                delta[(b_idx, a_idx)] = -delta_ab;
+                delta_squared[(b_idx, a_idx)] = delta_squared_ab;
             }
             // Interior–Exterior
             for b_ex in 0..n_exterior {
                 let b_total = n_interior + b_ex;
-                let da = &ext_vecs[b_ex] - &int_vecs[a_idx];
-                delta[(a_idx, b_total)] = da;
-                delta_squared[(a_idx, b_total)] = da.scalar(&da);
+                let delta_ab = &ext_vecs[b_ex] - &int_vecs[a_idx];
+                delta[(a_idx, b_total)] = delta_ab;
+                delta_squared[(a_idx, b_total)] = delta_ab.scalar(&delta_ab);
             }
         }
 
@@ -338,36 +343,14 @@ where
         let mut delta = DMatrix::from_element(n_interior, n_total_new, Vector4::zeros());
         let mut delta_squared = DMatrix::zeros(n_interior, n_total_new);
 
-        // // Copy old interior–interior block (upper-left n_interior × n_interior)
-        // // Since interior didn't change, this block is still valid
-        // for a in 0..n_interior {
-        //     for b in 0..n_interior {
-        //         delta[(a, b)] = self.delta[(a, b)];
-        //         delta_squared[(a, b)] = self.delta_squared[(a, b)];
-        //     }
-        // }
-        //
-        // // Recompute interior–exterior block: for each interior a, exterior e
-        // let int_vecs = &self.interior.spacetime;
-        // let ext_vecs = &self.exterior.spacetime;
-        //
-        // for a in 0..n_interior {
-        //     for e in 0..n_exterior {
-        //         let b_total = n_interior + e;
-        //         let da = &ext_vecs[e] - &int_vecs[a]; // Vector4
-        //         delta[(a, b_total)] = da;
-        //         delta_squared[(a, b_total)] = da.scalar(&da);
-        //     }
-        // }
-        // Pre-extract bubble positions as slices of Vector4 for fast access
-        let int_vecs = &self.interior.spacetime;
-        let ext_vecs = &self.exterior.spacetime;
+        let interior_spacetime = &self.interior.spacetime;
+        let exterior_spacetime = &self.exterior.spacetime;
 
         // Compute delta and delta_squared
         for a_idx in 0..n_interior {
             // Interior → Interior (a_idx to b_idx)
             for b_idx in a_idx..n_interior {
-                let da = &int_vecs[b_idx] - &int_vecs[a_idx]; // Vector4 - Vector4 → Vector4
+                let da = &interior_spacetime[b_idx] - &interior_spacetime[a_idx];
                 delta[(a_idx, b_idx)] = da;
                 let dsq = da.scalar(&da);
                 delta_squared[(a_idx, b_idx)] = dsq;
@@ -379,7 +362,7 @@ where
             // Interior → Exterior
             for b_ex in 0..n_exterior {
                 let b_total = n_interior + b_ex;
-                let da = &ext_vecs[b_ex] - &int_vecs[a_idx];
+                let da = &exterior_spacetime[b_ex] - &interior_spacetime[a_idx];
                 delta[(a_idx, b_total)] = da;
                 delta_squared[(a_idx, b_total)] = da.scalar(&da);
             }
@@ -390,8 +373,9 @@ where
         self.delta_squared = delta_squared;
     }
 
-    /// Sorts the interior and exterior bubbles in-place by nucleation time `t` (column 0).
-    /// Uses stable sort to preserve relative order for equal times.
+    /// Sorts the interior and exterior bubbles in-place by nucleation time `t`
+    /// (column 0). Uses stable sort to preserve relative order for equal
+    /// times.
     pub fn sort_by_time(&mut self) {
         // Sort interior
         if !self.interior.spacetime.is_empty() {
@@ -420,25 +404,25 @@ where
         let mut delta = DMatrix::from_element(n_interior, n_total, Vector4::zeros());
         let mut delta_squared = DMatrix::zeros(n_interior, n_total);
 
-        let int_vecs = &self.interior.spacetime;
-        let ext_vecs = &self.exterior.spacetime;
+        let interior_spacetime = &self.interior.spacetime;
+        let exterior_spacetime = &self.exterior.spacetime;
 
         for a_idx in 0..n_interior {
             // Interior–Interior (symmetric)
             for b_idx in a_idx..n_interior {
-                let da = &int_vecs[b_idx] - &int_vecs[a_idx];
-                let dsq = da.scalar(&da);
-                delta[(a_idx, b_idx)] = da;
-                delta_squared[(a_idx, b_idx)] = dsq;
-                delta[(b_idx, a_idx)] = -da;
-                delta_squared[(b_idx, a_idx)] = dsq;
+                let delta_ab = &interior_spacetime[b_idx] - &interior_spacetime[a_idx];
+                let delta_squared_ab = delta_ab.scalar(&delta_ab);
+                delta[(a_idx, b_idx)] = delta_ab;
+                delta_squared[(a_idx, b_idx)] = delta_squared_ab;
+                delta[(b_idx, a_idx)] = -delta_ab;
+                delta_squared[(b_idx, a_idx)] = delta_squared_ab;
             }
             // Interior–Exterior
             for b_ex in 0..n_exterior {
                 let b_total = n_interior + b_ex;
-                let da = &ext_vecs[b_ex] - &int_vecs[a_idx];
-                delta[(a_idx, b_total)] = da;
-                delta_squared[(a_idx, b_total)] = da.scalar(&da);
+                let delta_ab = &exterior_spacetime[b_ex] - &interior_spacetime[a_idx];
+                delta[(a_idx, b_total)] = delta_ab;
+                delta_squared[(a_idx, b_total)] = delta_ab.scalar(&delta_ab);
             }
         }
 
@@ -446,17 +430,20 @@ where
         self.delta_squared = delta_squared;
     }
 
-    /// In-place nucleation: **replaces** current interior/exterior bubbles with those returned by the strategy.
+    /// In-place nucleation: **replaces** current interior/exterior bubbles with
+    /// those returned by the strategy.
     ///
     /// # Steps
-    /// 1. Call `strategy.nucleate(self, boundary_condition)` → `(new_interior, new_exterior)`.
+    /// 1. Call `strategy.nucleate(self, boundary_condition)` → `(new_interior,
+    ///    new_exterior)`.
     /// 2. Validate containment:
     ///    - All interior points ∈ lattice
     ///    - All exterior points ∉ lattice (unless `boundary_condition == None`)
     /// 3. Rebuild via `with_bubbles` (which also checks causality).
     ///
     /// # Note
-    /// - Previous bubbles are **discarded** — useful for resetting or time-stepping.
+    /// - Previous bubbles are **discarded** — useful for resetting or
+    ///   time-stepping.
     pub fn nucleate_and_update<N: NucleationStrategy<L>>(
         &mut self,
         strategy: N,
@@ -531,15 +518,17 @@ where
         Ok(())
     }
 
-    /// Create a new `Bubbles` instance by reading interior and exterior bubbles from CSV files.
+    /// Create a new `Bubbles` instance by reading interior and exterior bubbles
+    /// from CSV files.
     ///
-    /// Each CSV file must have exactly 4 columns: `t,x,y,z` (formation time first).
-    /// No header row is required or expected.
+    /// Each CSV file must have exactly 4 columns: `t,x,y,z` (formation time
+    /// first). No header row is required or expected.
     ///
     /// # Arguments
     /// * `interior_path` - Path to CSV with real (interior) bubbles
     /// * `exterior_path` - Path to CSV with periodic image (exterior) bubbles
-    /// * `sort_by_time`  - Whether to sort bubbles by formation time after loading
+    /// * `sort_by_time`  - Whether to sort bubbles by formation time after
+    ///   loading
     ///
     /// # Returns
     /// `Ok(Bubbles)` on success, or a descriptive error
@@ -559,7 +548,8 @@ where
     ///
     /// # Arguments
     /// - `path`: Path to CSV file
-    /// - `has_headers`: Set to `true` if the file has a header row (will be skipped)
+    /// - `has_headers`: Set to `true` if the file has a header row (will be
+    ///   skipped)
     ///
     /// # Returns
     /// `Array2<f64>` with shape `(n_bubbles, 4)` → [t, x, y, z]

@@ -1,6 +1,7 @@
-use crate::many_bubbles::lattice::TransformationIsometry3;
 use nalgebra::{Vector3, Vector4};
 use ndarray::prelude::*;
+
+use crate::many_bubbles::lattice::TransformationIsometry3;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Bubbles {

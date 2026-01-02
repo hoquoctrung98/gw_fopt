@@ -1,6 +1,12 @@
 use bubble_gw::many_bubbles::lattice::{
-    BuiltInLattice, CartesianLattice, EmptyLattice, LatticeError, LatticeGeometry,
-    ParallelepipedLattice, SphericalLattice, TransformationIsometry3,
+    BuiltInLattice,
+    CartesianLattice,
+    EmptyLattice,
+    LatticeError,
+    LatticeGeometry,
+    ParallelepipedLattice,
+    SphericalLattice,
+    TransformationIsometry3,
 };
 use nalgebra::{Point3, Vector3};
 use pyo3::exceptions::PyValueError;
