@@ -6,7 +6,7 @@ pub mod py_two_bubbles;
 pub mod py_utils;
 
 #[pymodule]
-#[pyo3(name = "bubble_gw")]
+#[pyo3(name = "bubble_gw_python")]
 fn bubble_gw(py: Python, module_parent: &Bound<'_, PyModule>) -> PyResult<()> {
     let module_two_bubbles = PyModule::new(module_parent.py(), "two_bubbles")?;
     module_two_bubbles.add_class::<py_two_bubbles::py_gw_calc::PyGravitationalWaveCalculator>()?;

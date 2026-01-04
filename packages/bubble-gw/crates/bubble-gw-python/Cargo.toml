@@ -9,7 +9,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [lib]
-name = "bubble_gw"
+name = "bubble_gw_python"
 crate-type = ["cdylib", "lib"]
 
 [dependencies]

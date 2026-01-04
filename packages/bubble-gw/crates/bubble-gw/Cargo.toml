@@ -29,4 +29,5 @@ nalgebra-spacetime = "0.5.0"
 approx = { version = "0.5.1", features = ["num-complex"] }
 
 [lib]
-crate-type = ["cdylib", "lib"]
+# crate-type = ["cdylib", "lib"]
+crate-type = ["lib"]
