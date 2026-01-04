@@ -125,6 +125,7 @@ impl From<PyBulkFlowError> for PyErr {
 type PyResult<T> = Result<T, PyBulkFlowError>;
 
 #[pyclass(name = "GeneralizedBulkFlow")]
+/// GeneralizedBulkFlow approximation
 pub struct PyGeneralizedBulkFlow {
     inner: GeneralizedBulkFlow<BuiltInLattice>,
 }
