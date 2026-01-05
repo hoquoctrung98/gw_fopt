@@ -1,5 +1,5 @@
 [package]
-name = "bubble-gw-python"
+name = "py-bubble-gw"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -9,7 +9,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [lib]
-name = "bubble_gw_python"
+name = "py_bubble_gw"
 crate-type = ["cdylib", "lib"]
 
 [dependencies]

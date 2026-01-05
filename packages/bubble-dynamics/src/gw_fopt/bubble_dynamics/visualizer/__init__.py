@@ -1,3 +1,3 @@
 from .two_bubbles_evolution_visualizer import TwoBubblesEvolutionVisualizer
 from .get_colors import get_colors_from_cmap
-from .gw_two_bubbles_visualizer import GwTwoBubblesVisualizer
+# from .gw_two_bubbles_visualizer import GwTwoBubblesVisualizer

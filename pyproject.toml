@@ -1,6 +1,6 @@
 name = "gw-fopt"
 version = "0.1.0"
-description = "Fast gravitational wave calculation from bubble collisions in first-order phase transitions"
+description = "Gravitational Wave background sourced by bubble collisions in First Order Phase Transitions"
 license = { text = "MIT OR Apache-2.0" }
 readme = "README.md"
 authors = [
@@ -10,13 +10,9 @@ requires-python = ">=3.13,<3.14"
 
 [tool.uv.workspace]
 members = [
+    "packages/bubble-gw/python",
     "packages/bubble-dynamics",
-    "packages/bubble-gw",
 ]
-
-[tool.uv.sources]
-bubble-dynamics = { workspace = true, editable = true }
-bubble-gw = { workspace = true, editable = true }
 
 [build-system]
 requires = ["uv_build>=0.9.8,<0.10.0", "maturin>=1.9,<2.0"]

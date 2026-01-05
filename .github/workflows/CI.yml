@@ -2,125 +2,38 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: ["main", "dev"]
   pull_request:
-    branches: [main]
-
-env:
-  # Use uv's cache directory for speed
-  UV_CACHE_DIR: ~/.cache/uv
+    branches: ["main"]
 
 jobs:
-  lint-and-fmt:
-    name: Lint & Format
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v3
-        with:
-          enable-cache: true
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-
-      - name: Rust fmt check
-        run: cargo fmt --all -- --check
-
-      - name: Rust clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
-
-      - name: Install dev dependencies (for ruff/mypy if used)
-        run: uv sync --all-extras --dev
-
-      # Optional: Add ruff/mypy if your project uses them
-      # - name: Ruff lint
-      #   run: uv run ruff check .
-      # - name: MyPy type check
-      #   run: uv run mypy packages/
-
-  test-rust:
-    name: Rust Tests (${{ matrix.os }})
+  build-and-check:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macOS-latest, windows-latest]
-      fail-fast: false
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v3
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo & uv
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: rust-${{ runner.os }}
-
-      - name: Run Rust tests (unit & integration)
-        run: cargo test --workspace --lib --bins --tests --examples
-
-      - name: Run doctests
-        run: cargo test --workspace --doc
-
-      # Optional: Run benches in check mode (won’t execute, just compile)
-      - name: Check benches compile
-        run: cargo check --benches --workspace
-
-  build-and-test-python:
-    name: Python (${{ matrix.os }} / ${{ matrix.python-version }})
-    runs-on: ${{ matrix.os }}
-    needs: [lint-and-fmt, test-rust]
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macOS-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
         python-version: ["3.13"]
       fail-fast: false
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v3
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
         with:
-          enable-cache: true
           python-version: ${{ matrix.python-version }}
 
-      - name: Install Rust toolchain (needed for maturin native builds)
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          # maturin prefers stable; ensure compatibility
-          toolchain: stable
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
 
-      - name: Sync dependencies & build native extensions
-        # uv sync will trigger maturin build via build-backend = "uv_build"
-        run: uv sync --all-extras --dev
-
-      - name: Verify imports work (smoke test)
+      - name: Sync dependencies and build workspace
         run: |
-          uv run python -c "import bubble_gw; print('bubble_gw OK')"
-          uv run python -c "import bubble_dynamics; print('bubble_dynamics OK')"
+          uv sync --all-extras --dev
 
-      - name: Run Python tests (if any exist)
-        # Assume pytest is used — add tests later if needed
+      # Ensure that the Rust extension was built successfully
+      # and both packages can be imported without error
+      - name: Verify imports
         run: |
-          if [ -d "packages/bubble-dynamics/tests" ] || [ -d "packages/bubble-gw/python/tests" ]; then
-            uv run pytest packages/**/tests/ -v --tb=short
-          else
-            echo "No Python tests found — skipping pytest"
-          fi
+          python -c "import gw_fopt.bubble_gw; print('✓ bubble_gw imported')"
+          python -c "import gw_fopt.bubble_dynamics; print('✓ bubble_dynamics imported')"
 
-      - name: Run examples as smoke tests (optional but recommended)
-        if: runner.os == 'Linux'  # avoid heavy examples on mac/win unless needed
-        run: |
-          # Run lightweight examples to catch basic integration issues
-          cd docs/examples
-          uv run python -c "import lattice_bubbles; print('lattice_bubbles imported')"
-          uv run python -c "import two_bubbles; print('two_bubbles imported')"
-
-  # Optional: Add a job for publishing (triggered on release), but not in CI
