@@ -3,10 +3,10 @@ use thiserror::Error;
 
 use crate::many_bubbles::lattice::{BoundaryConditions, GeneralLatticeProperties};
 use crate::many_bubbles::lattice_bubbles::LatticeBubbles;
-pub mod fixed_nucleation_rate;
-pub use fixed_nucleation_rate::FixedNucleationRate;
-pub mod uniform_at_fixed_time;
-pub use uniform_at_fixed_time::UniformAtFixedTime;
+pub mod fixed_rate_nucleation;
+pub use fixed_rate_nucleation::FixedRateNucleation;
+pub mod spontaneous_nucleation;
+pub use spontaneous_nucleation::SpontaneousNucleation;
 
 #[derive(Error, Debug)]
 pub enum NucleationError {

@@ -37,6 +37,8 @@ fn bubble_gw(py: Python, module_parent: &Bound<'_, PyModule>) -> PyResult<()> {
     module_many_bubbles.add_class::<py_many_bubbles::py_lattice_bubbles::PyLatticeBubbles>()?;
     module_many_bubbles
         .add_class::<py_many_bubbles::py_bubbles_nucleation::PyUniformAtFixedTime>()?;
+    module_many_bubbles
+        .add_class::<py_many_bubbles::py_bubbles_nucleation::PyFixedNucleationRate>()?;
 
     let module_utils = PyModule::new(module_parent.py(), "utils")?;
     module_utils.add_function(wrap_pyfunction!(py_utils::sample, module_parent)?)?;

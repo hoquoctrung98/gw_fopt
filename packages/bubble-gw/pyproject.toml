@@ -15,12 +15,12 @@ build-backend = "maturin"
 [tool.maturin]
 profile = "release"
 features = ["pyo3/extension-module"]
-manifest-path = "../crates/py-bubble-gw/Cargo.toml"
+manifest-path = "crates/py-bubble-gw/Cargo.toml"
 # manifest-path = "../Cargo.toml" 
 # python-source = "python"
 # module-name = "gw_fopt.py_bubble_gw"
 module-name = "gw_fopt.bubble_gw.py_bubble_gw"
-python-source = "src"  # ← src/gw_fopt/bubble_gw/
+python-source = "python/src"
 
 [tool.uv]
 cache-keys = [{file = "pyproject.toml"}, {file = "Cargo.toml"}, {file = "../**/*.rs"}, {file = "**/*.py"}]

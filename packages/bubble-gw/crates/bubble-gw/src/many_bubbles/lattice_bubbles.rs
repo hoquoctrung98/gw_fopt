@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use csv::{ReaderBuilder, Writer};
-use nalgebra::{DMatrix, Point3, Vector3, Vector4};
+use nalgebra::{DMatrix, Vector3, Vector4};
 use nalgebra_spacetime::Lorentzian;
 use ndarray::prelude::*;
 use ndarray_csv::{Array2Reader, Array2Writer, ReadError};
@@ -432,69 +432,13 @@ where
 
     /// In-place nucleation: **replaces** current interior/exterior bubbles with
     /// those returned by the strategy.
-    ///
-    /// # Steps
-    /// 1. Call `strategy.nucleate(self, boundary_condition)` → `(new_interior,
-    ///    new_exterior)`.
-    /// 2. Validate containment:
-    ///    - All interior points ∈ lattice
-    ///    - All exterior points ∉ lattice (unless `boundary_condition == None`)
-    /// 3. Rebuild via `with_bubbles` (which also checks causality).
-    ///
-    /// # Note
-    /// - Previous bubbles are **discarded** — useful for resetting or
-    ///   time-stepping.
     pub fn nucleate_and_update<N: NucleationStrategy<L>>(
         &mut self,
         strategy: N,
         boundary_condition: BoundaryConditions,
     ) -> Result<(), NucleationError> {
-        // 1. Generate new bubbles
         let (new_interior, new_exterior) = strategy.nucleate(self, boundary_condition)?;
 
-        // 2. Validate interior containment
-        if !new_interior.is_empty() {
-            let interior_points: Vec<Point3<f64>> = (0..new_interior.nrows())
-                .map(|i| {
-                    Point3::new(new_interior[[i, 1]], new_interior[[i, 2]], new_interior[[i, 3]])
-                })
-                .collect();
-            let contained = self.lattice.contains(&interior_points);
-            for (i, &is_contained) in contained.iter().enumerate() {
-                if !is_contained {
-                    let [x, y, z] = [
-                        new_interior[[i, 1]],
-                        new_interior[[i, 2]],
-                        new_interior[[i, 3]],
-                    ];
-                    return Err(NucleationError::BubbleOutsideLattice { x, y, z });
-                }
-            }
-        }
-
-        // 3. Validate exterior containment (only if boundary_condition ≠ None)
-        if boundary_condition != BoundaryConditions::None && !new_exterior.is_empty() {
-            let exterior_points: Vec<Point3<f64>> = (0..new_exterior.nrows())
-                .map(|i| {
-                    Point3::new(new_exterior[[i, 1]], new_exterior[[i, 2]], new_exterior[[i, 3]])
-                })
-                .collect();
-            let contained = self.lattice.contains(&exterior_points);
-            for (i, &is_contained) in contained.iter().enumerate() {
-                if is_contained {
-                    let [x, y, z] = [
-                        new_exterior[[i, 1]],
-                        new_exterior[[i, 2]],
-                        new_exterior[[i, 3]],
-                    ];
-                    return Err(NucleationError::InvalidConfig(format!(
-                        "Exterior bubble at ({x}, {y}, {z}) is inside lattice (boundary={boundary_condition:?})"
-                    )));
-                }
-            }
-        }
-
-        // 4. Rebuild with full validation (causality, etc.)
         let updated = Self::with_bubbles(new_interior, new_exterior, self.lattice.clone())
             .map_err(|e| match e {
                 LatticeBubblesError::InteriorBubblesOutsideLattice { .. } => {
@@ -513,7 +457,6 @@ where
                 _ => NucleationError::InvalidConfig(format!("Validation failed: {}", e)),
             })?;
 
-        // 5. Commit
         *self = updated;
         Ok(())
     }
