@@ -36,7 +36,7 @@ fn bubble_gw(py: Python, module_parent: &Bound<'_, PyModule>) -> PyResult<()> {
         .add_class::<py_many_bubbles::py_generalized_bulk_flow::PyGeneralizedBulkFlow>()?;
     module_many_bubbles.add_class::<py_many_bubbles::py_lattice_bubbles::PyLatticeBubbles>()?;
     module_many_bubbles
-        .add_class::<py_many_bubbles::py_bubbles_nucleation::PyUniformAtFixedTime>()?;
+        .add_class::<py_many_bubbles::py_bubbles_nucleation::PySpontaneousNucleation>()?;
     module_many_bubbles
         .add_class::<py_many_bubbles::py_bubbles_nucleation::PyFixedNucleationRate>()?;
 

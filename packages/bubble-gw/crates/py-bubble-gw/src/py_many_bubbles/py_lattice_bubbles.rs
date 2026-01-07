@@ -12,11 +12,14 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyAnyMethods;
 
-use crate::py_many_bubbles::py_bubbles_nucleation::{PyFixedNucleationRate, PyUniformAtFixedTime};
+use crate::py_many_bubbles::py_bubbles_nucleation::{
+    PyFixedNucleationRate,
+    PySpontaneousNucleation,
+};
 use crate::py_many_bubbles::py_isometry::PyIsometry3;
 use crate::py_many_bubbles::py_lattice::{PyCartesian, PyEmpty, PyParallelepiped, PySpherical};
 
-#[pyclass(name = "LatticeBubbles", module = "bubble_gw")]
+#[pyclass(name = "LatticeBubbles")]
 #[derive(Clone)]
 pub struct PyLatticeBubbles {
     pub(crate) inner: LatticeBubbles<BuiltInLattice>,
@@ -113,7 +116,7 @@ impl PyLatticeBubbles {
         };
 
         // Extract strategy
-        if let Ok(strategy) = strategy.extract::<PyUniformAtFixedTime>() {
+        if let Ok(strategy) = strategy.extract::<PySpontaneousNucleation>() {
             self.inner
                 .nucleate_and_update(strategy.inner, bc)
                 .map_err(|e| PyErr::new::<PyValueError, _>(e.to_string()))?;

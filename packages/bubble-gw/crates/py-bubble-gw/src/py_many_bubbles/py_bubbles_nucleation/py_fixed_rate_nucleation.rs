@@ -46,10 +46,9 @@ impl PyFixedNucleationRate {
         })
     }
 
-    /// String representation.
     pub fn __repr__(&self) -> PyResult<String> {
         Ok(format!(
-            "FixedNucleationRate(beta={}, gamma0={}, t0={}, d_p0={}, seed={:?})",
+            "FixedRateNucleation(beta={}, gamma0={}, t0={}, d_p0={}, seed={:?})",
             self.inner.beta, self.inner.gamma0, self.inner.t0, self.inner.d_p0, self.inner.seed
         ))
     }
