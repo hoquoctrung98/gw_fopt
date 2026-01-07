@@ -10,7 +10,7 @@ requires-python = ">=3.13,<3.14"
 
 [tool.uv.workspace]
 members = [
-    "packages/bubble-gw/python",
+    "packages/bubble-gw",
     "packages/bubble-dynamics",
 ]
 

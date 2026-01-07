@@ -1,6 +1,6 @@
 from ..utils.filter_dataframe import filter_dataframe
 from .get_colors import get_colors_from_cmap
-from bubble_gw.utils import sample
+from gw_fopt.bubble_gw import utils
 import matplotlib.ticker as ticker
 import numpy as np
 
@@ -14,16 +14,16 @@ class GwTwoBubblesVisualizer():
     
     def get_gw_averaged(self):
         w_peak = 2*np.pi / self.df_filtered.d.values[0]
-        w_arr = sample(*self.df_filtered.ratio_w_sample.values[0]) * w_peak
-        cos_thetak_arr = sample(*self.df_filtered.cos_thetak_sample.values[0])
+        w_arr = utils.sample(*self.df_filtered.ratio_w_sample.values[0]) * w_peak
+        cos_thetak_arr = utils.sample(*self.df_filtered.cos_thetak_sample.values[0])
         dE_dlogw_dcosthetak = self.df_filtered.dE_dlogw_dcosthetak.values[0]
         spectrum = 2 * np.trapezoid(dE_dlogw_dcosthetak, axis=0, x=cos_thetak_arr)
         return (w_arr, spectrum)
     
     def plot_gw_averaged(self, fig, ax, **kwargs_plot):
         w_peak = 2*np.pi / self.df_filtered.d.values[0]
-        w_arr = sample(*self.df_filtered.ratio_w_sample.values[0]) * w_peak
-        cos_thetak_arr = sample(*self.df_filtered.cos_thetak_sample.values[0])
+        w_arr = utils.sample(*self.df_filtered.ratio_w_sample.values[0]) * w_peak
+        cos_thetak_arr = utils.sample(*self.df_filtered.cos_thetak_sample.values[0])
         dE_dlogw_dcosthetak = self.df_filtered.dE_dlogw_dcosthetak.values[0]
         spectrum = 2 * np.trapezoid(dE_dlogw_dcosthetak, axis=0, x=cos_thetak_arr)
         ax.plot(w_arr, spectrum, **kwargs_plot)
@@ -38,8 +38,8 @@ class GwTwoBubblesVisualizer():
 
     def plot_all_gw_angular(self, fig, ax):
         w_peak = 2*np.pi / self.df_filtered.d.values[0]
-        w_arr = sample(*self.df_filtered.ratio_w_sample.values[0]) * w_peak
-        cos_thetak_arr = sample(*self.df_filtered.cos_thetak_sample.values[0])
+        w_arr = utils.sample(*self.df_filtered.ratio_w_sample.values[0]) * w_peak
+        cos_thetak_arr = utils.sample(*self.df_filtered.cos_thetak_sample.values[0])
         colors = get_colors_from_cmap("inferno", len(cos_thetak_arr))
         for k, cos_thetak in enumerate(cos_thetak_arr):
             dE_dlogw_dcosthetak = self.df_filtered.dE_dlogw_dcosthetak.values[0][k, :]
@@ -56,8 +56,8 @@ class GwTwoBubblesVisualizer():
 
     def plot_one_gw_angular(self, fig, ax, cos_thetak, **kwargs_plot):
         w_peak = 2*np.pi / self.df_filtered.d.values[0]
-        w_arr = sample(*self.df_filtered.ratio_w_sample.values[0]) * w_peak
-        cos_thetak_arr = sample(*self.df_filtered.cos_thetak_sample.values[0])
+        w_arr = utils.sample(*self.df_filtered.ratio_w_sample.values[0]) * w_peak
+        cos_thetak_arr = utils.sample(*self.df_filtered.cos_thetak_sample.values[0])
         closest_idx = np.argmin(np.abs(cos_thetak_arr - cos_thetak))
         dE_dlogw_dcosthetak = self.df_filtered.dE_dlogw_dcosthetak.values[0][closest_idx, :]
         ax.plot(w_arr, dE_dlogw_dcosthetak, label=rf"$\cos \theta_k = {cos_thetak_arr[closest_idx]:.2f}$, $(1+1)D$ simulation", **kwargs_plot)

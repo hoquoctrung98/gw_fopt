@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from .filter_dataframe import filter_dataframe
-from bubble_gw.utils import sample
+from gw_fopt.bubble_gw import utils
 
 class DataGwBulkFlow():
     def __init__(self, df):
@@ -58,7 +58,7 @@ class DataGwBulkFlow():
         de_dlnw_dcosthetak_arr = []
 
         for _, row in self.df_filtered.iterrows():
-            w_arr_from_sample = np.asarray(sample(*row['w_sample']))
+            w_arr_from_sample = np.asarray(utils.sample(*row['w_sample']))
             if w_arr_from_sample.ndim != 1 or np.any(w_arr_from_sample <= 0):
                 raise ValueError(f"w_arr for _pset_id {row['_pset_id']} must be a 1D array of positive frequencies")
             if w_arr is None:
@@ -71,7 +71,7 @@ class DataGwBulkFlow():
 
             powers_available = None
             if any(p is not None for p in xi_powers):
-                powers_available = list(sample(*row['powers_sets_sample']))
+                powers_available = list(utils.sample(*row['powers_sets_sample']))
 
             for p, coeff in zip(xi_powers, xi_coefficients):
                 if p is None:
