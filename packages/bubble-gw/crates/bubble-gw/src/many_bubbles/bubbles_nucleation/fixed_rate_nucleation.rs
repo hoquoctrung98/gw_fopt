@@ -4,7 +4,7 @@ use ndarray::Array2;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng, random};
 
-use super::{GeneralLatticeProperties, NucleationError, NucleationStrategy};
+use super::{GeneralLatticeProperties, NucleationStrategy};
 use crate::many_bubbles::bubbles::Bubbles;
 use crate::many_bubbles::lattice::{
     BoundaryConditions,
@@ -15,7 +15,7 @@ use crate::many_bubbles::lattice::{
     ParallelepipedLattice,
     SphericalLattice,
 };
-use crate::many_bubbles::lattice_bubbles::LatticeBubbles;
+use crate::many_bubbles::lattice_bubbles::{LatticeBubbles, LatticeBubblesError};
 
 /// Nucleation strategy with fixed exponential nucleation rate per unit
 /// volume-time: Γ(t) = γ₀ · exp(β (t − t₀))
@@ -80,7 +80,7 @@ macro_rules! impl_fixed_rate_nucleation_for_lattice {
                 &self,
                 lattice_bubbles: &LatticeBubbles<$Lattice>,
                 boundary_condition: BoundaryConditions,
-            ) -> Result<(Array2<f64>, Array2<f64>), NucleationError> {
+            ) -> Result<(Array2<f64>, Array2<f64>), LatticeBubblesError> {
                 let mut rng = match self.seed {
                     Some(seed) => StdRng::seed_from_u64(seed),
                     None => StdRng::seed_from_u64(random::<u64>()),
@@ -152,7 +152,6 @@ macro_rules! impl_fixed_rate_nucleation_for_lattice {
                     }
                 }
 
-                // ✅ Fix: get lengths BEFORE consuming vectors
                 let n_interior = new_interior.len();
                 let n_exterior = new_exterior.len();
 
@@ -164,7 +163,9 @@ macro_rules! impl_fixed_rate_nucleation_for_lattice {
                         .flat_map(|v| [v[0], v[1], v[2], v[3]])
                         .collect();
                     Array2::from_shape_vec((n_interior, 4), data).map_err(|_| {
-                        NucleationError::InvalidConfig("interior reshape failed".into())
+                        LatticeBubblesError::ArrayShapeMismatch(
+                            "FixedRateNucleation: Interior Bubbles reshape failed".to_string(),
+                        )
                     })?
                 };
 
@@ -176,7 +177,9 @@ macro_rules! impl_fixed_rate_nucleation_for_lattice {
                         .flat_map(|v| [v[0], v[1], v[2], v[3]])
                         .collect();
                     Array2::from_shape_vec((n_exterior, 4), data).map_err(|_| {
-                        NucleationError::InvalidConfig("exterior reshape failed".into())
+                        LatticeBubblesError::ArrayShapeMismatch(
+                            "FixedRateNucleation: Exterior Bubbles reshape failed".to_string(),
+                        )
                     })?
                 };
 

@@ -4,7 +4,7 @@ use ndarray::Array2;
 use rand::rngs::StdRng;
 use rand::{SeedableRng, random};
 
-use super::{GeneralLatticeProperties, NucleationError, NucleationStrategy};
+use super::{GeneralLatticeProperties, NucleationStrategy};
 use crate::many_bubbles::bubbles::Bubbles;
 use crate::many_bubbles::lattice::{
     BoundaryConditions,
@@ -14,7 +14,7 @@ use crate::many_bubbles::lattice::{
     ParallelepipedLattice,
     SphericalLattice,
 };
-use crate::many_bubbles::lattice_bubbles::LatticeBubbles;
+use crate::many_bubbles::lattice_bubbles::{LatticeBubbles, LatticeBubblesError};
 
 /// Nucleates `n_bubbles` bubbles at fixed time `t0`, uniformly distributed
 /// within the lattice. Ensures no two *newly nucleated* bubbles violate
@@ -33,7 +33,7 @@ impl SpontaneousNucleation {
         &self,
         lattice_bubbles: &LatticeBubbles<L>,
         rng: &mut StdRng,
-    ) -> Result<Array2<f64>, NucleationError> {
+    ) -> Result<Array2<f64>, LatticeBubblesError> {
         let lattice = &lattice_bubbles.lattice;
         let mut accepted = Vec::with_capacity(self.n_bubbles);
         let max_attempts = self.n_bubbles * 10_000;
@@ -66,10 +66,14 @@ impl SpontaneousNucleation {
         }
 
         if accepted.len() != self.n_bubbles {
-            return Err(NucleationError::InsufficientBubbles {
-                requested: self.n_bubbles,
-                generated: accepted.len(),
-            });
+            return Err(LatticeBubblesError::NucleationError(
+                format!(
+                    "Insufficient Bubbles: requested {}, generated {}",
+                    self.n_bubbles,
+                    accepted.len()
+                )
+                .to_string(),
+            ));
         }
 
         Ok(Array2::from_shape_fn((self.n_bubbles, 4), |(i, j)| match j {
@@ -87,7 +91,7 @@ impl NucleationStrategy<BuiltInLattice> for SpontaneousNucleation {
         &self,
         lattice_bubbles: &LatticeBubbles<BuiltInLattice>,
         boundary_condition: BoundaryConditions,
-    ) -> Result<(Array2<f64>, Array2<f64>), NucleationError> {
+    ) -> Result<(Array2<f64>, Array2<f64>), LatticeBubblesError> {
         let mut rng = match self.seed {
             Some(seed) => StdRng::seed_from_u64(seed),
             None => StdRng::seed_from_u64(random::<u64>()),
@@ -109,7 +113,7 @@ impl NucleationStrategy<ParallelepipedLattice> for SpontaneousNucleation {
         &self,
         lattice_bubbles: &LatticeBubbles<ParallelepipedLattice>,
         boundary_condition: BoundaryConditions,
-    ) -> Result<(Array2<f64>, Array2<f64>), NucleationError> {
+    ) -> Result<(Array2<f64>, Array2<f64>), LatticeBubblesError> {
         let mut rng = match self.seed {
             Some(seed) => StdRng::seed_from_u64(seed),
             None => StdRng::seed_from_u64(random::<u64>()),
@@ -130,7 +134,7 @@ impl NucleationStrategy<CartesianLattice> for SpontaneousNucleation {
         &self,
         lattice_bubbles: &LatticeBubbles<CartesianLattice>,
         boundary_condition: BoundaryConditions,
-    ) -> Result<(Array2<f64>, Array2<f64>), NucleationError> {
+    ) -> Result<(Array2<f64>, Array2<f64>), LatticeBubblesError> {
         let mut rng = match self.seed {
             Some(seed) => StdRng::seed_from_u64(seed),
             None => StdRng::seed_from_u64(random::<u64>()),
@@ -151,7 +155,7 @@ impl NucleationStrategy<SphericalLattice> for SpontaneousNucleation {
         &self,
         lattice_bubbles: &LatticeBubbles<SphericalLattice>,
         boundary_condition: BoundaryConditions,
-    ) -> Result<(Array2<f64>, Array2<f64>), NucleationError> {
+    ) -> Result<(Array2<f64>, Array2<f64>), LatticeBubblesError> {
         let mut rng = match self.seed {
             Some(seed) => StdRng::seed_from_u64(seed),
             None => StdRng::seed_from_u64(random::<u64>()),

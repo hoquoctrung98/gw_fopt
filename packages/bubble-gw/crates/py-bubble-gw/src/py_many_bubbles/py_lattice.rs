@@ -41,28 +41,28 @@ pub type PyResult<T> = Result<T, PyLatticeError>;
 // === Concrete Python lattice wrappers ===
 // Each stores: concrete type (for methods) + BuiltInLattice (for interop)
 
-#[pyclass(name = "ParallelepipedLattice", module = "bubble_gw")]
+#[pyclass(name = "ParallelepipedLattice")]
 #[derive(Clone)]
 pub struct PyParallelepiped {
     pub(crate) concrete: ParallelepipedLattice,
     pub(crate) builtin: BuiltInLattice,
 }
 
-#[pyclass(name = "CartesianLattice", module = "bubble_gw")]
+#[pyclass(name = "CartesianLattice")]
 #[derive(Clone)]
 pub struct PyCartesian {
     pub(crate) concrete: CartesianLattice,
     pub(crate) builtin: BuiltInLattice,
 }
 
-#[pyclass(name = "SphericalLattice", module = "bubble_gw")]
+#[pyclass(name = "SphericalLattice")]
 #[derive(Clone)]
 pub struct PySpherical {
     pub(crate) concrete: SphericalLattice,
     pub(crate) builtin: BuiltInLattice,
 }
 
-#[pyclass(name = "EmptyLattice", module = "bubble_gw")]
+#[pyclass(name = "EmptyLattice")]
 #[derive(Clone)]
 pub struct PyEmpty {
     pub(crate) concrete: EmptyLattice,
@@ -128,6 +128,10 @@ impl PyParallelepiped {
         Ok(Self::from_concrete(concrete))
     }
 
+    fn name(&self) -> String {
+        "ParallelepipedLattice".to_string()
+    }
+
     #[staticmethod]
     fn axis_aligned(origin: [f64; 3], lx: f64, ly: f64, lz: f64) -> Self {
         let concrete = ParallelepipedLattice::axis_aligned(Point3::from(origin), lx, ly, lz);
@@ -185,6 +189,10 @@ impl PyCartesian {
         Ok(Self::from_concrete(concrete))
     }
 
+    fn name(&self) -> String {
+        "CartesianLattice".to_string()
+    }
+
     #[staticmethod]
     fn with_origin_and_sizes(origin: [f64; 3], sizes: [f64; 3]) -> Self {
         let concrete = CartesianLattice::with_origin_and_sizes(Point3::from(origin), sizes);
@@ -234,6 +242,10 @@ impl PySpherical {
         Self::from_concrete(concrete)
     }
 
+    fn name(&self) -> String {
+        "SphericalLattice".to_string()
+    }
+
     #[getter]
     fn center(&self) -> [f64; 3] {
         self.concrete.center.coords.into()
@@ -265,6 +277,10 @@ impl PyEmpty {
     fn py_new() -> Self {
         let concrete = EmptyLattice {};
         Self::from_concrete(concrete)
+    }
+
+    fn name(&self) -> String {
+        "EmptyLattice".to_string()
     }
 
     #[getter]

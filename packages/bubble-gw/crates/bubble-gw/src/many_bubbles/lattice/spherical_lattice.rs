@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-use nalgebra::{Isometry3, Point3};
+use nalgebra::{Isometry3, Point3, Vector3};
 use rand::Rng;
 use rand::rngs::StdRng;
 
@@ -112,37 +112,98 @@ impl GenerateBubblesExterior for SphericalLattice {
     }
 }
 
+// Point rejection: perform uniform sampling in cartesian coordinates, and
+// reject points that are outside of the sphere
 impl SamplePointsInsideLattice for SphericalLattice {
     fn sample_points(&self, n_points: usize, rng: &mut StdRng) -> Vec<Point3<f64>> {
         let mut points = Vec::with_capacity(n_points);
-        let max_attempts = n_points * 1000;
+        let max_attempts = n_points * 10_000;
+
+        let r = self.radius;
 
         for _ in 0..max_attempts {
             if points.len() >= n_points {
                 break;
             }
-            // Uniform in ball: r = R * cbrt(u), direction uniform
-            let u = rng.random::<f64>();
-            let r = self.radius * u.cbrt();
-            let z = rng.random::<f64>() * 2.0 - 1.0;
-            let phi = rng.random::<f64>() * 2.0 * std::f64::consts::PI;
-            let sin_theta = f64::sqrt(1.0 - z * z);
-            let x = r * sin_theta * phi.cos();
-            let y = r * sin_theta * phi.sin();
-            let z_coord = r * z;
-            let pt = Point3::new(self.center.x + x, self.center.y + y, self.center.z + z_coord);
-            // Theoretically always inside, but check for floating-point safety
-            if self.contains(&[pt])[0] {
-                points.push(pt);
+
+            // Sample uniformly in [-1, 1]^3 cube (unit cube centered at origin)
+            let sample: Vector3<f64> = Vector3::new(
+                rng.random::<f64>() * 2.0 - 1.0,
+                rng.random::<f64>() * 2.0 - 1.0,
+                rng.random::<f64>() * 2.0 - 1.0,
+            );
+
+            // Reject if outside unit ball
+            if sample.norm_squared() > 1.0 {
+                continue;
             }
+
+            // Scale and translate to lattice
+            let pt = Point3::from(self.center.coords + r * sample);
+            points.push(pt);
         }
 
         if points.len() != n_points {
             panic!(
-                "Failed to sample {} points in SphericalLattice (radius={})",
-                n_points, self.radius
+                "Failed to sample {} points in SphericalLattice (radius={}, attempts={})",
+                n_points, r, max_attempts
             );
         }
+
         points
     }
 }
+
+// use rand_distr::{Distribution, StandardNormal};
+// //See  https://www.johndcook.com/blog/2025/10/11/ball-rng/#:~:text=To%20generate%20a%20random%20point%20in%20a,u$%20can%20over%2Dsample%20points%20near%20the%20origin.
+// // Further docs: https://vhartmann.com/ball_sampling/
+// //FIXME: This method seems to produce points sparser near the center,
+// requires // more testing
+// impl SamplePointsInsideLattice for SphericalLattice {
+//     fn sample_points(&self, n_points: usize, rng: &mut StdRng) ->
+// Vec<Point3<f64>> {         let mut points = Vec::with_capacity(n_points);
+//         let max_attempts = n_points * 10_000;
+//
+//         for _ in 0..max_attempts {
+//             if points.len() >= n_points {
+//                 break;
+//             }
+//
+//             // ✅ Explicit: sample f64 Gaussian components
+//             let x: f64 = StandardNormal.sample(rng);
+//             let y: f64 = StandardNormal.sample(rng);
+//             let z: f64 = StandardNormal.sample(rng);
+//
+//             let v = Vector3::new(x, y, z);
+//             let norm = v.norm();
+//
+//             if norm < f64::EPSILON {
+//                 continue;
+//             }
+//
+//             // ✅ Explicit: dir is Vector3<f64>, norm is f64 → division is
+// unambiguous             let dir: Vector3<f64> = v / norm;
+//
+//             let u: f64 = rng.random();
+//             let r = self.radius * u.cbrt();
+//
+//             // ✅ Point3<f64> construction is now unambiguous
+//             let pt = Point3::new(
+//                 self.center.x + r * dir.x,
+//                 self.center.y + r * dir.y,
+//                 self.center.z + r * dir.z,
+//             );
+//
+//             points.push(pt);
+//         }
+//
+//         if points.len() != n_points {
+//             panic!(
+//                 "Failed to sample {} points in SphericalLattice (radius={},
+// attempts={})",                 n_points, self.radius, max_attempts
+//             );
+//         }
+//
+//         points
+//     }
+// }

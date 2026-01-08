@@ -23,4 +23,4 @@ module-name = "gw_fopt.bubble_gw.py_bubble_gw"
 python-source = "python/src"
 
 [tool.uv]
-cache-keys = [{file = "pyproject.toml"}, {file = "Cargo.toml"}, {file = "../**/*.rs"}, {file = "**/*.py"}]
+cache-keys = [{file = "**/*.toml"}, {file = "**/*.rs"}, {file = "**/*.py"}]

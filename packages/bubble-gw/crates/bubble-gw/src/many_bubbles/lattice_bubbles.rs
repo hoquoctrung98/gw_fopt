@@ -8,7 +8,7 @@ use ndarray_csv::{Array2Reader, Array2Writer, ReadError};
 use thiserror::Error;
 
 use crate::many_bubbles::bubbles::Bubbles;
-use crate::many_bubbles::bubbles_nucleation::{NucleationError, NucleationStrategy};
+use crate::many_bubbles::bubbles_nucleation::NucleationStrategy;
 use crate::many_bubbles::lattice::{
     BoundaryConditions,
     GeneralLatticeProperties,
@@ -59,6 +59,9 @@ pub enum LatticeBubblesError {
 
     #[error("Exterior bubbles formed inside lattice: {indices:?}")]
     ExteriorBubblesInsideLattice { indices: Vec<BubbleIndex> },
+
+    #[error("Nucleation error: {0}")]
+    NucleationError(String),
 }
 
 // TODO: convert the input arguments to type Bubbles
@@ -436,27 +439,9 @@ where
         &mut self,
         strategy: N,
         boundary_condition: BoundaryConditions,
-    ) -> Result<(), NucleationError> {
+    ) -> Result<(), LatticeBubblesError> {
         let (new_interior, new_exterior) = strategy.nucleate(self, boundary_condition)?;
-
-        let updated = Self::with_bubbles(new_interior, new_exterior, self.lattice.clone())
-            .map_err(|e| match e {
-                LatticeBubblesError::InteriorBubblesOutsideLattice { .. } => {
-                    NucleationError::BubbleOutsideLattice {
-                        x: 0.0,
-                        y: 0.0,
-                        z: 0.0,
-                    }
-                },
-                LatticeBubblesError::ExteriorBubblesInsideLattice { .. } => {
-                    NucleationError::InvalidConfig("Exterior bubbles inside lattice".into())
-                },
-                LatticeBubblesError::BubbleFormedInsideBubble { .. } => {
-                    NucleationError::BubbleInsideExistingBubble
-                },
-                _ => NucleationError::InvalidConfig(format!("Validation failed: {}", e)),
-            })?;
-
+        let updated = Self::with_bubbles(new_interior, new_exterior, self.lattice.clone())?;
         *self = updated;
         Ok(())
     }
