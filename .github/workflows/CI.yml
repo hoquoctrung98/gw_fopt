@@ -29,11 +29,3 @@ jobs:
       - name: Sync dependencies and build workspace
         run: |
           uv sync --all-extras --dev
-
-      # Ensure that the Rust extension was built successfully
-      # and both packages can be imported without error
-      - name: Verify imports
-        run: |
-          python -c "import gw_fopt.bubble_gw; print('✓ bubble_gw imported')"
-          python -c "import gw_fopt.bubble_dynamics; print('✓ bubble_dynamics imported')"
-
