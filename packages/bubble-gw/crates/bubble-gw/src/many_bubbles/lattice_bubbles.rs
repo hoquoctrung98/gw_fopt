@@ -437,11 +437,16 @@ where
     /// those returned by the strategy.
     pub fn nucleate_and_update<N: NucleationStrategy<L>>(
         &mut self,
-        strategy: N,
+        mut strategy: N,
         boundary_condition: BoundaryConditions,
     ) -> Result<(), LatticeBubblesError> {
-        let (new_interior, new_exterior) = strategy.nucleate(self, boundary_condition)?;
-        let updated = Self::with_bubbles(new_interior, new_exterior, self.lattice.clone())?;
+        let (bubbles_interior, bubbles_exterior) = strategy.nucleate(self, boundary_condition)?;
+
+        let updated = Self::with_bubbles(
+            bubbles_interior.to_array2(),
+            bubbles_exterior.to_array2(),
+            self.lattice.clone(),
+        )?;
         *self = updated;
         Ok(())
     }

@@ -23,11 +23,7 @@ impl PySpontaneousNucleation {
     #[pyo3(signature = (n_bubbles, t0 = 0.0, seed = None))]
     fn new(n_bubbles: usize, t0: f64, seed: Option<u64>) -> Self {
         Self {
-            inner: SpontaneousNucleation {
-                n_bubbles,
-                t0,
-                seed,
-            },
+            inner: SpontaneousNucleation::new(n_bubbles, t0, seed),
         }
     }
 

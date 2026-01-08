@@ -1,6 +1,5 @@
-use nalgebra::{Point3, Vector4};
+use nalgebra::Vector4;
 use nalgebra_spacetime::Lorentzian;
-use ndarray::Array2;
 use rand::rngs::StdRng;
 use rand::{SeedableRng, random};
 
@@ -24,149 +23,95 @@ pub struct SpontaneousNucleation {
     pub n_bubbles: usize,
     pub t0: f64,
     pub seed: Option<u64>,
+    rng: StdRng,
 }
 
 impl SpontaneousNucleation {
+    pub fn new(n_bubbles: usize, t0: f64, seed: Option<u64>) -> Self {
+        let rng = match seed {
+            Some(s) => StdRng::seed_from_u64(s),
+            None => StdRng::seed_from_u64(random::<u64>()),
+        };
+        Self {
+            n_bubbles,
+            t0,
+            seed,
+            rng,
+        }
+    }
+
     /// Sample `n_bubbles` points uniformly in lattice, rejecting any that
     /// violate causality with already-accepted points.
     fn sample_interior<L: GeneralLatticeProperties>(
-        &self,
-        lattice_bubbles: &LatticeBubbles<L>,
-        rng: &mut StdRng,
-    ) -> Result<Array2<f64>, LatticeBubblesError> {
-        let lattice = &lattice_bubbles.lattice;
-        let mut accepted = Vec::with_capacity(self.n_bubbles);
+        &mut self,
+        lattice: &L,
+    ) -> Result<Bubbles, LatticeBubblesError> {
+        let mut accepted_spacetime = Vec::with_capacity(self.n_bubbles);
         let max_attempts = self.n_bubbles * 10_000;
 
         for _ in 0..max_attempts {
-            if accepted.len() >= self.n_bubbles {
+            if accepted_spacetime.len() >= self.n_bubbles {
                 break;
             }
 
-            let candidate_pt = lattice.sample_points(1, rng).into_iter().next().unwrap();
+            let candidate_pt = lattice
+                .sample_points(1, &mut self.rng)
+                .into_iter()
+                .next()
+                .unwrap();
             let candidate_vec =
                 Vector4::new(self.t0, candidate_pt.x, candidate_pt.y, candidate_pt.z);
 
-            // Skip if outside lattice (FP edge case)
             if !lattice.contains(&[candidate_pt])[0] {
                 continue;
             }
 
-            // Check causality against already accepted *new* points
-            let conflict = accepted.iter().any(|&pt: &Point3<f64>| {
-                let existing_vec = Vector4::new(self.t0, pt.x, pt.y, pt.z);
-                let delta = candidate_vec - existing_vec;
-                // In (−,+,+,+) signature: timelike separation ⇒ causality violation
-                delta.scalar(&delta) < 0.0
-            });
+            // Check causality against already accepted *new* bubbles
+            let conflict = accepted_spacetime
+                .iter()
+                .any(|existing_vec: &Vector4<f64>| {
+                    let delta = candidate_vec - existing_vec;
+                    delta.scalar(&delta) < 0.0
+                });
 
             if !conflict {
-                accepted.push(candidate_pt);
+                accepted_spacetime.push(candidate_vec);
             }
         }
 
-        if accepted.len() != self.n_bubbles {
+        if accepted_spacetime.len() != self.n_bubbles {
             return Err(LatticeBubblesError::NucleationError(
                 format!(
                     "Insufficient Bubbles: requested {}, generated {}",
                     self.n_bubbles,
-                    accepted.len()
+                    accepted_spacetime.len()
                 )
                 .to_string(),
             ));
         }
 
-        Ok(Array2::from_shape_fn((self.n_bubbles, 4), |(i, j)| match j {
-            0 => self.t0,
-            1 => accepted[i].x,
-            2 => accepted[i].y,
-            3 => accepted[i].z,
-            _ => unreachable!(),
-        }))
+        Ok(Bubbles::new(accepted_spacetime))
     }
 }
 
-impl NucleationStrategy<BuiltInLattice> for SpontaneousNucleation {
-    fn nucleate(
-        &self,
-        lattice_bubbles: &LatticeBubbles<BuiltInLattice>,
-        boundary_condition: BoundaryConditions,
-    ) -> Result<(Array2<f64>, Array2<f64>), LatticeBubblesError> {
-        let mut rng = match self.seed {
-            Some(seed) => StdRng::seed_from_u64(seed),
-            None => StdRng::seed_from_u64(random::<u64>()),
-        };
-
-        let interior = self.sample_interior(lattice_bubbles, &mut rng)?;
-        let dummy_interior = Bubbles::from_array2(interior.clone());
-        let exterior_bubbles = lattice_bubbles
-            .lattice
-            .generate_bubbles_exterior(&dummy_interior, boundary_condition);
-        let exterior = exterior_bubbles.to_array2();
-
-        Ok((interior, exterior))
-    }
+macro_rules! impl_spontaneous_nucleation_for_lattice {
+    ($Lattice:ty) => {
+        impl NucleationStrategy<$Lattice> for SpontaneousNucleation {
+            fn nucleate(
+                &mut self,
+                lattice_bubbles: &LatticeBubbles<$Lattice>,
+                boundary_condition: BoundaryConditions,
+            ) -> Result<(Bubbles, Bubbles), LatticeBubblesError> {
+                let lattice = &lattice_bubbles.lattice;
+                let interior = self.sample_interior(lattice)?;
+                let exterior = lattice.generate_bubbles_exterior(&interior, boundary_condition);
+                Ok((interior, exterior))
+            }
+        }
+    };
 }
 
-impl NucleationStrategy<ParallelepipedLattice> for SpontaneousNucleation {
-    fn nucleate(
-        &self,
-        lattice_bubbles: &LatticeBubbles<ParallelepipedLattice>,
-        boundary_condition: BoundaryConditions,
-    ) -> Result<(Array2<f64>, Array2<f64>), LatticeBubblesError> {
-        let mut rng = match self.seed {
-            Some(seed) => StdRng::seed_from_u64(seed),
-            None => StdRng::seed_from_u64(random::<u64>()),
-        };
-
-        let interior = self.sample_interior(lattice_bubbles, &mut rng)?;
-        let dummy_interior = Bubbles::from_array2(interior.clone());
-        let exterior = lattice_bubbles
-            .lattice
-            .generate_bubbles_exterior(&dummy_interior, boundary_condition)
-            .to_array2();
-        Ok((interior, exterior))
-    }
-}
-
-impl NucleationStrategy<CartesianLattice> for SpontaneousNucleation {
-    fn nucleate(
-        &self,
-        lattice_bubbles: &LatticeBubbles<CartesianLattice>,
-        boundary_condition: BoundaryConditions,
-    ) -> Result<(Array2<f64>, Array2<f64>), LatticeBubblesError> {
-        let mut rng = match self.seed {
-            Some(seed) => StdRng::seed_from_u64(seed),
-            None => StdRng::seed_from_u64(random::<u64>()),
-        };
-
-        let interior = self.sample_interior(lattice_bubbles, &mut rng)?;
-        let dummy_interior = Bubbles::from_array2(interior.clone());
-        let exterior = lattice_bubbles
-            .lattice
-            .generate_bubbles_exterior(&dummy_interior, boundary_condition)
-            .to_array2();
-        Ok((interior, exterior))
-    }
-}
-
-impl NucleationStrategy<SphericalLattice> for SpontaneousNucleation {
-    fn nucleate(
-        &self,
-        lattice_bubbles: &LatticeBubbles<SphericalLattice>,
-        boundary_condition: BoundaryConditions,
-    ) -> Result<(Array2<f64>, Array2<f64>), LatticeBubblesError> {
-        let mut rng = match self.seed {
-            Some(seed) => StdRng::seed_from_u64(seed),
-            None => StdRng::seed_from_u64(random::<u64>()),
-        };
-
-        let interior = self.sample_interior(lattice_bubbles, &mut rng)?;
-        let dummy_interior = Bubbles::from_array2(interior.clone());
-        let exterior = lattice_bubbles
-            .lattice
-            .generate_bubbles_exterior(&dummy_interior, boundary_condition)
-            .to_array2();
-        Ok((interior, exterior))
-    }
-}
+impl_spontaneous_nucleation_for_lattice!(BuiltInLattice);
+impl_spontaneous_nucleation_for_lattice!(ParallelepipedLattice);
+impl_spontaneous_nucleation_for_lattice!(CartesianLattice);
+impl_spontaneous_nucleation_for_lattice!(SphericalLattice);

@@ -55,8 +55,8 @@ pub enum GeneralizedBulkFlowError {
 }
 /// Computes the frequency-domain bulk-flow integrals $C_{+}(\omega)$ and
 /// $C_{\times}(\omega)$ for gravitational-wave emission from colliding vacuum
-/// bubbles in a first-order phase transition. Implements the triple integral:
-/// $$
+/// lattice_bubbles in a first-order phase transition. Implements the triple
+/// integral: $$
 /// C_{+,\times}(\omega) = \frac{1}{6\pi} \sum_n \int dt\ e^{i\omega(t - z_n)}
 /// A_{n,\pm}(\omega, t), \\ A_{n,\pm}(\omega, t) = \int_{-1}^{1} d\zeta\
 /// e^{-i\omega(t-t_n)\zeta} B_{n,\pm}(\zeta, t), \\ B_{n,\pm}(\zeta, t) =
@@ -69,7 +69,7 @@ pub struct GeneralizedBulkFlow<L>
 where
     L: GeneralLatticeProperties,
 {
-    pub bubbles: LatticeBubbles<L>,
+    pub lattice_bubbles: LatticeBubbles<L>,
     pub first_colliding_bubbles: Option<Array3<BubbleIndex>>,
     pub coefficients_sets: Array2<f64>,
     pub powers_sets: Array2<f64>,
@@ -87,12 +87,6 @@ impl<L> GeneralizedBulkFlow<L>
 where
     L: GeneralLatticeProperties,
 {
-    /// Create a new `BulkFlow`.
-    ///
-    /// * `bubbles` – spacetime coordinates of nucleated bubbles inside and
-    ///   outside the lattice
-    /// * `sort_by_time`    – if `true` the two bubble lists are sorted by
-    ///   formation time
     pub fn new(bubbles: LatticeBubbles<L>) -> Result<Self, GeneralizedBulkFlowError> {
         let default_num_threads = std::thread::available_parallelism()
             .map(|n| n.get())
@@ -103,7 +97,7 @@ where
             .map_err(GeneralizedBulkFlowError::ThreadPoolBuildError)?;
 
         Ok(GeneralizedBulkFlow {
-            bubbles,
+            lattice_bubbles: bubbles,
             first_colliding_bubbles: None,
             coefficients_sets: Array2::from_elem((1, 1), 1.0),
             powers_sets: Array2::from_elem((1, 1), 3.0),
@@ -148,14 +142,14 @@ where
         let direction_vectors = self.direction_vectors.as_ref().ok_or_else(|| {
             GeneralizedBulkFlowError::UninitializedField("direction_vectors".to_string())
         })?;
-        let n_interior = self.bubbles.interior.n_bubbles();
-        let n_exterior = self.bubbles.exterior.n_bubbles();
+        let n_interior = self.lattice_bubbles.interior.n_bubbles();
+        let n_exterior = self.lattice_bubbles.exterior.n_bubbles();
         let n_total = n_interior + n_exterior;
         let tolerance = 1e-10;
 
         // Pre-extract shared read-only data
-        let delta = &self.bubbles.delta;
-        let delta_squared = &self.bubbles.delta_squared;
+        let delta = &self.lattice_bubbles.delta;
+        let delta_squared = &self.lattice_bubbles.delta_squared;
 
         // Allocate output
         let mut first_bubble = Array2::from_elem((n_cos_thetax, n_phix), BubbleIndex::None);
@@ -252,7 +246,7 @@ where
 
         if precompute_first_bubbles {
             let first_colliding_bubbles: Vec<Array2<BubbleIndex>> =
-                (0..self.bubbles.interior.n_bubbles())
+                (0..self.lattice_bubbles.interior.n_bubbles())
                     .into_par_iter()
                     .map(|a_idx| self.compute_first_colliding_bubble(a_idx).unwrap())
                     .collect();
@@ -424,7 +418,7 @@ where
         }
         let mut collision_status =
             Array2::from_elem((n_cos_thetax, n_phix), CollisionStatus::NeverCollided);
-        let ta = self.bubbles.interior.spacetime[a_idx][0];
+        let ta = self.lattice_bubbles.interior.spacetime[a_idx][0];
         let delta_ta = t - ta;
 
         for i in 0..n_cos_thetax {
@@ -472,7 +466,7 @@ where
                 first_bubble.shape()
             )));
         }
-        let n_interior = self.bubbles.interior.n_bubbles();
+        let n_interior = self.lattice_bubbles.interior.n_bubbles();
         let mut delta_tab_grid = Array2::zeros((n_cos_thetax, n_phix));
 
         for i in 0..n_cos_thetax {
@@ -486,9 +480,9 @@ where
                     BubbleIndex::Interior(b_idx) => b_idx,
                     BubbleIndex::Exterior(b_idx) => n_interior + b_idx,
                 };
-                let delta_ba = self.bubbles.delta[(a_idx, b_total)];
+                let delta_ba = self.lattice_bubbles.delta[(a_idx, b_total)];
                 let x_vec = direction_vectors[(i, j)];
-                let delta_ba_squared = self.bubbles.delta_squared[(a_idx, b_total)];
+                let delta_ba_squared = self.lattice_bubbles.delta_squared[(a_idx, b_total)];
                 let dot_ba_x = delta_ba.scalar(&x_vec);
                 if dot_ba_x.abs() < 1e-10 {
                     delta_tab_grid[[i, j]] = 0.0;
@@ -653,7 +647,7 @@ where
 
         let n_w = w_arr.len();
         let n_sets = self.coefficients_sets.nrows();
-        let ta = self.bubbles.interior.spacetime[a_idx][0];
+        let ta = self.lattice_bubbles.interior.spacetime[a_idx][0];
         let delta_ta = t - ta;
 
         // Compute collision status grid
@@ -710,7 +704,7 @@ where
         let n_sets = self.coefficients_sets.nrows();
         let n_w = w_arr.len();
 
-        let t_nucleation = self.bubbles.interior.spacetime[a_idx][0];
+        let t_nucleation = self.lattice_bubbles.interior.spacetime[a_idx][0];
         if t_nucleation >= t_end {
             return Ok(Array4::zeros((2, n_sets, n_w, n_t)));
         }
@@ -724,7 +718,7 @@ where
         }
         let t_arr = Array1::linspace(t_begin, t_end, n_t).to_vec();
         let dt = if n_t > 1 { t_arr[1] - t_arr[0] } else { 0.0 };
-        let z_a = self.bubbles.interior.spacetime[a_idx][3];
+        let z_a = self.lattice_bubbles.interior.spacetime[a_idx][3];
 
         let first_colliding_bubbles_with_a: Array2<BubbleIndex> =
             if let Some(cache) = self.first_colliding_bubbles.as_ref() {
@@ -828,7 +822,7 @@ where
         let t_arr = Array1::linspace(t_begin, t_end, n_t).to_vec();
         let dt = if n_t > 1 { t_arr[1] - t_arr[0] } else { 0.0 };
 
-        let z_a = self.bubbles.interior.spacetime[a_idx][3];
+        let z_a = self.lattice_bubbles.interior.spacetime[a_idx][3];
 
         let first_colliding_bubbles_with_a: Array2<BubbleIndex> =
             if let Some(cache) = self.first_colliding_bubbles.as_ref() {
@@ -847,7 +841,7 @@ where
                     |(mut integral_plus, mut integral_minus), (t_idx, t)| {
                         let mut integrand_dt_plus = Array2::zeros((n_sets, n_w));
                         let mut integrand_dt_minus = Array2::zeros((n_sets, n_w));
-                        let t_nucleation = self.bubbles.interior.spacetime[a_idx][0];
+                        let t_nucleation = self.lattice_bubbles.interior.spacetime[a_idx][0];
                         if t_nucleation <= t {
                             let (a_plus, a_minus) = self
                                 .compute_a_integral(
@@ -911,7 +905,7 @@ where
         W: AsRef<[f64]>,
     {
         let w_arr = w_arr.as_ref();
-        let n_interior = self.bubbles.interior.n_bubbles();
+        let n_interior = self.lattice_bubbles.interior.n_bubbles();
         let n_sets = self.coefficients_sets.nrows();
         let n_w = w_arr.len();
 
@@ -964,7 +958,7 @@ where
         W: AsRef<[f64]>,
     {
         let w_arr = w_arr.as_ref();
-        let n_interior = self.bubbles.interior.n_bubbles();
+        let n_interior = self.lattice_bubbles.interior.n_bubbles();
         let n_sets = self.coefficients_sets.nrows();
         let n_w = w_arr.len();
 
@@ -1002,15 +996,15 @@ where
     }
 
     pub fn delta_squared(&self) -> &DMatrix<f64> {
-        &self.bubbles.delta_squared
+        &self.lattice_bubbles.delta_squared
     }
 
     pub fn bubbles_interior(&self) -> &Bubbles {
-        &self.bubbles.interior
+        &self.lattice_bubbles.interior
     }
 
     pub fn bubbles_exterior(&self) -> &Bubbles {
-        &self.bubbles.exterior
+        &self.lattice_bubbles.exterior
     }
 }
 

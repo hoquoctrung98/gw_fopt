@@ -36,13 +36,7 @@ impl PyFixedNucleationRate {
         }
 
         Ok(PyFixedNucleationRate {
-            inner: FixedRateNucleation {
-                beta,
-                gamma0,
-                t0,
-                d_p0,
-                seed,
-            },
+            inner: FixedRateNucleation::new(beta, gamma0, t0, d_p0, seed),
         })
     }
 

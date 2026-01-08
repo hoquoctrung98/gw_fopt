@@ -21,13 +21,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     // 200,     t0: 0.,
     //     seed: None,
     // };
-    let nucleation_strategy = many_bubbles::bubbles_nucleation::FixedRateNucleation {
-        beta: 0.1,
-        gamma0: 1.,
-        t0: 0.0,
-        d_p0: 0.01,
-        seed: None,
-    };
+    let nucleation_strategy =
+        many_bubbles::bubbles_nucleation::FixedRateNucleation::new(0.1, 1., 0.0, 0.01, None);
     lattice_bubbles.nucleate_and_update(
         nucleation_strategy,
         many_bubbles::lattice::BoundaryConditions::Periodic,
