@@ -5,15 +5,7 @@ use rand::{Rng, SeedableRng, random};
 
 use super::{GeneralLatticeProperties, NucleationStrategy};
 use crate::many_bubbles::bubbles::Bubbles;
-use crate::many_bubbles::lattice::{
-    BoundaryConditions,
-    BuiltInLattice,
-    CartesianLattice,
-    GenerateBubblesExterior,
-    LatticeGeometry,
-    ParallelepipedLattice,
-    SphericalLattice,
-};
+use crate::many_bubbles::lattice::BoundaryConditions;
 use crate::many_bubbles::lattice_bubbles::{LatticeBubbles, LatticeBubblesError};
 
 const MAX_ATTEMPTS: usize = 10_000;
@@ -143,81 +135,70 @@ impl FixedRateNucleation {
     }
 }
 
-macro_rules! impl_fixed_rate_nucleation_for_lattice {
-    ($Lattice:ty) => {
-        impl NucleationStrategy<$Lattice> for FixedRateNucleation {
-            fn nucleate(
-                &mut self,
-                lattice_bubbles: &LatticeBubbles<$Lattice>,
-                boundary_condition: BoundaryConditions,
-            ) -> Result<(Bubbles, Bubbles), LatticeBubblesError> {
-                let lattice = &lattice_bubbles.lattice;
-                let volume_lattice = lattice.volume();
-                let volume_cutoff = 1e-5 * volume_lattice;
+impl<L: GeneralLatticeProperties> NucleationStrategy<L> for FixedRateNucleation {
+    fn nucleate(
+        &mut self,
+        lattice_bubbles: &LatticeBubbles<L>,
+        boundary_condition: BoundaryConditions,
+    ) -> Result<(Bubbles, Bubbles), LatticeBubblesError> {
+        let lattice = &lattice_bubbles.lattice;
+        let volume_lattice = lattice.volume();
+        let volume_cutoff = 1e-5 * volume_lattice;
 
-                let t_start = self.t0;
-                let mut t = t_start;
+        let t_start = self.t0;
+        let mut t = t_start;
 
-                let mut bubbles_interior = Bubbles::new(Vec::new());
-                let mut bubbles_exterior = Bubbles::new(Vec::new());
+        let mut bubbles_interior = Bubbles::new(Vec::new());
+        let mut bubbles_exterior = Bubbles::new(Vec::new());
 
-                for _ in 0..MAX_ATTEMPTS {
-                    let volume_remaining = self.volume_remaining(lattice, t, &bubbles_interior);
+        for _ in 0..MAX_ATTEMPTS {
+            let volume_remaining = self.volume_remaining(lattice, t, &bubbles_interior);
 
-                    if volume_remaining < volume_cutoff || volume_remaining < 1e-12 {
-                        break;
-                    }
-
-                    let exponent = self.beta * (t - self.t0);
-                    let gamma_t = self.gamma0 * exponent.exp();
-                    if !gamma_t.is_finite() || gamma_t <= 0.0 {
-                        break;
-                    }
-
-                    let dt = self.d_p0 / (gamma_t * volume_remaining).max(f64::EPSILON);
-                    if !dt.is_finite() || dt <= 0.0 || dt > 1.0 {
-                        break;
-                    }
-
-                    let new_t = t + dt;
-                    if new_t <= t || !new_t.is_finite() {
-                        break;
-                    }
-
-                    let x: f64 = self.rng.random();
-                    if x <= self.d_p0 {
-                        if let Some(new_bubbles) = self.sample_points_outside_bubbles(
-                            lattice,
-                            new_t,
-                            &bubbles_interior,
-                            &bubbles_exterior,
-                            1,
-                        ) {
-                            if let Some(bubble_new) = new_bubbles.spacetime.into_iter().next() {
-                                // Add to interior
-                                bubbles_interior.spacetime.push(bubble_new);
-
-                                // Generate exterior for this bubble
-                                let dummy_interior = Bubbles::new(vec![bubble_new]);
-                                let exterior_bubbles = lattice
-                                    .generate_bubbles_exterior(&dummy_interior, boundary_condition);
-                                bubbles_exterior
-                                    .spacetime
-                                    .extend(exterior_bubbles.spacetime);
-                            }
-                        }
-                    }
-
-                    t = new_t;
-                }
-
-                Ok((bubbles_interior, bubbles_exterior))
+            if volume_remaining < volume_cutoff || volume_remaining < 1e-12 {
+                break;
             }
-        }
-    };
-}
 
-impl_fixed_rate_nucleation_for_lattice!(BuiltInLattice);
-impl_fixed_rate_nucleation_for_lattice!(ParallelepipedLattice);
-impl_fixed_rate_nucleation_for_lattice!(CartesianLattice);
-impl_fixed_rate_nucleation_for_lattice!(SphericalLattice);
+            let exponent = self.beta * (t - self.t0);
+            let gamma_t = self.gamma0 * exponent.exp();
+            if !gamma_t.is_finite() || gamma_t <= 0.0 {
+                break;
+            }
+
+            let dt = self.d_p0 / (gamma_t * volume_remaining).max(f64::EPSILON);
+            if !dt.is_finite() || dt <= 0.0 || dt > 1.0 {
+                break;
+            }
+
+            let new_t = t + dt;
+            if new_t <= t || !new_t.is_finite() {
+                break;
+            }
+
+            let x: f64 = self.rng.random();
+            if x <= self.d_p0 {
+                if let Some(new_bubbles) = self.sample_points_outside_bubbles(
+                    lattice,
+                    new_t,
+                    &bubbles_interior,
+                    &bubbles_exterior,
+                    1,
+                ) {
+                    if let Some(bubble_new) = new_bubbles.spacetime.into_iter().next() {
+                        bubbles_interior.spacetime.push(bubble_new);
+
+                        let dummy_interior = Bubbles::new(vec![bubble_new]);
+                        let exterior_bubbles =
+                            lattice.generate_bubbles_exterior(&dummy_interior, boundary_condition);
+                        bubbles_exterior
+                            .spacetime
+                            .extend(exterior_bubbles.spacetime);
+                    }
+                }
+            }
+
+            t = new_t;
+        }
+
+        Ok((bubbles_interior, bubbles_exterior))
+    }
+}
