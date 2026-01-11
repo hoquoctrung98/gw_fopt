@@ -1,7 +1,8 @@
-use nalgebra::Vector4;
+use nalgebra::{Point3, Vector4};
 use nalgebra_spacetime::Lorentzian;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng, random};
+use rayon::prelude::*;
 
 use super::{GeneralLatticeProperties, NucleationStrategy};
 use crate::many_bubbles::bubbles::Bubbles;
@@ -10,11 +11,12 @@ use crate::many_bubbles::lattice_bubbles::{LatticeBubbles, LatticeBubblesError};
 
 const MAX_ATTEMPTS: usize = 10_000;
 
-/// Nucleation strategy with fixed exponential nucleation rate per unit
-/// space-time: Γ(t) = γ₀ · exp(β (t − t₀))
-///
-/// Assumes `lattice_bubbles` is initially empty. Nucleates bubbles until volume
-/// saturation.
+#[derive(Clone, Debug)]
+pub enum VolumeRemainingMethod {
+    Approximation,
+    MonteCarlo { n_points: usize },
+}
+
 #[derive(Clone, Debug)]
 pub struct FixedRateNucleation {
     pub beta: f64,
@@ -22,12 +24,22 @@ pub struct FixedRateNucleation {
     pub t0: f64,
     pub d_p0: f64,
     pub seed: Option<u64>,
+    pub volume_method: VolumeRemainingMethod,
     rng: StdRng,
+    points_outside_bubbles: Option<Vec<Point3<f64>>>,
+    pub time_history: Vec<f64>,
+    pub volume_remaining_history: Vec<f64>,
 }
 
 impl FixedRateNucleation {
-    /// Create a new `FixedRateNucleation` strategy.
-    pub fn new(beta: f64, gamma0: f64, t0: f64, d_p0: f64, seed: Option<u64>) -> Self {
+    pub fn new(
+        beta: f64,
+        gamma0: f64,
+        t0: f64,
+        d_p0: f64,
+        seed: Option<u64>,
+        volume_method: VolumeRemainingMethod,
+    ) -> Self {
         let rng = match seed {
             Some(s) => StdRng::seed_from_u64(s),
             None => StdRng::seed_from_u64(random::<u64>()),
@@ -38,32 +50,76 @@ impl FixedRateNucleation {
             t0,
             d_p0,
             seed,
+            volume_method,
             rng,
+            points_outside_bubbles: None,
+            time_history: Vec::new(),
+            volume_remaining_history: Vec::new(),
         }
     }
 
-    /// Compute remaining volume at time `t`, given current interior bubbles.
     fn volume_remaining<L: GeneralLatticeProperties>(
-        &self,
+        &mut self,
         lattice: &L,
         t: f64,
         bubbles_interior: &Bubbles,
+        bubbles_exterior: &Bubbles,
     ) -> f64 {
-        let volume_lattice = lattice.volume();
-        let volume_bubbles: f64 = bubbles_interior
-            .spacetime
-            .iter()
-            .map(|v| {
-                let t_n = v[0];
-                let radius = (t - t_n).max(0.0);
-                (4.0 / 3.0) * std::f64::consts::PI * radius.powi(3)
-            })
-            .sum();
-        (volume_lattice - volume_bubbles).max(0.0)
+        match &self.volume_method {
+            VolumeRemainingMethod::Approximation => {
+                let volume_lattice = lattice.volume();
+                let volume_bubbles: f64 = bubbles_interior
+                    .spacetime
+                    .iter()
+                    .map(|v| {
+                        let t_n = v[0];
+                        let radius = (t - t_n).max(0.0);
+                        (4.0 / 3.0) * std::f64::consts::PI * radius.powi(3)
+                    })
+                    .sum();
+                (volume_lattice - volume_bubbles).max(0.0)
+            },
+            VolumeRemainingMethod::MonteCarlo { n_points } => {
+                if *n_points == 0 {
+                    return lattice.volume();
+                }
+
+                if self.points_outside_bubbles.is_none() {
+                    let points = lattice.sample_points(*n_points, &mut self.rng);
+                    self.points_outside_bubbles = Some(points);
+                }
+
+                let points_outside_bubbles = self.points_outside_bubbles.as_mut().unwrap();
+                let all_bubbles: Vec<&Vector4<f64>> = bubbles_interior
+                    .spacetime
+                    .iter()
+                    .chain(bubbles_exterior.spacetime.iter())
+                    .collect();
+
+                let valid_points: Vec<Point3<f64>> = points_outside_bubbles
+                    .par_iter()
+                    .filter_map(|pt| {
+                        let candidate = Vector4::new(t, pt.x, pt.y, pt.z);
+                        for &bubble in &all_bubbles {
+                            let delta = candidate - bubble;
+                            if delta.scalar(&delta) < 0.0 {
+                                return None; // inside bubble
+                            }
+                        }
+                        Some(*pt)
+                    })
+                    .collect();
+
+                // Replace active points with valid ones
+                *points_outside_bubbles = valid_points;
+
+                let active_count = points_outside_bubbles.len();
+                let fraction = active_count as f64 / *n_points as f64;
+                (fraction * lattice.volume()).max(0.0)
+            },
+        }
     }
 
-    /// Check that *all* `bubbles_new` are outside *all* existing bubbles
-    /// (both interior and exterior).
     fn check_points_outside_bubbles(
         &self,
         bubbles_new: &Bubbles,
@@ -71,7 +127,7 @@ impl FixedRateNucleation {
         bubbles_exterior: &Bubbles,
     ) -> bool {
         for bubble_new in &bubbles_new.spacetime {
-            for bubble in bubbles_interior
+            for &bubble in bubbles_interior
                 .spacetime
                 .iter()
                 .chain(bubbles_exterior.spacetime.iter())
@@ -85,11 +141,6 @@ impl FixedRateNucleation {
         true
     }
 
-    /// Sample exactly `n_points` bubbles at time `t`, uniformly in lattice and
-    /// outside all existing bubbles (interior + exterior).
-    ///
-    /// Returns `Some(valid_bubbles)` if successful, `None` if fewer than
-    /// `n_points` are found after `MAX_ATTEMPTS`.
     fn sample_points_outside_bubbles<L: GeneralLatticeProperties>(
         &mut self,
         lattice: &L,
@@ -151,8 +202,15 @@ impl<L: GeneralLatticeProperties> NucleationStrategy<L> for FixedRateNucleation 
         let mut bubbles_interior = Bubbles::new(Vec::new());
         let mut bubbles_exterior = Bubbles::new(Vec::new());
 
+        self.time_history.clear();
+        self.volume_remaining_history.clear();
+
         for _ in 0..MAX_ATTEMPTS {
-            let volume_remaining = self.volume_remaining(lattice, t, &bubbles_interior);
+            let volume_remaining =
+                self.volume_remaining(lattice, t, &bubbles_interior, &bubbles_exterior);
+
+            self.time_history.push(t);
+            self.volume_remaining_history.push(volume_remaining);
 
             if volume_remaining < volume_cutoff || volume_remaining < 1e-12 {
                 break;
@@ -185,7 +243,6 @@ impl<L: GeneralLatticeProperties> NucleationStrategy<L> for FixedRateNucleation 
                 ) {
                     if let Some(bubble_new) = new_bubbles.spacetime.into_iter().next() {
                         bubbles_interior.spacetime.push(bubble_new);
-
                         let dummy_interior = Bubbles::new(vec![bubble_new]);
                         let exterior_bubbles =
                             lattice.generate_bubbles_exterior(&dummy_interior, boundary_condition);
