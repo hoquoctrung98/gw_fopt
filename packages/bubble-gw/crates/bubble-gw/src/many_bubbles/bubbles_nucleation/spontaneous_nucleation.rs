@@ -6,7 +6,7 @@ use rand::{SeedableRng, random};
 use super::{GeneralLatticeProperties, NucleationStrategy};
 use crate::many_bubbles::bubbles::Bubbles;
 use crate::many_bubbles::lattice::BoundaryConditions;
-use crate::many_bubbles::lattice_bubbles::{LatticeBubbles, LatticeBubblesError};
+use crate::many_bubbles::lattice_bubbles::LatticeBubblesError;
 
 /// Nucleates `n_bubbles` bubbles at fixed time `t0`, uniformly distributed
 /// within the lattice. Ensures no two *newly nucleated* bubbles violate
@@ -90,10 +90,9 @@ impl SpontaneousNucleation {
 impl<L: GeneralLatticeProperties> NucleationStrategy<L> for SpontaneousNucleation {
     fn nucleate(
         &mut self,
-        lattice_bubbles: &LatticeBubbles<L>,
+        lattice: &L,
         boundary_condition: BoundaryConditions,
     ) -> Result<(Bubbles, Bubbles), LatticeBubblesError> {
-        let lattice = &lattice_bubbles.lattice;
         let interior = self.sample_interior(lattice)?;
         let exterior = lattice.generate_bubbles_exterior(&interior, boundary_condition);
         Ok((interior, exterior))

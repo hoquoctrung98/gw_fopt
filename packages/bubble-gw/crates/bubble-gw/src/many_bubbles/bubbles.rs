@@ -3,6 +3,10 @@ use ndarray::prelude::*;
 
 use crate::many_bubbles::lattice::TransformationIsometry3;
 
+// TODO: should add a field `origin: Point4<f64>`, default to Point4::new(0.,
+// 0., 0., 0.) All spacetime vectors are with respect to this origin
+// This allows for correct transformation of coordinates from one lattice to
+// another lattice
 #[derive(Clone, Debug, PartialEq)]
 pub struct Bubbles {
     pub spacetime: Vec<Vector4<f64>>,

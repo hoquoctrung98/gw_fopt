@@ -67,6 +67,7 @@ impl GenerateBubblesExterior for SphericalLattice {
         boundary_condition: BoundaryConditions,
     ) -> Bubbles {
         match boundary_condition {
+            // No such Periodic boundary condition for SphericalLattice
             BoundaryConditions::Periodic => Bubbles::new(Vec::new()),
             BoundaryConditions::Reflection => {
                 let interior = bubbles_interior.borrow();

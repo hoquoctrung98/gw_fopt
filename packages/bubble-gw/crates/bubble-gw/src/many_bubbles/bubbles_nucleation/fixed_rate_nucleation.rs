@@ -7,7 +7,7 @@ use rayon::prelude::*;
 use super::{GeneralLatticeProperties, NucleationStrategy};
 use crate::many_bubbles::bubbles::Bubbles;
 use crate::many_bubbles::lattice::BoundaryConditions;
-use crate::many_bubbles::lattice_bubbles::{LatticeBubbles, LatticeBubblesError};
+use crate::many_bubbles::lattice_bubbles::LatticeBubblesError;
 
 const MAX_ATTEMPTS: usize = 10_000;
 
@@ -189,10 +189,9 @@ impl FixedRateNucleation {
 impl<L: GeneralLatticeProperties> NucleationStrategy<L> for FixedRateNucleation {
     fn nucleate(
         &mut self,
-        lattice_bubbles: &LatticeBubbles<L>,
+        lattice: &L,
         boundary_condition: BoundaryConditions,
     ) -> Result<(Bubbles, Bubbles), LatticeBubblesError> {
-        let lattice = &lattice_bubbles.lattice;
         let volume_lattice = lattice.volume();
         let volume_cutoff = 1e-5 * volume_lattice;
 

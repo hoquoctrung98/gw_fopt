@@ -440,7 +440,8 @@ where
         mut strategy: N,
         boundary_condition: BoundaryConditions,
     ) -> Result<(), LatticeBubblesError> {
-        let (bubbles_interior, bubbles_exterior) = strategy.nucleate(self, boundary_condition)?;
+        let (bubbles_interior, bubbles_exterior) =
+            strategy.nucleate(&self.lattice, boundary_condition)?;
 
         let updated = Self::with_bubbles(
             bubbles_interior.to_array2(),
