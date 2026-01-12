@@ -1,6 +1,8 @@
 use std::error::Error;
 
-use bubble_gw::many_bubbles;
+use bubble_gw::many_bubbles::bubbles_nucleation::{NucleationStrategy, VolumeRemainingMethod};
+use bubble_gw::many_bubbles::lattice::BoundaryConditions;
+use bubble_gw::many_bubbles::{self};
 use nalgebra::{Point3, Vector3};
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -15,24 +17,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     );
 
     let lattice = many_bubbles::lattice::BuiltInLattice::Cartesian(lattice);
-    let mut lattice_bubbles = many_bubbles::lattice_bubbles::LatticeBubbles::new(lattice);
-    // let nucleation_strategy =
-    // many_bubbles::bubbles_nucleation::UniformAtFixedTime {     n_bubbles:
-    // 200,     t0: 0.,
-    //     seed: None,
-    // };
-    let nucleation_strategy = many_bubbles::bubbles_nucleation::FixedRateNucleation::new(
+    let mut nucleation_strategy = many_bubbles::bubbles_nucleation::FixedRateNucleation::new(
         0.1,
         1.,
         0.0,
         0.01,
         None,
-        many_bubbles::bubbles_nucleation::VolumeRemainingMethod::Approximation,
+        VolumeRemainingMethod::Approximation,
     );
-    lattice_bubbles.nucleate_and_update(
-        nucleation_strategy,
-        many_bubbles::lattice::BoundaryConditions::Periodic,
-    )?;
+    let lattice_bubbles = nucleation_strategy.nucleate(&lattice, BoundaryConditions::Periodic)?;
     println!("{:?}", lattice_bubbles.interior.n_bubbles());
     Ok(())
 }

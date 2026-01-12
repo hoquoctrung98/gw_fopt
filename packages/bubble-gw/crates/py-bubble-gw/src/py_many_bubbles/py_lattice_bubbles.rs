@@ -12,10 +12,6 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyAnyMethods;
 
-use crate::py_many_bubbles::py_bubbles_nucleation::{
-    PyFixedNucleationRate,
-    PySpontaneousNucleation,
-};
 use crate::py_many_bubbles::py_isometry::PyIsometry3;
 use crate::py_many_bubbles::py_lattice::{PyCartesian, PyEmpty, PyParallelepiped, PySpherical};
 
@@ -95,42 +91,6 @@ impl PyLatticeBubbles {
     /// Sorts interior and exterior bubbles in-place by nucleation time `t`.
     fn sort_by_time(&mut self) {
         self.inner.sort_by_time();
-    }
-
-    #[pyo3(signature = (strategy, boundary_condition = "periodic"))]
-    fn nucleate_and_update(
-        &mut self,
-        strategy: &Bound<'_, PyAny>,
-        boundary_condition: &str,
-    ) -> PyResult<()> {
-        // Parse boundary condition
-        let bc = match boundary_condition.to_lowercase().as_str() {
-            "periodic" => BoundaryConditions::Periodic,
-            "reflection" => BoundaryConditions::Reflection,
-            "none" => BoundaryConditions::None,
-            _ => {
-                return Err(PyValueError::new_err(
-                    "Invalid boundary condition. Expected 'periodic', 'reflection', or 'none'.",
-                ));
-            },
-        };
-
-        // Extract strategy
-        if let Ok(strategy) = strategy.extract::<PySpontaneousNucleation>() {
-            self.inner
-                .nucleate_and_update(strategy.inner, bc)
-                .map_err(|e| PyErr::new::<PyValueError, _>(e.to_string()))?;
-        } else if let Ok(strategy) = strategy.extract::<PyFixedNucleationRate>() {
-            self.inner
-                .nucleate_and_update(strategy.inner, bc)
-                .map_err(|e| PyErr::new::<PyValueError, _>(e.to_string()))?;
-        } else {
-            return Err(PyValueError::new_err(
-                "Unsupported nucleation strategy. Expected UniformAtFixedTime.",
-            ));
-        }
-
-        Ok(())
     }
 
     fn __repr__(&self) -> String {

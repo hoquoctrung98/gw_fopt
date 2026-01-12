@@ -1,9 +1,17 @@
-use bubble_gw::many_bubbles::bubbles_nucleation::{FixedRateNucleation, VolumeRemainingMethod};
+use bubble_gw::many_bubbles::bubbles_nucleation::{
+    FixedRateNucleation,
+    NucleationStrategy,
+    VolumeRemainingMethod,
+};
+use bubble_gw::many_bubbles::lattice::{BoundaryConditions, BuiltInLattice};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
+use crate::py_many_bubbles::py_lattice::{PyCartesian, PyEmpty, PyParallelepiped, PySpherical};
+use crate::py_many_bubbles::py_lattice_bubbles::PyLatticeBubbles;
+
 #[pyclass(name = "FixedNucleationRate")]
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct PyFixedNucleationRate {
     pub inner: FixedRateNucleation,
 }
@@ -119,5 +127,47 @@ impl PyFixedNucleationRate {
     #[getter]
     fn volume_remaining_history(&self) -> Vec<f64> {
         self.inner.volume_remaining_history.clone()
+    }
+
+    #[pyo3(signature = (lattice, boundary_condition = "periodic"))]
+    fn nucleate(
+        &mut self,
+        lattice: &Bound<'_, PyAny>,
+        boundary_condition: &str,
+    ) -> PyResult<PyLatticeBubbles> {
+        // Extract builtin lattice from concrete Python object
+        let lattice: BuiltInLattice = if let Ok(l) = lattice.extract::<PyParallelepiped>() {
+            l.builtin
+        } else if let Ok(l) = lattice.extract::<PyCartesian>() {
+            l.builtin
+        } else if let Ok(l) = lattice.extract::<PySpherical>() {
+            l.builtin
+        } else if let Ok(l) = lattice.extract::<PyEmpty>() {
+            l.builtin
+        } else {
+            return Err(PyValueError::new_err(
+                "Expected a lattice instance: ParallelepipedLattice, CartesianLattice, SphericalLattice, or EmptyLattice",
+            ));
+        };
+
+        let boundary_condition = match boundary_condition.to_lowercase().as_str() {
+            "periodic" => BoundaryConditions::Periodic,
+            "reflection" => BoundaryConditions::Reflection,
+            "none" => BoundaryConditions::None,
+            _ => {
+                return Err(PyValueError::new_err(
+                    "Invalid boundary condition. Expected 'periodic' or 'reflection'.",
+                ));
+            },
+        };
+
+        let lattice_bubbles = PyLatticeBubbles {
+            inner: self
+                .inner
+                .nucleate(&lattice, boundary_condition)
+                .map_err(|e| PyErr::new::<PyValueError, _>(e.to_string()))?,
+        };
+
+        Ok(lattice_bubbles)
     }
 }

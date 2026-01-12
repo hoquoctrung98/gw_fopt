@@ -8,7 +8,6 @@ use ndarray_csv::{Array2Reader, Array2Writer, ReadError};
 use thiserror::Error;
 
 use crate::many_bubbles::bubbles::Bubbles;
-use crate::many_bubbles::bubbles_nucleation::NucleationStrategy;
 use crate::many_bubbles::lattice::{
     BoundaryConditions,
     GeneralLatticeProperties,
@@ -62,6 +61,9 @@ pub enum LatticeBubblesError {
 
     #[error("Nucleation error: {0}")]
     NucleationError(String),
+
+    #[error("Other error: {0}")]
+    Other(String),
 }
 
 // TODO: convert the input arguments to type Bubbles
@@ -431,25 +433,6 @@ where
 
         self.delta = delta;
         self.delta_squared = delta_squared;
-    }
-
-    /// In-place nucleation: **replaces** current interior/exterior bubbles with
-    /// those returned by the strategy.
-    pub fn nucleate_and_update<N: NucleationStrategy<L>>(
-        &mut self,
-        mut strategy: N,
-        boundary_condition: BoundaryConditions,
-    ) -> Result<(), LatticeBubblesError> {
-        let (bubbles_interior, bubbles_exterior) =
-            strategy.nucleate(&self.lattice, boundary_condition)?;
-
-        let updated = Self::with_bubbles(
-            bubbles_interior.to_array2(),
-            bubbles_exterior.to_array2(),
-            self.lattice.clone(),
-        )?;
-        *self = updated;
-        Ok(())
     }
 
     /// Create a new `Bubbles` instance by reading interior and exterior bubbles
