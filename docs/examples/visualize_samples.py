@@ -24,7 +24,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
-from bubble_gw.utils import sample
+from gw_fopt.bubble_gw import utils
 
 sns.set_theme(style="ticks", font="Dejavu Sans")
 sns.set_palette("bright")
@@ -62,7 +62,7 @@ cmap = plt.get_cmap("Set1")
 
 fig, ax = plt.subplots(figsize=(10, 6))
 for n_iter in range(4):
-    arr = sample(
+    arr = utils.sample(
         start, stop, n_sample=n_sample, n_grid=n_grid, n_iter=n_iter, sample_type="log"
     )
     color = cmap(n_iter)
@@ -95,7 +95,7 @@ fig.savefig("./figures/sample_log.png", bbox_inches="tight", facecolor="white")
 
 fig, ax = plt.subplots(figsize=(10, 6))
 for n_iter in range(4):
-    arr = sample(
+    arr = utils.sample(
         start=start,
         stop=stop,
         n_sample=n_sample,

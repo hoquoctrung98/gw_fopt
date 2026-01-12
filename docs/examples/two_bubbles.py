@@ -24,13 +24,12 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
-from bubble_dynamics.bubble_simulator import LatticeSetup, PDEBubbleSolver
-from bubble_dynamics.bubble_simulator.potentials import (
+from gw_fopt.bubble_dynamics.bubble_simulator import LatticeSetup, PDEBubbleSolver
+from gw_fopt.bubble_dynamics.bubble_simulator.potentials import (
     QuarticPotential,
 )
-from bubble_dynamics.visualizer import TwoBubblesEvolutionVisualizer
-from bubble_gw import two_bubbles
-from bubble_gw.utils import sample
+from gw_fopt.bubble_dynamics.visualizer import TwoBubblesEvolutionVisualizer
+from gw_fopt.bubble_gw import two_bubbles, utils
 
 # %%
 sns.set(style="ticks", font="Dejavu Sans")
@@ -177,8 +176,8 @@ fig.savefig(
 solver.compute_phi_region2()  # Compute the field $\phi_-$ on the patch $t^2 < x^2 + y^2$
 
 # GW computation
-w_arr = (1.0 / d) * sample(1e-1, 1e2, 100, 2, 0, "log")  # array of frequencies
-cos_thetak_arr = sample(0, 1, 5, 2, 0, "uniform")  # array of directions
+w_arr = (1.0 / d) * utils.sample(1e-1, 1e2, 100, 2, 0, "log")  # array of frequencies
+cos_thetak_arr = utils.sample(0, 1, 5, 2, 0, "uniform")  # array of directions
 gw_calc = two_bubbles.GravitationalWaveCalculator(
     initial_field_status="two_bubbles",
     phi1=solver.phi1,

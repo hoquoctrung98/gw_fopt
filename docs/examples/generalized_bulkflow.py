@@ -31,7 +31,7 @@ import seaborn as sns
 sys.path.append("../")  # add the qball package to the python path
 # sys.path.append(os.path.realpath('..'))
 
-from bubble_gw import many_bubbles
+from gw_fopt.bubble_gw import many_bubbles
 
 # %%
 # %matplotlib ipympl
@@ -634,10 +634,9 @@ bubbles_interior = np.array(
 
 lattice = many_bubbles.EmptyLattice()
 
-lattice_bubbles = many_bubbles.LatticeBubbles(
+lattice_bubbles = many_bubbles.LatticeBubbles.with_bubbles(
     bubbles_interior=bubbles_interior,
     lattice=lattice,
-    sort_by_time=False,
 )
 generalized_bulk_flow = many_bubbles.GeneralizedBulkFlow(lattice_bubbles)
 generalized_bulk_flow.set_resolution(
@@ -743,10 +742,9 @@ lattice = many_bubbles.CartesianLattice(
     origin=[0.0, 0.0, 0.0], basis=[[L, 0.0, 0.0], [0.0, L, 0.0], [0.0, 0.0, L]]
 )
 
-lattice_bubbles = many_bubbles.LatticeBubbles(
+lattice_bubbles = many_bubbles.LatticeBubbles.with_bubbles(
     bubbles_interior=bubbles_interior,
     lattice=lattice,
-    sort_by_time=False,
 )
 lattice_bubbles.with_boundary_condition("periodic")
 generalized_bulk_flow = many_bubbles.GeneralizedBulkFlow(lattice_bubbles)

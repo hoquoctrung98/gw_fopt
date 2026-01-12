@@ -99,7 +99,7 @@ State key:
 | Support LatticeBubbles: a bundle of bubbles and lattice to perform checks on bubbles inside/outside lattice and bubbles formed inside bubbles |   🟢    |
 | Implement core computations of generalized bulk-flow along $z$ direction                                                                      |   🟢    |
 | Generate bubbles with given nucleation rate $\beta$                                                                                           |   🟠    |
-| Generalized bulk-flow computations along arbitrary $\hat{\bm{k}}$ directions without rotating the input Bubbles?                              |   🔴    |
+| Generalized bulk-flow computations along arbitrary $\hat{\mathbf{k}}$ directions without rotating the input Bubbles?                          |   🔴    |
 
 > [!NOTE]
 > From personal experience in using bubble_gw from Python code, it could happen that the the Python kernel died while executing the Rust code.

@@ -25,6 +25,15 @@ The supported nucleation strategies are
 + `SpontaneousNucleation`: Nucleate a fixed number of bubbles inside a lattice at the same time.
 + `FixedRateNucleation`: Nucleate the bubbles with a fixed rate $\Gamma$ (i.e fixed number of bubbles in a unit spacetime volume). The nucleation stop if no remaining volume of the lattice is outside all of the bubbles.
 
+Note that in using `FixedNucleationRate` nucleation strategy, we need to know the remaining volume of the lattice that is outside all bubbles available at time $t$ (i.e the false-vacuum valume $V_\text{FV}$).
+We therefore need to pass an argument `method`, which currently corresponds to two simple approaches:
+
++ `method = 'approximation'`: A brute-force approach where $V_\text{FV} = V_\text{lattice} - \sum_n V_n^{\text{(bubbles)}}$. This is fast but does not take into account the bubbles overlapse.
++ `method = 'montecarlo'`: We use Monte-Carlo with uniform sampling, counting number of points are outside all bubbles and take fraction with number of sampling points, multiplied by lattice volume.
+This approach is much slower, but we correctly take into account the overlapping bubbles.
+
+![V_FV](./examples/figures/many_bubbles/V_FV.png)
+
 ## Example code
 
 An example of creating a lattice, attaching with bubbles_interior and do various verifications (bubbles causality, bubbles_interior outside of a given lattice, ...) as well as performing Isometry3 transformations on both the lattice and the bubbles can be found at [lattice_bubbles.py](./examples/lattice_bubbles.py)
