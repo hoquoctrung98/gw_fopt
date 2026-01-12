@@ -41,15 +41,19 @@ An example of creating a lattice, attaching with bubbles_interior and do various
 ### Read bubbles from input file in CartesianLattice
 
 > Distributions of bubble centers
+
 ![bubble centers](./examples/figures/many_bubbles/many_bubbles_centers_cartesian.png)
 
 > Bubbles at a given time slice
+
 ![bubble at fixed time](./examples/figures/many_bubbles/many_bubbles_at_time_cartesian.png)
 
 ### Generate bubbles from SphericalLattice
 
 > Distributions of bubble centers
+
 ![bubble centers](./examples/figures/many_bubbles/many_bubbles_centers_spherical.png)
 
 > Bubbles at a given time slice
+
 ![bubble at fixed time](./examples/figures/many_bubbles/many_bubbles_at_time_spherical.png)
