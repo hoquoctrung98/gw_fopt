@@ -112,6 +112,14 @@ impl PyFixedNucleationRate {
     }
 
     #[getter]
+    fn n_points(&self) -> usize {
+        match self.inner.volume_method {
+            VolumeRemainingMethod::Approximation => 0,
+            VolumeRemainingMethod::MonteCarlo { n_points } => n_points,
+        }
+    }
+
+    #[getter]
     fn method(&self) -> String {
         match &self.inner.volume_method {
             VolumeRemainingMethod::Approximation => "approximation".to_string(),
