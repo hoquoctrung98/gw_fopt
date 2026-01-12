@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-use nalgebra::{Isometry3, Point3, Vector3};
+use nalgebra::{Isometry3, Point3, Vector3, Vector4};
 use rand::Rng;
 use rand::rngs::StdRng;
 
@@ -67,46 +67,67 @@ impl GenerateBubblesExterior for SphericalLattice {
         boundary_condition: BoundaryConditions,
     ) -> Bubbles {
         match boundary_condition {
-            BoundaryConditions::Periodic => {
-                // Return empty as requested
-                Bubbles::new(Vec::new())
-            },
-
+            BoundaryConditions::Periodic => Bubbles::new(Vec::new()),
             BoundaryConditions::Reflection => {
                 let interior = bubbles_interior.borrow();
-                let mut exterior_spacetime = Vec::with_capacity(interior.spacetime.len());
+                let mut exterior_spacetime = Vec::with_capacity(interior.spacetime.len() * 2);
 
                 let center = self.center;
                 let radius = self.radius;
 
                 for &event in &interior.spacetime {
                     let t = event[0];
-                    let p = nalgebra::Point3::new(event[1], event[2], event[3]);
-                    let v = p - center; // Vector3
+                    let p = Point3::new(event[1], event[2], event[3]);
+                    let v = p - center; // Vector from center to point
                     let d = v.norm();
 
-                    let p_exterior = if d < f64::EPSILON {
-                        // At center: reflect along x-axis
-                        nalgebra::Point3::from(
-                            center.coords + nalgebra::Vector3::x() * radius * 2.0,
-                        )
-                    } else {
-                        // Mirror across surface: p' = c + (2*r/d - 1) * (p - c)
-                        let scale = 2.0 * radius / d - 1.0;
-                        nalgebra::Point3::from(center.coords + v * scale)
-                    };
+                    if d < f64::EPSILON {
+                        // Point at center: create two images along x-axis
+                        let img1 = Point3::new(center.x + radius, center.y, center.z);
+                        let img2 = Point3::new(center.x - radius, center.y, center.z);
 
-                    exterior_spacetime.push(nalgebra::Vector4::new(
-                        t,
-                        p_exterior.x,
-                        p_exterior.y,
-                        p_exterior.z,
-                    ));
+                        exterior_spacetime.push(Vector4::new(t, img1.x, img1.y, img1.z));
+                        exterior_spacetime.push(Vector4::new(t, img2.x, img2.y, img2.z));
+                        continue;
+                    }
+
+                    // unit vector from center to p
+                    let unit_vec = v / d;
+
+                    // Intersection points with sphere surface
+                    let q1 = Point3::from(center.coords + radius * unit_vec); // forward
+                    let q2 = Point3::from(center.coords - radius * unit_vec); // backward
+
+                    // Normals at tangent planes (same as radial directions)
+                    let n1 = unit_vec;
+                    let n2 = -unit_vec;
+
+                    // Reflection across tangent plane at q1:
+                    // p1_img = p - 2 * dot(p - q1, n1) * n1
+                    let pq1 = p - q1;
+                    let dot1 = pq1.x * n1.x + pq1.y * n1.y + pq1.z * n1.z;
+                    let p1_img = Point3::new(
+                        p.x - 2.0 * dot1 * n1.x,
+                        p.y - 2.0 * dot1 * n1.y,
+                        p.z - 2.0 * dot1 * n1.z,
+                    );
+
+                    // Reflection across tangent plane at q2:
+                    // p2_img = p - 2 * dot(p - q2, n2) * n2
+                    let pq2 = p - q2;
+                    let dot2 = pq2.x * n2.x + pq2.y * n2.y + pq2.z * n2.z;
+                    let p2_img = Point3::new(
+                        p.x - 2.0 * dot2 * n2.x,
+                        p.y - 2.0 * dot2 * n2.y,
+                        p.z - 2.0 * dot2 * n2.z,
+                    );
+
+                    exterior_spacetime.push(Vector4::new(t, p1_img.x, p1_img.y, p1_img.z));
+                    exterior_spacetime.push(Vector4::new(t, p2_img.x, p2_img.y, p2_img.z));
                 }
 
                 Bubbles::new(exterior_spacetime)
             },
-
             BoundaryConditions::None => Bubbles::new(Vec::new()),
         }
     }
