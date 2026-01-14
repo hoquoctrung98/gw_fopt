@@ -3,8 +3,9 @@ use std::error::Error;
 use std::fs::File;
 use std::io::BufReader;
 
-use bubble_gw::many_bubbles_legacy::bubbles::LatticeBubbles;
-use bubble_gw::many_bubbles_legacy::bulk_flow::BulkFlow;
+use bubble_gw::many_bubbles::generalized_bulk_flow::GeneralizedBulkFlow;
+use bubble_gw::many_bubbles::lattice::EmptyLattice;
+use bubble_gw::many_bubbles::lattice_bubbles::LatticeBubbles;
 use bubble_gw::utils::is_close::IsClose;
 use ndarray::{Array1, Array2, arr2};
 use num::complex::Complex64;
@@ -82,10 +83,10 @@ fn test_bulk_flow_two_bubbles() -> Result<(), Box<dyn Error>> {
             })
             .collect();
 
-        let mut bulk = BulkFlow::new(LatticeBubbles::new(
+        let mut bulk = GeneralizedBulkFlow::new(LatticeBubbles::with_bubbles(
             bubbles_interior.clone(),
             bubbles_exterior.clone(),
-            true,
+            EmptyLattice {},
         )?)?;
         bulk.set_resolution(n_cos_val as usize, n_phi_val as usize, true)?;
         bulk.set_gradient_scaling_params(coefficients_sets.clone(), powers_sets.clone(), None)?;

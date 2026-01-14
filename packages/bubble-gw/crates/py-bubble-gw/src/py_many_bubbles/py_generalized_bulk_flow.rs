@@ -180,15 +180,6 @@ impl PyGeneralizedBulkFlow {
     }
 
     #[getter]
-    pub fn active_sets(&self, py: Python) -> Py<PyArray1<bool>> {
-        PyArray1::from_array(py, self.inner.active_sets()).into()
-    }
-
-    pub fn set_active_sets(&mut self, active_sets: PyReadonlyArray1<bool>) {
-        self.inner.set_active_sets(active_sets.to_owned_array());
-    }
-
-    #[getter]
     fn cos_thetax(&self, py: Python) -> PyResult<Py<PyArray1<f64>>> {
         let cos_thetax = self.inner.cos_thetax()?;
         Ok(PyArray1::from_array(py, cos_thetax).into())

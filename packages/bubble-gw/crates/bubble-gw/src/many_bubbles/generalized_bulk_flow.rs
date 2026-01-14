@@ -74,7 +74,6 @@ where
     pub coefficients_sets: Array2<f64>,
     pub powers_sets: Array2<f64>,
     pub damping_width: Option<f64>,
-    pub active_bubbles: Array1<bool>,
     pub thread_pool: ThreadPool,
     pub n_cos_thetax: Option<usize>,
     pub n_phix: Option<usize>,
@@ -102,7 +101,6 @@ where
             coefficients_sets: Array2::from_elem((1, 1), 1.0),
             powers_sets: Array2::from_elem((1, 1), 3.0),
             damping_width: None,
-            active_bubbles: Array1::from_elem(1, true),
             thread_pool,
             n_cos_thetax: None,
             n_phix: None,
@@ -274,10 +272,6 @@ where
         Ok(())
     }
 
-    pub fn set_active_sets(&mut self, active_sets: Array1<bool>) {
-        self.active_bubbles = active_sets;
-    }
-
     // pub fn bubbles_interior(&self) -> &Array2<f64> {
     //     &self.bubbles.interior
     // }
@@ -300,10 +294,6 @@ where
 
     pub fn set_powers_sets(&mut self, powers_sets: Array2<f64>) {
         self.powers_sets = powers_sets;
-    }
-
-    pub fn active_sets(&self) -> &Array1<bool> {
-        &self.active_bubbles
     }
 
     pub fn cos_thetax(&self) -> Result<&Array1<f64>, GeneralizedBulkFlowError> {
@@ -369,22 +359,9 @@ where
             ));
         }
 
-        let mut active_bubbles = Array1::from_elem(n_sets, false);
-        for s in 0..n_sets {
-            let coeff_sum = coefficients_sets.slice(s![s, ..]).sum();
-            if coeff_sum.abs() >= 1e-10 && (coeff_sum - 1.0).abs() > 1e-10 {
-                return Err(GeneralizedBulkFlowError::ArrayShapeMismatch(format!(
-                    "Set {}: coefficients must sum to 0 or 1",
-                    s
-                )));
-            }
-            active_bubbles[s] = coeff_sum.abs() > 1e-10;
-        }
-
         self.coefficients_sets = coefficients_sets;
         self.powers_sets = powers_sets;
         self.damping_width = damping_width;
-        self.active_bubbles = active_bubbles;
         Ok(())
     }
 
