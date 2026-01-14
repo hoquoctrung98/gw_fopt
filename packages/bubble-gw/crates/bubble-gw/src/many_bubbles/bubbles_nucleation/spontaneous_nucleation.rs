@@ -97,9 +97,9 @@ impl<L: GeneralLatticeProperties> NucleationStrategy<L> for SpontaneousNucleatio
         let bubbles_exterior =
             lattice.generate_bubbles_exterior(&bubbles_interior, boundary_condition);
 
-        let lattice_bubbles = LatticeBubbles::with_bubbles(
+        let lattice_bubbles = LatticeBubbles::new(
             bubbles_interior.to_array2(),
-            bubbles_exterior.to_array2(),
+            Some(bubbles_exterior.to_array2()),
             lattice.clone(),
         )?;
         Ok(lattice_bubbles)

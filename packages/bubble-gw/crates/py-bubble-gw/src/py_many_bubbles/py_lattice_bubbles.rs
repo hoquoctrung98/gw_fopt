@@ -22,13 +22,13 @@ pub struct PyLatticeBubbles {
 }
 
 impl PyLatticeBubbles {
-    fn from_concrete(
+    fn from_builtin(
         lattice: BuiltInLattice,
         interior: Array2<f64>,
-        exterior: Array2<f64>,
+        exterior: Option<Array2<f64>>,
     ) -> PyResult<Self> {
         // Convert Array2 (N×4) → Vec<Vector4>
-        let lb = LatticeBubbles::with_bubbles(interior, exterior, lattice)
+        let lb = LatticeBubbles::new(interior, exterior, lattice)
             .map_err(|e| PyErr::new::<PyValueError, _>(e.to_string()))?;
 
         Ok(Self { inner: lb })
@@ -39,33 +39,13 @@ impl PyLatticeBubbles {
 #[pymethods]
 impl PyLatticeBubbles {
     #[new]
-    fn new(lattice: &Bound<'_, PyAny>) -> PyResult<Self> {
-        // Extract builtin lattice from concrete Python object
-        let builtin: BuiltInLattice = if let Ok(l) = lattice.extract::<PyParallelepiped>() {
-            l.builtin
-        } else if let Ok(l) = lattice.extract::<PyCartesian>() {
-            l.builtin
-        } else if let Ok(l) = lattice.extract::<PySpherical>() {
-            l.builtin
-        } else if let Ok(l) = lattice.extract::<PyEmpty>() {
-            l.builtin
-        } else {
-            return Err(PyValueError::new_err(
-                "Expected a lattice instance: ParallelepipedLattice, CartesianLattice, SphericalLattice, or EmptyLattice",
-            ));
-        };
-        let lb = LatticeBubbles::new(builtin);
-        Ok(Self { inner: lb })
-    }
-
-    #[staticmethod]
     #[pyo3(signature = (lattice, bubbles_interior, bubbles_exterior = None))]
-    fn with_bubbles(
+    fn new(
         lattice: &Bound<'_, PyAny>,
         bubbles_interior: PyReadonlyArray2<f64>,
         bubbles_exterior: Option<PyReadonlyArray2<f64>>,
     ) -> PyResult<Self> {
-        // Extract builtin lattice from concrete Python object
+        // Extract builtin lattice from built-in Python object
         let builtin: BuiltInLattice = if let Ok(l) = lattice.extract::<PyParallelepiped>() {
             l.builtin
         } else if let Ok(l) = lattice.extract::<PyCartesian>() {
@@ -81,11 +61,9 @@ impl PyLatticeBubbles {
         };
 
         let interior = bubbles_interior.to_owned_array();
-        let exterior = bubbles_exterior
-            .map(|a| a.to_owned_array())
-            .unwrap_or_else(|| Array2::zeros((0, 4)));
+        let exterior = bubbles_exterior.map(|a| a.to_owned_array());
 
-        Self::from_concrete(builtin, interior, exterior)
+        Self::from_builtin(builtin, interior, exterior)
     }
 
     /// Sorts interior and exterior bubbles in-place by nucleation time `t`.

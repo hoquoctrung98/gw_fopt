@@ -278,9 +278,9 @@ impl<L: GeneralLatticeProperties> NucleationStrategy<L> for FixedRateNucleation 
             t = new_t;
         }
 
-        let lattice_bubbles = LatticeBubbles::with_bubbles(
+        let lattice_bubbles = LatticeBubbles::new(
             bubbles_interior.to_array2(),
-            bubbles_exterior.to_array2(),
+            Some(bubbles_exterior.to_array2()),
             lattice.clone(),
         )?;
 

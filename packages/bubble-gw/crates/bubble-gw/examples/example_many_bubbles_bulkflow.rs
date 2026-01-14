@@ -24,9 +24,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         ],
     );
 
-    let mut lattice_bubbles = LatticeBubbles::with_bubbles(
+    let mut lattice_bubbles = LatticeBubbles::new(
         bubbles_interior,
-        Array2::zeros((0, 4)), // start with no bubbles_exterior
+        None, // start with no bubbles_exterior
         lattice,
     )?;
     // generate bubbles_exterior corresponding to Periodic boundary condition

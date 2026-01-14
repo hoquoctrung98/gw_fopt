@@ -1,49 +1,7 @@
 use bubble_gw::many_bubbles::generalized_bulk_flow::GeneralizedBulkFlow as BulkFlowNalgebra;
 use bubble_gw::many_bubbles::lattice::EmptyLattice;
 use bubble_gw::many_bubbles::lattice_bubbles::LatticeBubbles;
-use bubble_gw::many_bubbles_legacy::bubble_formation::generate_random_bubbles;
-use bubble_gw::many_bubbles_legacy::bulk_flow::BulkFlow;
-use bubble_gw::many_bubbles_legacy::bulk_flow_segment::BulkFlow as BulkFlowSegment;
-use bubble_gw::many_bubbles_legacy::lattice::{BoundaryConditions, Lattice, LatticeType};
 use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
-
-fn setup_bulk_flow() -> BulkFlow {
-    let lattice = Lattice::new(
-        LatticeType::Cartesian {
-            sizes: [10., 10., 10.],
-        },
-        100,
-    )
-    .expect("Failed to create lattice");
-    let bubbles_config =
-        generate_random_bubbles(lattice, BoundaryConditions::Periodic, -0.1, 0.0, 20, Some(0))
-            .expect("Failed to create bubbles_config");
-    let mut bf = BulkFlow::new(bubbles_config).expect("Failed to create BulkFlow");
-    let coefficients_sets = vec![vec![0.0], vec![1.0]];
-    let powers_sets = vec![vec![3.0], vec![3.0]];
-    bf.set_gradient_scaling_params(coefficients_sets, powers_sets, None)
-        .expect("Failed to set params");
-    bf
-}
-
-fn setup_bulk_flow_segment() -> BulkFlowSegment {
-    let lattice = Lattice::new(
-        LatticeType::Cartesian {
-            sizes: [10., 10., 10.],
-        },
-        100,
-    )
-    .expect("Failed to create lattice");
-    let bubbles_config =
-        generate_random_bubbles(lattice, BoundaryConditions::Periodic, -0.1, 0.0, 20, Some(0))
-            .expect("Failed to create bubbles_config");
-    let mut bf = BulkFlowSegment::new(bubbles_config).expect("Failed to create BulkFlow");
-    let coefficients_sets = vec![vec![0.0], vec![1.0]];
-    let powers_sets = vec![vec![3.0], vec![3.0]];
-    bf.set_gradient_scaling_params(coefficients_sets, powers_sets, None)
-        .expect("Failed to set params");
-    bf
-}
 
 fn setup_bulk_flow_nalgebra() -> BulkFlowNalgebra<EmptyLattice> {
     let lattice = Lattice::new(
@@ -56,12 +14,9 @@ fn setup_bulk_flow_nalgebra() -> BulkFlowNalgebra<EmptyLattice> {
     let bubbles_config =
         generate_random_bubbles(lattice, BoundaryConditions::Periodic, -0.1, 0.0, 20, Some(0))
             .expect("Failed to create bubbles_config");
-    let bubbles_config = LatticeBubbles::with_bubbles(
-        bubbles_config.interior,
-        bubbles_config.exterior,
-        EmptyLattice {},
-    )
-    .unwrap();
+    let bubbles_config =
+        LatticeBubbles::new(bubbles_config.interior, bubbles_config.exterior, EmptyLattice {})
+            .unwrap();
     let mut bf = BulkFlowNalgebra::new(bubbles_config).expect("Failed to create BulkFlow");
     let coefficients_sets = vec![vec![0.0], vec![1.0]];
     let powers_sets = vec![vec![3.0], vec![3.0]];

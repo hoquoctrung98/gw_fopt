@@ -4,7 +4,7 @@ use bubble_gw::many_bubbles::generalized_bulk_flow::GeneralizedBulkFlow as BulkF
 use bubble_gw::many_bubbles::lattice::CartesianLattice;
 use bubble_gw::many_bubbles::lattice_bubbles::LatticeBubbles as LatticeBubblesNalgebra;
 use nalgebra::{Point3, Vector3};
-use ndarray::{Array2, arr2};
+use ndarray::arr2;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let l_box = 20.;
@@ -18,12 +18,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         ],
     );
     let bubbles_interior = arr2(&[[0.0, 5.5, 5.0, 5.0], [0.0, 4.5, 5.0, 10.0]]);
-    let mut lattice_bubbles = LatticeBubblesNalgebra::with_bubbles(
-        bubbles_interior.clone(),
-        Array2::zeros((0, 4)),
-        lattice_nalgebra,
-    )
-    .unwrap();
+    let mut lattice_bubbles =
+        LatticeBubblesNalgebra::new(bubbles_interior.clone(), None, lattice_nalgebra).unwrap();
     lattice_bubbles
         .with_boundary_condition(bubble_gw::many_bubbles::lattice::BoundaryConditions::Periodic);
     let mut generalized_bulk_flow = BulkFlowNalgebra::new(lattice_bubbles).unwrap();

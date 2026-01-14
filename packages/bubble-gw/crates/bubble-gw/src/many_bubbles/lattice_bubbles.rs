@@ -200,20 +200,6 @@ impl<L> LatticeBubbles<L>
 where
     L: GeneralLatticeProperties + Clone,
 {
-    /// Creates a new `LatticeBubbles` with an empty set of interior and
-    /// exterior bubbles. `delta` and `delta_squared` are 0×0 matrices.
-    /// Use `set_bubbles` or `with_bubbles` to populate data later.
-    pub fn new(lattice: L) -> Self {
-        let empty_spacetime = Vec::new();
-        LatticeBubbles {
-            interior: Bubbles::new(empty_spacetime.clone()),
-            exterior: Bubbles::new(empty_spacetime),
-            lattice,
-            delta: DMatrix::from_element(0, 0, Vector4::zeros()),
-            delta_squared: DMatrix::zeros(0, 0),
-        }
-    }
-
     /// Constructs a new `LatticeBubbles` by validating and processing given
     /// interior and exterior bubbles. Checks:
     /// - Shape: both arrays must be `(n, 4)` → `[t, x, y, z]`
@@ -222,11 +208,12 @@ where
     /// - (Optionally) sorts bubbles by nucleation time `t` (column 0)
     /// Precomputes pairwise spacetime intervals `delta` and Minkowski norms
     /// `delta_squared`.
-    pub fn with_bubbles(
+    pub fn new(
         bubbles_interior: Array2<f64>,
-        bubbles_exterior: Array2<f64>,
+        bubbles_exterior: Option<Array2<f64>>,
         lattice: L,
     ) -> Result<LatticeBubbles<L>, LatticeBubblesError> {
+        let bubbles_exterior = bubbles_exterior.unwrap_or_else(|| Array2::zeros((0, 4)));
         if bubbles_interior.ncols() != 4 || bubbles_exterior.ncols() != 4 {
             return Err(LatticeBubblesError::ArrayShapeMismatch(format!(
                 "Expected 4 columns, got {} for interior, {} for exterior",
@@ -321,15 +308,14 @@ where
     }
 
     /// Replaces the current interior and exterior bubbles in-place.
-    /// Performs the same validation and precomputation as `with_bubbles`.
+    /// Performs the same validation and precomputation as `new`.
     /// Returns error if validation fails; leaves self unchanged on error.
     pub fn set_bubbles(
         &mut self,
         bubbles_interior: Array2<f64>,
-        bubbles_exterior: Array2<f64>,
+        bubbles_exterior: Option<Array2<f64>>,
     ) -> Result<(), LatticeBubblesError> {
-        let new_self =
-            Self::with_bubbles(bubbles_interior, bubbles_exterior, self.lattice.clone())?;
+        let new_self = Self::new(bubbles_interior, bubbles_exterior, self.lattice.clone())?;
         *self = new_self;
         Ok(())
     }
@@ -458,7 +444,7 @@ where
         let interior = Self::load_bubbles_from_csv(interior_path, has_headers)?;
         let exterior = Self::load_bubbles_from_csv(exterior_path, has_headers)?;
 
-        Ok(Self::with_bubbles(interior, exterior, lattice)?)
+        Ok(Self::new(interior, Some(exterior), lattice)?)
     }
 
     /// Load bubbles from a CSV file.

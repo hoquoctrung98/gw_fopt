@@ -83,9 +83,9 @@ fn test_bulk_flow_two_bubbles() -> Result<(), Box<dyn Error>> {
             })
             .collect();
 
-        let mut bulk = GeneralizedBulkFlow::new(LatticeBubbles::with_bubbles(
+        let mut bulk = GeneralizedBulkFlow::new(LatticeBubbles::new(
             bubbles_interior.clone(),
-            bubbles_exterior.clone(),
+            Some(bubbles_exterior.clone()),
             EmptyLattice {},
         )?)?;
         bulk.set_resolution(n_cos_val as usize, n_phi_val as usize, true)?;
