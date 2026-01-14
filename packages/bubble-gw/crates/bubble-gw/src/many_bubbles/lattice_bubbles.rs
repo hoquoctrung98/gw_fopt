@@ -364,63 +364,6 @@ where
         self.delta_squared = delta_squared;
     }
 
-    /// Sorts the interior and exterior bubbles in-place by nucleation time `t`
-    /// (column 0). Uses stable sort to preserve relative order for equal
-    /// times.
-    pub fn sort_by_time(&mut self) {
-        // Sort interior
-        if !self.interior.spacetime.is_empty() {
-            self.interior
-                .spacetime
-                .sort_by(|a, b| a[0].partial_cmp(&b[0]).unwrap_or(std::cmp::Ordering::Equal));
-            // Recompute delta matrices since order changed
-            self.recompute_delta_matrices();
-        }
-
-        // Sort exterior
-        if !self.exterior.spacetime.is_empty() {
-            self.exterior
-                .spacetime
-                .sort_by(|a, b| a[0].partial_cmp(&b[0]).unwrap_or(std::cmp::Ordering::Equal));
-            // Exterior order doesn’t affect delta (only interior–*), but for consistency:
-            self.recompute_delta_matrices();
-        }
-    }
-
-    fn recompute_delta_matrices(&mut self) {
-        let n_interior = self.interior.n_bubbles();
-        let n_exterior = self.exterior.n_bubbles();
-        let n_total = n_interior + n_exterior;
-
-        let mut delta = DMatrix::from_element(n_interior, n_total, Vector4::zeros());
-        let mut delta_squared = DMatrix::zeros(n_interior, n_total);
-
-        let interior_spacetime = &self.interior.spacetime;
-        let exterior_spacetime = &self.exterior.spacetime;
-
-        for a_idx in 0..n_interior {
-            // Interior–Interior (symmetric)
-            for b_idx in a_idx..n_interior {
-                let delta_ab = &interior_spacetime[b_idx] - &interior_spacetime[a_idx];
-                let delta_squared_ab = delta_ab.scalar(&delta_ab);
-                delta[(a_idx, b_idx)] = delta_ab;
-                delta_squared[(a_idx, b_idx)] = delta_squared_ab;
-                delta[(b_idx, a_idx)] = -delta_ab;
-                delta_squared[(b_idx, a_idx)] = delta_squared_ab;
-            }
-            // Interior–Exterior
-            for b_ex in 0..n_exterior {
-                let b_total = n_interior + b_ex;
-                let delta_ab = &exterior_spacetime[b_ex] - &interior_spacetime[a_idx];
-                delta[(a_idx, b_total)] = delta_ab;
-                delta_squared[(a_idx, b_total)] = delta_ab.scalar(&delta_ab);
-            }
-        }
-
-        self.delta = delta;
-        self.delta_squared = delta_squared;
-    }
-
     /// Create a new `Bubbles` instance by reading interior and exterior bubbles
     /// from CSV files.
     ///

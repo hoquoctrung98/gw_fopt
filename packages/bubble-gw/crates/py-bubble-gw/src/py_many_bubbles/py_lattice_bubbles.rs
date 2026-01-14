@@ -66,11 +66,6 @@ impl PyLatticeBubbles {
         Self::from_builtin(builtin, interior, exterior)
     }
 
-    /// Sorts interior and exterior bubbles in-place by nucleation time `t`.
-    fn sort_by_time(&mut self) {
-        self.inner.sort_by_time();
-    }
-
     fn __repr__(&self) -> String {
         format!(
             "LatticeBubbles(lattice_type={}, n_interior={}, n_exterior={})",
