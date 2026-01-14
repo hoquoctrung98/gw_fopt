@@ -79,7 +79,7 @@ bubbles_interior = np.array([[0.0, 0.0, 0.0, L], [1.0, L, 0.0, 0.0]])
 bubbles_exterior = np.array([[0.0, 0.0, 0.0, 2 * L], [1.0, 3 * L, 0.0, 0.0]])
 
 # Below we create a combination of bubbles on a lattice
-lattice_bubbles_empty = many_bubbles.LatticeBubbles.with_bubbles(
+lattice_bubbles_empty = many_bubbles.LatticeBubbles(
     bubbles_interior=bubbles_interior,
     bubbles_exterior=bubbles_exterior,
     lattice=lattice_empty,
@@ -87,12 +87,12 @@ lattice_bubbles_empty = many_bubbles.LatticeBubbles.with_bubbles(
 
 # Note that is is optional to pass bubbles_exterior as an input argument
 # we can always generate the bubbles_exterior with a built-in boundary conditions later
-lattice_bubbles_cartesian = many_bubbles.LatticeBubbles.with_bubbles(
+lattice_bubbles_cartesian = many_bubbles.LatticeBubbles(
     bubbles_interior=bubbles_interior,
     bubbles_exterior=None,
     lattice=lattice_cartesian,
 )
-lattice_bubbles_spherical = many_bubbles.LatticeBubbles.with_bubbles(
+lattice_bubbles_spherical = many_bubbles.LatticeBubbles(
     bubbles_interior=bubbles_interior,
     bubbles_exterior=None,
     lattice=lattice_spherical,
@@ -111,7 +111,7 @@ lattice_bubbles_spherical.with_boundary_condition(boundary_condition="reflection
 
 try:
     bubbles_interior = np.array([[0.0, 0.0, 0.0, L], [1.0, L * 1.0001, 0.0, 0.0]])
-    lattice_bubbles = many_bubbles.LatticeBubbles.with_bubbles(
+    lattice_bubbles = many_bubbles.LatticeBubbles(
         bubbles_interior=bubbles_interior,
         bubbles_exterior=None,
         lattice=lattice_cartesian,
@@ -122,7 +122,7 @@ except Exception:
 try:
     bubbles_interior = np.array([[0.0, 0.0, 0.0, L], [1.0, L, 0.0, 0.0]])
     bubbles_exterior = np.array([[0.0, 0.0, 0.0, 0.5 * L], [1.0, 0.5 * L, 0.0, 0.0]])
-    lattice_bubbles = many_bubbles.LatticeBubbles.with_bubbles(
+    lattice_bubbles = many_bubbles.LatticeBubbles(
         bubbles_interior=bubbles_interior,
         bubbles_exterior=bubbles_exterior,
         lattice=lattice_spherical,
@@ -132,7 +132,7 @@ except Exception:
 
 try:
     bubbles_interior = np.array([[0.0, 0.0, 0.0, L], [2 * L, 0.0, 0.0, 0.0]])
-    lattice_bubbles = many_bubbles.LatticeBubbles.with_bubbles(
+    lattice_bubbles = many_bubbles.LatticeBubbles(
         bubbles_interior=bubbles_interior,
         bubbles_exterior=None,
         lattice=lattice_empty,
@@ -152,7 +152,7 @@ except Exception:
 bubbles_interior = np.array(
     [[0.0, 10.0, 0.0, 1.0], [1.0, 0.0, 10.0, 0.0], [2.0, 0.0, 0.0, 10.0]]
 )
-lattice_bubbles_cartesian = many_bubbles.LatticeBubbles.with_bubbles(
+lattice_bubbles_cartesian = many_bubbles.LatticeBubbles(
     bubbles_interior=bubbles_interior,
     bubbles_exterior=None,
     lattice=lattice_cartesian,
@@ -705,17 +705,28 @@ class LatticeBubblesVisualizer:
 
 # %%
 # Load bubbles from file, and only take the first 10 bubbles for visualization purpose
-bubbles_interior = np.loadtxt("./inputs/confY.txt")
 bubbles_interior = bubbles_interior[:10]
 
 L = 2.0
-lattice_bubbles_cartesian = many_bubbles.LatticeBubbles.with_bubbles(
-    bubbles_interior=bubbles_interior,
-    lattice=many_bubbles.CartesianLattice(
-        origin=[0.0, 0.0, 0.0], basis=[[L, 0.0, 0.0], [0.0, L, 0.0], [0.0, 0.0, L]]
-    ),
+nucleation_strategy = many_bubbles.FixedNucleationRate(
+    beta=1,
+    gamma0=1,
+    t0=0.0,
+    d_p0=0.01,
+    seed=0,
+    # Method to compute lattice volume that is outside of all bubbles. "approximation" means that volume_remaining = volume_lattice - sum_n(volume_bubble_n)
+    method="approximation",
 )
-lattice_bubbles_cartesian.with_boundary_condition("periodic")
+lattice_bubbles_cartesian = nucleation_strategy.nucleate(
+    lattice=many_bubbles.CartesianLattice(
+        origin=[-L / 2, -L / 2, -L / 2],
+        basis=[[L, 0.0, 0.0], [0.0, L, 0.0], [0.0, 0.0, L]],
+    ),
+    boundary_condition="periodic",
+)
+
+# %%
+lattice_bubbles_cartesian.bubbles_interior.shape
 
 # %%
 # Assuming you have a lattice_bubbles object
@@ -768,6 +779,9 @@ visualizer_cartesian.plot_lattice(
     fig, ax, skeleton_alpha=0.1, fill_alpha=0.1, show_grid=True
 )
 visualizer_cartesian.plot_bubbles(fig, ax, t=0.7, show_bubbles_exterior=True, alpha=0.4)
+ax.set_xlim(-1.5 * L, 1.5 * L)
+ax.set_ylim(-1.5 * L, 1.5 * L)
+ax.set_zlim(-1.5 * L, 1.5 * L)
 fig.savefig(
     f"./figures/many_bubbles/many_bubbles_at_time_cartesian.png",
     bbox_inches="tight",
@@ -776,7 +790,6 @@ fig.savefig(
 fig.show()
 
 # %%
-L = 1.0
 nucleation_strategy = many_bubbles.FixedNucleationRate(
     beta=1,
     gamma0=1,
@@ -787,9 +800,12 @@ nucleation_strategy = many_bubbles.FixedNucleationRate(
     method="approximation",
 )
 lattice_bubbles_spherical = nucleation_strategy.nucleate(
-    lattice=many_bubbles.SphericalLattice(center=[0.0, 0.0, 0.0], radius=2 * L),
+    lattice=many_bubbles.SphericalLattice(center=[0.0, 0.0, 0.0], radius=L),
     boundary_condition="reflection",
 )
+
+# %%
+lattice_bubbles_spherical.bubbles_interior.shape
 
 # %%
 # Assuming you have a lattice_bubbles object
@@ -842,6 +858,10 @@ visualizer_spherical.plot_bubbles(fig, ax, t=0.7, show_bubbles_exterior=True, al
 visualizer_spherical.plot_lattice(
     fig, ax, skeleton_alpha=0.1, fill_alpha=0.1, show_grid=True
 )
+ax.set_box_aspect((1, 1, 1))
+ax.set_xlim(-2 * L, 2 * L)
+ax.set_ylim(-2 * L, 2 * L)
+ax.set_zlim(-2 * L, 2 * L)
 fig.savefig(
     f"./figures/many_bubbles/many_bubbles_at_time_spherical.png",
     bbox_inches="tight",

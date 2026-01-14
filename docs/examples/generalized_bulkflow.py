@@ -634,7 +634,7 @@ bubbles_interior = np.array(
 
 lattice = many_bubbles.EmptyLattice()
 
-lattice_bubbles = many_bubbles.LatticeBubbles.with_bubbles(
+lattice_bubbles = many_bubbles.LatticeBubbles(
     bubbles_interior=bubbles_interior,
     lattice=lattice,
 )
@@ -749,7 +749,7 @@ lattice = many_bubbles.CartesianLattice(
     origin=[0.0, 0.0, 0.0], basis=[[L, 0.0, 0.0], [0.0, L, 0.0], [0.0, 0.0, L]]
 )
 
-lattice_bubbles = many_bubbles.LatticeBubbles.with_bubbles(
+lattice_bubbles = many_bubbles.LatticeBubbles(
     bubbles_interior=bubbles_interior,
     lattice=lattice,
 )

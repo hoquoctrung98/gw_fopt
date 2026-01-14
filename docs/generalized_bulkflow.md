@@ -19,9 +19,9 @@ where
 \begin{align*}
     \Lambda_{ij,lm}(\hat{\mathbf{k}}) &= P_{\hat{\mathbf{k}}}^{il} P_{\hat{\mathbf{k}}}^{jm} - \dfrac{1}{2} P_{\hat{\mathbf{k}}}^{ij} P_{\hat{\mathbf{k}}}^{lm}, \qquad P_{\hat{\mathbf{k}}}^{ij} = \delta_{ij} - \hat{k}_i \hat{k}_j \\
     T_{ij}(\hat{\mathbf{k}},\omega) &=\frac{1}{2\pi}\int dt \, d^3x \, e^{i\omega(t-\hat{\mathbf{k}} \cdot \mathbf{x})}T_{ij}(\mathbf{x},t)
-    = \kappa \rho_\text{vac} v_b^3 C_{ij} (\hat{\mathbf{k}},\omega), \\
+    = \kappa \rho_\text{vac} v_w^3 C_{ij} (\hat{\mathbf{k}},\omega), \\
     C_{ij}(\hat{\mathbf{k}},\omega) &= \dfrac{1}{6 \pi} \sum_n \int dt \, e^{i \omega (t - \hat{\mathbf{k}} \cdot \mathbf{x}_n)} A_{n, ij}(\hat{\mathbf{k}},\omega), \\
-    A_{n, ij}(\hat{\mathbf{k}},\omega, t) &= \int_{S_n} d \Omega_{\mathbf{x}} \, e^{-i \omega v_b (t - t_n) \hat{\mathbf{k}} \cdot \mathbf{\hat{x}}} \hat{\mathbf{x}}_i \hat{\mathbf{x}}_j \left[ (t - t_n)^3  f(t, t_n, t_{n,c})\right]
+    A_{n, ij}(\hat{\mathbf{k}},\omega, t) &= \int_{S_n} d \Omega_{\mathbf{x}} \, e^{-i \omega v_w (t - t_n) \hat{\mathbf{k}} \cdot \mathbf{\hat{x}}} \hat{\mathbf{x}}_i \hat{\mathbf{x}}_j \left[ (t - t_n)^3  f(t, t_n, t_{n,c})\right]
 \end{align*}
 ```
 
@@ -65,7 +65,7 @@ $$
         &=  G \omega^3 \left(\left\vert \widetilde{T}_{xx} - \widetilde{T}_{yy}\right\vert^2+2 \left\vert \widetilde{T}_{xy} \right\vert^2 + 2 \left\vert\widetilde{T}_{yx} \right\vert^2 \right) \nonumber \\
         &= 4 G \rho_\text{vac}^2 \omega^3 \left( \vert C_+ \vert^2 + \vert C_- \vert^2 \right), \\
         C_\pm(\omega) &= \dfrac{1}{6 \pi} \sum_{n=1}^N \int dt \ e^{i \omega (t - z_n)} A_{n, \pm}(\omega, t), \\
-        A_{n, \pm}(\omega, t) &= \int_{-1}^1 d \cos \theta_x \ e^{-i \omega (t - t_n) \cos \theta_x} B_{n, \pm} (\cos \theta_x, t), \\
+        A_{n, \pm}(\omega, t) &= \int_{-1}^1 d \cos \theta_x \ e^{-i \omega v_w (t - t_n) \cos \theta_x} B_{n, \pm} (\cos \theta_x, t), \\
         B_{n, \pm}(\cos \theta_x, t) &= \dfrac{\sin^2 \theta_x}{2} \int_0^{2 \pi} d \phi_x \ X_\pm(\phi_x) \left[ (t - t_n)^3  f(t, t_n, t_{n,c})\right]
     \end{align}
     ```

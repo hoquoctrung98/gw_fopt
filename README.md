@@ -89,11 +89,11 @@ State key:
 
 | Feature                                                                                                                                       | Status |
 | :-------------------------------------------------------------------------------------------------------------------------------------------- | :----: |
-| **#bubble_dynamics**                                                                                                                          |        |
+| **# bubble_dynamics**                                                                                                                         |        |
 | Evolution of two-bubbles on lattice using leapfrog                                                                                            |   🟢    |
 | Evolution of two-bubbles on lattice using adaptive mesh refinement?                                                                           |   🔴    |
 | Extract the surface tension along the bubble wall                                                                                             |   🟢    |
-| # **bubble_gw**                                                                                                                               |        |
+| **# bubble_gw**                                                                                                                               |        |
 | Compute GW spectrum of two-bubble collision with input from $(1+1)D$ lattice simulation                                                       |   🟢    |
 | Support for common Lattices (parallelepiped, cartesian, spherical) where we attach/generate Bubbles                                           |   🟢    |
 | Support LatticeBubbles: a bundle of bubbles and lattice to perform checks on bubbles inside/outside lattice and bubbles formed inside bubbles |   🟢    |
