@@ -442,7 +442,7 @@ def plot_omega_gw(
                 # Format coefficients and powers without trailing comma
                 coeff_str = ", ".join(f"{c:.2f}" for c in coeffs)
                 xi_str = ", ".join(f"{p - 1:.2f}" for p in powers_sets[s])
-                labels.append(f"$b_j=({coeff_str}), \\xi_j=({xi_str})$")
+                labels.append(f"$a_\\xi=({coeff_str}), \\xi=({xi_str})$")
     else:
         labels = [
             f"Set {s}" if n_sets > 1 else r"$\Omega_{\text{gw}}$" for s in range(n_sets)
@@ -599,7 +599,7 @@ def plot_omega_gw(
         fontsize=14,
     )
     ax.set_title(
-        r"Gravitational Wave Spectrum with gradient scaling function $f(t, t_{n, c}) = \Theta_H(t_{n, c} - t) + \sum_j b_j \left( \dfrac{t_{n, c} - t_n}{t - t_n} \right)^{\xi_j + 1} \Theta_H(t - t_{n, c})$",
+        r"Gravitational Wave Spectrum with gradient scaling function $f(t, t_{n, c}) = \Theta_H(t_{n, c} - t) + \sum_\xi a_\xi \left( \dfrac{t_{n, c} - t_n}{t - t_n} \right)^{\xi + 1} \Theta_H(t - t_{n, c})$",
         fontsize=14,
     )
 
@@ -723,7 +723,14 @@ ax.yaxis.set_major_locator(mpl.ticker.LogLocator(numticks=999))
 ax.yaxis.set_minor_locator(mpl.ticker.LogLocator(numticks=999, subs="auto"))
 ybottom, ytop = (1e-10, 2e-2)
 ax.set_ylim(bottom=ybottom, top=ytop)
-ax.vlines(x=2 * np.pi / d, ymin=ybottom, ymax=ytop, color="black", label=r"$2 \pi / d$")
+ax.vlines(
+    x=2 * np.pi / d,
+    ymin=ybottom,
+    ymax=ytop,
+    ls="--",
+    color="black",
+    label=r"$\omega = 2 \pi / d$",
+)
 ax.legend(bbox_to_anchor=(1.02, 1), loc="upper left", borderaxespad=0.0, fontsize=14)
 fig.savefig(
     f"./figures/two_bubbles/gw_spectrum_apprx.png",
