@@ -704,18 +704,10 @@ class LatticeBubblesVisualizer:
 
 
 # %%
-# Load bubbles from file, and only take the first 10 bubbles for visualization purpose
-bubbles_interior = bubbles_interior[:10]
-
 L = 2.0
-nucleation_strategy = many_bubbles.FixedNucleationRate(
-    beta=1,
-    gamma0=1,
-    t0=0.0,
-    d_p0=0.01,
+nucleation_strategy = many_bubbles.SpontaneousNucleation(
+    n_bubbles=4,
     seed=0,
-    # Method to compute lattice volume that is outside of all bubbles. "approximation" means that volume_remaining = volume_lattice - sum_n(volume_bubble_n)
-    method="approximation",
 )
 lattice_bubbles_cartesian = nucleation_strategy.nucleate(
     lattice=many_bubbles.CartesianLattice(
@@ -724,9 +716,6 @@ lattice_bubbles_cartesian = nucleation_strategy.nucleate(
     ),
     boundary_condition="periodic",
 )
-
-# %%
-lattice_bubbles_cartesian.bubbles_interior.shape
 
 # %%
 # Assuming you have a lattice_bubbles object
@@ -752,6 +741,9 @@ visualizer_cartesian.plot_bubbles_centers(
 visualizer_cartesian.plot_lattice(
     fig, ax, skeleton_alpha=0.1, fill_alpha=0.1, show_grid=True
 )
+ax.set_xlim(-1.5 * L, 1.5 * L)
+ax.set_ylim(-1.5 * L, 1.5 * L)
+ax.set_zlim(-1.5 * L, 1.5 * L)
 fig.savefig(
     f"./figures/many_bubbles/many_bubbles_centers_cartesian.png",
     bbox_inches="tight",
@@ -776,9 +768,9 @@ visualizer_cartesian.plot_bubbles_centers(
     linewidths=0.5,
 )
 visualizer_cartesian.plot_lattice(
-    fig, ax, skeleton_alpha=0.1, fill_alpha=0.1, show_grid=True
+    fig, ax, skeleton_alpha=0.2, fill_alpha=0.1, show_grid=True
 )
-visualizer_cartesian.plot_bubbles(fig, ax, t=0.7, show_bubbles_exterior=True, alpha=0.4)
+visualizer_cartesian.plot_bubbles(fig, ax, t=0.4, show_bubbles_exterior=True, alpha=0.4)
 ax.set_xlim(-1.5 * L, 1.5 * L)
 ax.set_ylim(-1.5 * L, 1.5 * L)
 ax.set_zlim(-1.5 * L, 1.5 * L)
