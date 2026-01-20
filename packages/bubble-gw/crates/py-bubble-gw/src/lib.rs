@@ -18,6 +18,8 @@ fn bubble_gw(py: Python, module_parent: &Bound<'_, PyModule>) -> PyResult<()> {
     module_many_bubbles.add_class::<py_many_bubbles::py_isometry::PyIsometry3>()?;
     module_many_bubbles
         .add_class::<py_many_bubbles::py_generalized_bulk_flow::PyGeneralizedBulkFlow>()?;
+    module_many_bubbles
+        .add_class::<py_many_bubbles::py_new_generalized_bulk_flow::PyNewGeneralizedBulkFlow>()?;
     module_many_bubbles.add_class::<py_many_bubbles::py_lattice_bubbles::PyLatticeBubbles>()?;
     module_many_bubbles
         .add_class::<py_many_bubbles::py_bubbles_nucleation::PySpontaneousNucleation>()?;

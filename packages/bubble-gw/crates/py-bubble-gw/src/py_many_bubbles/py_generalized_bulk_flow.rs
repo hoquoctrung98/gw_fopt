@@ -133,9 +133,9 @@ pub struct PyGeneralizedBulkFlow {
 #[pymethods]
 impl PyGeneralizedBulkFlow {
     #[new]
-    #[pyo3(signature = (lattice))]
-    pub fn new(lattice: PyLatticeBubbles) -> PyResult<Self> {
-        let bulk_flow = GeneralizedBulkFlow::new(lattice.inner)?;
+    #[pyo3(signature = (lattice_bubbles))]
+    pub fn new(lattice_bubbles: PyLatticeBubbles) -> PyResult<Self> {
+        let bulk_flow = GeneralizedBulkFlow::new(lattice_bubbles.inner)?;
         Ok(PyGeneralizedBulkFlow { inner: bulk_flow })
     }
 

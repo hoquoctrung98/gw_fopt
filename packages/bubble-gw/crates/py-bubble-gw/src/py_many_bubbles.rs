@@ -3,3 +3,4 @@ pub mod py_generalized_bulk_flow;
 pub mod py_isometry;
 pub mod py_lattice;
 pub mod py_lattice_bubbles;
+pub mod py_new_generalized_bulk_flow;
