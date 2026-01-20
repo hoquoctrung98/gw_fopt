@@ -33,7 +33,7 @@ impl PyFixedNucleationRate {
     /// Note:
     ///     If seed is None, a new random seed is used.
     #[new]
-    #[pyo3(signature = (beta, gamma0, t0, d_p0, seed=None, method="approximation", n_points=10000))]
+    #[pyo3(signature = (beta, gamma0, t0, d_p0, seed=None, method="approximation", n_points=10000, max_attempts=None, volume_remaining_fraction_cutoff=None))]
     fn new(
         beta: f64,
         gamma0: f64,
@@ -42,6 +42,8 @@ impl PyFixedNucleationRate {
         seed: Option<u64>,
         method: &str,
         n_points: usize,
+        max_attempts: Option<usize>,
+        volume_remaining_fraction_cutoff: Option<f64>,
     ) -> PyResult<Self> {
         if beta.is_nan() || gamma0.is_nan() || t0.is_nan() || d_p0.is_nan() {
             return Err(PyValueError::new_err("Parameters must be finite"));
@@ -67,7 +69,16 @@ impl PyFixedNucleationRate {
         };
 
         Ok(PyFixedNucleationRate {
-            inner: FixedRateNucleation::new(beta, gamma0, t0, d_p0, seed, volume_method),
+            inner: FixedRateNucleation::new(
+                beta,
+                gamma0,
+                t0,
+                d_p0,
+                seed,
+                volume_method,
+                max_attempts,
+                volume_remaining_fraction_cutoff,
+            ),
         })
     }
 
