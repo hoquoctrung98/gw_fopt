@@ -1,11 +1,10 @@
-// TODO:
-// Here we plan to use segment utils to decompose the first bubbles into segment
-// corresponding to the same bubble, hence potentially increase the performance.
-// use crate::utils::segment::{TryIntoConstrainedSegment, Unconstrained};
+use std::fmt::Debug;
+
 use nalgebra::{DMatrix, Vector4};
 use nalgebra_spacetime::Lorentzian;
 use ndarray::prelude::*;
 use ndarray::stack;
+use num::Zero;
 use num_complex::Complex64;
 use rayon::prelude::*;
 use rayon::{ThreadPool, ThreadPoolBuildError, ThreadPoolBuilder};
@@ -15,10 +14,107 @@ use crate::many_bubbles::bubbles::Bubbles;
 use crate::many_bubbles::lattice::GeneralLatticeProperties;
 use crate::many_bubbles::lattice_bubbles::{BubbleIndex, LatticeBubbles, LatticeBubblesError};
 
-/// Represents the causal collision status of a direction $(\cos\theta, \phi)$
-/// relative to a reference bubble $n$, used to evaluate the Heaviside functions
-/// $\Theta(t_{n,c} - t)$ and $\Theta(t - t_{n,c})$ in the scaling function
-/// $f(t, t_n, t_{n, c})$.
+/// A 3×3 Hermitian tensor stored in upper-triangular order:
+/// [xx, xy, xz, yy, yz, zz]
+///
+/// For real `T`, this reduces to a symmetric tensor.
+/// For complex `T`, Hermiticity implies:
+///   xx, yy, zz ∈ ℝ (though not enforced — caller ensures),
+///   yx = conj(xy), zx = conj(xz), zy = conj(yz).
+///
+/// This storage layout is optimal for memory and computation.
+#[derive(Debug, Clone, PartialEq)]
+#[repr(transparent)]
+pub struct HermitianTensor3<T>(pub [T; 6]);
+
+impl<T> HermitianTensor3<T> {
+    /// Construct from components in upper-triangular order.
+    pub const fn new(xx: T, xy: T, xz: T, yy: T, yz: T, zz: T) -> Self {
+        Self([xx, xy, xz, yy, yz, zz])
+    }
+
+    /// Accessors (read-only)
+    pub fn xx(&self) -> &T {
+        &self.0[0]
+    }
+    pub fn xy(&self) -> &T {
+        &self.0[1]
+    }
+    pub fn xz(&self) -> &T {
+        &self.0[2]
+    }
+    pub fn yy(&self) -> &T {
+        &self.0[3]
+    }
+    pub fn yz(&self) -> &T {
+        &self.0[4]
+    }
+    pub fn zz(&self) -> &T {
+        &self.0[5]
+    }
+
+    /// Borrow underlying array
+    pub fn as_array(&self) -> &[T; 6] {
+        &self.0
+    }
+    pub fn as_slice(&self) -> &[T] {
+        &self.0
+    }
+
+    /// Mutable access (for accumulation patterns)
+    pub fn as_array_mut(&mut self) -> &mut [T; 6] {
+        &mut self.0
+    }
+    pub fn as_slice_mut(&mut self) -> &mut [T] {
+        &mut self.0
+    }
+}
+
+impl<T> std::ops::Index<usize> for HermitianTensor3<T> {
+    type Output = T;
+    fn index(&self, i: usize) -> &Self::Output {
+        &self.0[i]
+    }
+}
+
+impl<T> std::ops::IndexMut<usize> for HermitianTensor3<T> {
+    fn index_mut(&mut self, i: usize) -> &mut Self::Output {
+        &mut self.0[i]
+    }
+}
+
+impl<T> From<[T; 6]> for HermitianTensor3<T> {
+    fn from(arr: [T; 6]) -> Self {
+        Self(arr)
+    }
+}
+
+impl<T> From<HermitianTensor3<T>> for [T; 6] {
+    fn from(tensor: HermitianTensor3<T>) -> Self {
+        tensor.0
+    }
+}
+
+impl<T: Clone + PartialEq + Debug + Zero + 'static> From<HermitianTensor3<T>>
+    for nalgebra::SMatrix<T, 3, 3>
+{
+    fn from(t: HermitianTensor3<T>) -> Self {
+        let mut m = nalgebra::SMatrix::<T, 3, 3>::zeros();
+        m[(0, 0)] = t.xx().clone();
+        m[(0, 1)] = t.xy().clone();
+        m[(1, 0)] = t.xy().clone();
+        m[(0, 2)] = t.xz().clone();
+        m[(2, 0)] = t.xz().clone();
+        m[(1, 1)] = t.yy().clone();
+        m[(1, 2)] = t.yz().clone();
+        m[(2, 1)] = t.yz().clone();
+        m[(2, 2)] = t.zz().clone();
+        m
+    }
+}
+
+/// Represents the collision status of a direction relative to a reference
+/// bubble.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum CollisionStatus {
     NeverCollided = 0,
@@ -90,6 +186,12 @@ impl<L> GeneralizedBulkFlow<L>
 where
     L: GeneralLatticeProperties,
 {
+    /// Create a new `BulkFlow`.
+    ///
+    /// * `bubbles` – spacetime coordinates of nucleated bubbles inside and
+    ///   outside the lattice
+    /// * `sort_by_time`    – if `true` the two bubble lists are sorted by
+    ///   formation time
     pub fn new(bubbles: LatticeBubbles<L>) -> Result<Self, GeneralizedBulkFlowError> {
         let default_num_threads = std::thread::available_parallelism()
             .map(|n| n.get())
@@ -485,13 +587,13 @@ where
     /// profiles using user-defined coefficients $a_\xi$ and powers $\xi$
     /// (stored in `coefficients_sets`, `powers_sets`), with optional
     /// exponential damping.
-    pub fn compute_b_integral(
+    pub fn compute_b_tensor(
         &self,
         cos_thetax_idx: usize,
         collision_status_grid: &ArrayRef2<CollisionStatus>,
         delta_tab_grid: &ArrayRef2<f64>,
         delta_ta: f64,
-    ) -> Result<(Array1<f64>, Array1<f64>), GeneralizedBulkFlowError> {
+    ) -> Result<HermitianTensor3<Array1<f64>>, GeneralizedBulkFlowError> {
         let n_cos_thetax = self.n_cos_thetax.ok_or_else(|| {
             GeneralizedBulkFlowError::UninitializedField("n_cos_thetax".to_string())
         })?;
@@ -526,33 +628,57 @@ where
         }
 
         let cos_thetax = cos_thetax_grid[cos_thetax_idx];
-        let sin_squared_thetax = 1.0 - cos_thetax.powi(2);
+        let sin_thetax = f64::sqrt((1.0 - cos_thetax * cos_thetax).max(0.0));
+        let sin_squared_thetax = sin_thetax * sin_thetax;
+        let cos_squared_thetax = cos_thetax * cos_thetax;
+        let sin_cos_thetax = sin_thetax * cos_thetax;
+
         let dphi = 2.0 * std::f64::consts::PI / n_phix as f64;
 
-        let mut b_plus_arr = Array1::zeros(n_sets);
-        let mut b_minus_arr = Array1::zeros(n_sets);
+        // Precompute trig over ϕ
+        let mut cos_phi = Array1::zeros(n_phix);
+        let mut sin_phi = Array1::zeros(n_phix);
+        azip!((c in &mut cos_phi, s in &mut sin_phi, &p in phix) {
+            *c = p.cos();
+            *s = p.sin();
+        });
 
-        let mut sin_2phi_row = Array1::zeros(n_phix);
-        let mut cos_2phi_row = Array1::zeros(n_phix);
-        azip!((sin_2phi in &mut sin_2phi_row, p in phix) *sin_2phi = (2.0 * p).sin());
-        azip!((cos_2phi in &mut cos_2phi_row, p in phix) *cos_2phi = (2.0 * p).cos());
+        let cos_phi_sq = &cos_phi * &cos_phi;
+        let sin_phi_sq = &sin_phi * &sin_phi;
+        let cos_sin_phi = &cos_phi * &sin_phi;
+
+        let basis0 = &cos_phi_sq * sin_squared_thetax;
+        let basis1 = &cos_sin_phi * sin_squared_thetax;
+        let basis2 = &cos_phi * sin_cos_thetax;
+        let basis3 = &sin_phi_sq * sin_squared_thetax;
+        let basis4 = &sin_phi * sin_cos_thetax;
+        let basis5 = Array1::from_elem(n_phix, cos_squared_thetax);
 
         let status_row = collision_status_grid.slice(s![cos_thetax_idx, ..]);
         let delta_tab_row = delta_tab_grid.slice(s![cos_thetax_idx, ..]);
 
-        // Trapezoidal weights: 0.5 at endpoints, 1.0 in middle
         let mut weights = Array1::from_elem(n_phix, 1.0);
-        weights[0] = 0.5;
-        weights[n_phix - 1] = 0.5;
-
-        if delta_ta <= 0.0 {
-            return Ok((b_plus_arr, b_minus_arr));
+        if n_phix > 1 {
+            weights[0] = 0.5;
+            weights[n_phix - 1] = 0.5;
         }
-        let delta_ta_cubed = delta_ta.powi(3);
+
+        let delta_ta_cubed = if delta_ta > 0.0 {
+            delta_ta.powi(3)
+        } else {
+            0.0
+        };
+
+        // Initialize 6 arrays (n_sets each)
+        let mut b0 = Array1::zeros(n_sets);
+        let mut b1 = Array1::zeros(n_sets);
+        let mut b2 = Array1::zeros(n_sets);
+        let mut b3 = Array1::zeros(n_sets);
+        let mut b4 = Array1::zeros(n_sets);
+        let mut b5 = Array1::zeros(n_sets);
 
         for s in 0..n_sets {
             let mut factors = Array1::zeros(n_phix);
-
             azip!((factor in &mut factors, &status in &status_row, &delta_tab in &delta_tab_row) {
                 match status {
                     CollisionStatus::NeverCollided | CollisionStatus::NotYetCollided => {
@@ -573,33 +699,39 @@ where
                 }
             });
 
-            let mut contrib_sin = Array1::zeros(n_phix);
-            let mut contrib_cos = Array1::zeros(n_phix);
-            azip!((sin_val in &mut contrib_sin, &sin2 in &sin_2phi_row, &factor in &factors, &weight in &weights) {
-                *sin_val = sin2 * factor * weight;
-            });
-            azip!((cos_val in &mut contrib_cos, &cos2 in &cos_2phi_row, &scale in &factors, &weight in &weights) {
-                *cos_val = cos2 * scale * weight;
-            });
+            let weighted0 = &basis0 * &factors * &weights;
+            let weighted1 = &basis1 * &factors * &weights;
+            let weighted2 = &basis2 * &factors * &weights;
+            let weighted3 = &basis3 * &factors * &weights;
+            let weighted4 = &basis4 * &factors * &weights;
+            let weighted5 = &basis5 * &factors * &weights;
 
-            let integral_minus = contrib_sin.sum() * dphi * delta_ta_cubed;
-            let integral_plus = contrib_cos.sum() * dphi * delta_ta_cubed;
+            let integral0 = weighted0.sum() * dphi * delta_ta_cubed;
+            let integral1 = weighted1.sum() * dphi * delta_ta_cubed;
+            let integral2 = weighted2.sum() * dphi * delta_ta_cubed;
+            let integral3 = weighted3.sum() * dphi * delta_ta_cubed;
+            let integral4 = weighted4.sum() * dphi * delta_ta_cubed;
+            let integral5 = weighted5.sum() * dphi * delta_ta_cubed;
 
-            b_plus_arr[s] += 0.5 * sin_squared_thetax * integral_plus;
-            b_minus_arr[s] += 0.5 * sin_squared_thetax * integral_minus;
+            b0[s] = integral0;
+            b1[s] = integral1;
+            b2[s] = integral2;
+            b3[s] = integral3;
+            b4[s] = integral4;
+            b5[s] = integral5;
         }
 
-        Ok((b_plus_arr, b_minus_arr))
+        Ok(HermitianTensor3::new(b0, b1, b2, b3, b4, b5))
     }
 
-    pub fn compute_a_integral<W>(
+    pub fn compute_a_tensor<W>(
         &self,
         a_idx: usize,
         w_arr: W,
         t: f64,
         first_bubble: &ArrayRef2<BubbleIndex>,
         delta_tab_grid: &ArrayRef2<f64>,
-    ) -> Result<(Array2<Complex64>, Array2<Complex64>), GeneralizedBulkFlowError>
+    ) -> Result<HermitianTensor3<Array2<Complex64>>, GeneralizedBulkFlowError>
     where
         W: AsRef<[f64]>,
     {
@@ -631,53 +763,78 @@ where
         let ta = self.lattice_bubbles.interior.spacetime[a_idx][0];
         let delta_ta = t - ta;
 
-        // Compute collision status grid
         let collision_status =
             self.compute_collision_status(a_idx, t, &first_bubble, &delta_tab_grid)?;
 
-        let mut a_plus = Array2::<Complex64>::zeros((n_sets, n_w));
-        let mut a_minus = Array2::<Complex64>::zeros((n_sets, n_w));
-        let dcos_thetax = 2.0 / (n_cos_thetax - 1) as f64;
+        let mut a0 = Array2::zeros((n_sets, n_w));
+        let mut a1 = Array2::zeros((n_sets, n_w));
+        let mut a2 = Array2::zeros((n_sets, n_w));
+        let mut a3 = Array2::zeros((n_sets, n_w));
+        let mut a4 = Array2::zeros((n_sets, n_w));
+        let mut a5 = Array2::zeros((n_sets, n_w));
+
+        let dcos_thetax = if n_cos_thetax > 1 {
+            2.0 / (n_cos_thetax - 1) as f64
+        } else {
+            1.0
+        };
 
         for i in 0..n_cos_thetax {
-            let (b_plus, b_minus) =
-                self.compute_b_integral(i, &collision_status, &delta_tab_grid, delta_ta)?;
+            let b_tensor =
+                self.compute_b_tensor(i, &collision_status, &delta_tab_grid, delta_ta)?;
 
             let cos_thetax_val = cos_thetax_grid[i];
             let phase_base = Complex64::new(0.0, -delta_ta * cos_thetax_val);
-            let mut angular_phases = Array1::zeros(n_w);
-            for w_idx in 0..n_w {
-                angular_phases[w_idx] = (w_arr[w_idx] * phase_base).exp();
-            }
+            let angular_phases: Vec<Complex64> =
+                w_arr.iter().map(|&w| (w * phase_base).exp()).collect();
 
-            let weight = if i == 0 || i == n_cos_thetax - 1 {
+            let weight_theta = if n_cos_thetax == 1 {
+                1.0
+            } else if i == 0 || i == n_cos_thetax - 1 {
                 0.5
             } else {
                 1.0
             };
-            let phase_factors = angular_phases.mapv(|p| p * dcos_thetax * weight);
+            let phase_factor_scalar = dcos_thetax * weight_theta;
+
+            let b0 = b_tensor.xx(); // &Array1<f64>
+            let b1 = b_tensor.xy();
+            let b2 = b_tensor.xz();
+            let b3 = b_tensor.yy();
+            let b4 = b_tensor.yz();
+            let b5 = b_tensor.zz();
 
             for s in 0..n_sets {
-                let b_plus_s = Complex64::new(b_plus[s], 0.0);
-                let b_minus_s = Complex64::new(b_minus[s], 0.0);
-                azip!((a_plus_val in a_plus.slice_mut(s![s, ..]), a_minus_val in a_minus.slice_mut(s![s, ..]), &factor in &phase_factors) {
-                    *a_plus_val += b_plus_s * factor;
-                    *a_minus_val += b_minus_s * factor;
-                });
+                let b0_val = Complex64::new(b0[s], 0.0);
+                let b1_val = Complex64::new(b1[s], 0.0);
+                let b2_val = Complex64::new(b2[s], 0.0);
+                let b3_val = Complex64::new(b3[s], 0.0);
+                let b4_val = Complex64::new(b4[s], 0.0);
+                let b5_val = Complex64::new(b5[s], 0.0);
+
+                for w_idx in 0..n_w {
+                    let phase = angular_phases[w_idx] * phase_factor_scalar;
+                    a0[[s, w_idx]] += b0_val * phase;
+                    a1[[s, w_idx]] += b1_val * phase;
+                    a2[[s, w_idx]] += b2_val * phase;
+                    a3[[s, w_idx]] += b3_val * phase;
+                    a4[[s, w_idx]] += b4_val * phase;
+                    a5[[s, w_idx]] += b5_val * phase;
+                }
             }
         }
 
-        Ok((a_plus, a_minus))
+        Ok(HermitianTensor3::new(a0, a1, a2, a3, a4, a5))
     }
 
-    pub fn compute_c_integrand_fixed_bubble<W>(
+    pub fn compute_c_tensor_integrand_fixed_bubble<W>(
         &self,
         a_idx: usize,
         w_arr: W,
         t_begin: Option<f64>,
         t_end: f64,
         n_t: usize,
-    ) -> Result<Array4<Complex64>, GeneralizedBulkFlowError>
+    ) -> Result<HermitianTensor3<Array3<Complex64>>, GeneralizedBulkFlowError>
     where
         W: AsRef<[f64]>,
     {
@@ -687,7 +844,15 @@ where
 
         let t_nucleation = self.lattice_bubbles.interior.spacetime[a_idx][0];
         if t_nucleation >= t_end {
-            return Ok(Array4::zeros((2, n_sets, n_w, n_t)));
+            let zeros = Array3::zeros((n_sets, n_w, n_t));
+            return Ok(HermitianTensor3::new(
+                zeros.clone(),
+                zeros.clone(),
+                zeros.clone(),
+                zeros.clone(),
+                zeros.clone(),
+                zeros,
+            ));
         }
 
         let t_begin = t_begin.unwrap_or(0.0);
@@ -697,6 +862,7 @@ where
                 end: t_end,
             });
         }
+
         let t_arr = Array1::linspace(t_begin, t_end, n_t).to_vec();
         let dt = if n_t > 1 { t_arr[1] - t_arr[0] } else { 0.0 };
         let z_a = self.lattice_bubbles.interior.spacetime[a_idx][3];
@@ -709,29 +875,49 @@ where
             };
         let delta_tab = self.compute_delta_tab(a_idx, &first_colliding_bubbles_with_a)?;
 
-        // Final result
-        let mut c_integrand = Array4::<Complex64>::zeros((2, n_sets, n_w, n_t));
+        let mut c0 = Array3::zeros((n_sets, n_w, n_t));
+        let mut c1 = Array3::zeros((n_sets, n_w, n_t));
+        let mut c2 = Array3::zeros((n_sets, n_w, n_t));
+        let mut c3 = Array3::zeros((n_sets, n_w, n_t));
+        let mut c4 = Array3::zeros((n_sets, n_w, n_t));
+        let mut c5 = Array3::zeros((n_sets, n_w, n_t));
 
         let time_and_integrand_results: Vec<
-            Result<(usize, Array2<Complex64>, Array2<Complex64>), GeneralizedBulkFlowError>,
+            Result<(usize, [Array2<Complex64>; 6]), GeneralizedBulkFlowError>,
         > = self.thread_pool.install(|| {
             t_arr
                 .into_par_iter()
                 .enumerate()
                 .map(|(t_idx, t)| {
                     if t <= t_nucleation {
-                        let zero_p = Array2::zeros((n_sets, n_w));
-                        let zero_m = Array2::zeros((n_sets, n_w));
-                        return Ok((t_idx, zero_p, zero_m));
+                        let zeros = Array2::zeros((n_sets, n_w));
+                        return Ok((
+                            t_idx,
+                            [
+                                zeros.clone(),
+                                zeros.clone(),
+                                zeros.clone(),
+                                zeros.clone(),
+                                zeros.clone(),
+                                zeros,
+                            ],
+                        ));
                     }
 
-                    let (a_plus, a_minus) = self.compute_a_integral(
+                    let a_tensor = self.compute_a_tensor(
                         a_idx,
                         w_arr,
                         t,
                         &first_colliding_bubbles_with_a,
                         &delta_tab,
                     )?;
+
+                    let a0 = a_tensor.xx();
+                    let a1 = a_tensor.xy();
+                    let a2 = a_tensor.xz();
+                    let a3 = a_tensor.yy();
+                    let a4 = a_tensor.yz();
+                    let a5 = a_tensor.zz();
 
                     let weight = if t_idx == 0 || t_idx == n_t - 1 {
                         0.5
@@ -740,201 +926,76 @@ where
                     };
                     let dt_weight = Complex64::new(dt * weight, 0.0);
 
-                    let mut c_integrand_plus = Array2::zeros((n_sets, n_w));
-                    let mut c_integrand_minus = Array2::zeros((n_sets, n_w));
+                    let mut c_integrand0 = Array2::zeros((n_sets, n_w));
+                    let mut c_integrand1 = Array2::zeros((n_sets, n_w));
+                    let mut c_integrand2 = Array2::zeros((n_sets, n_w));
+                    let mut c_integrand3 = Array2::zeros((n_sets, n_w));
+                    let mut c_integrand4 = Array2::zeros((n_sets, n_w));
+                    let mut c_integrand5 = Array2::zeros((n_sets, n_w));
 
                     for s in 0..n_sets {
                         for w_idx in 0..n_w {
                             let w = w_arr[w_idx];
                             let phase = Complex64::new(0.0, w * (t - z_a)).exp();
-                            c_integrand_plus[[s, w_idx]] = a_plus[[s, w_idx]] * phase * dt_weight;
-                            c_integrand_minus[[s, w_idx]] = a_minus[[s, w_idx]] * phase * dt_weight;
+                            let factor = phase * dt_weight;
+
+                            c_integrand0[[s, w_idx]] = a0[[s, w_idx]] * factor;
+                            c_integrand1[[s, w_idx]] = a1[[s, w_idx]] * factor;
+                            c_integrand2[[s, w_idx]] = a2[[s, w_idx]] * factor;
+                            c_integrand3[[s, w_idx]] = a3[[s, w_idx]] * factor;
+                            c_integrand4[[s, w_idx]] = a4[[s, w_idx]] * factor;
+                            c_integrand5[[s, w_idx]] = a5[[s, w_idx]] * factor;
                         }
                     }
 
-                    Ok((t_idx, c_integrand_plus, c_integrand_minus))
+                    Ok((
+                        t_idx,
+                        [
+                            c_integrand0,
+                            c_integrand1,
+                            c_integrand2,
+                            c_integrand3,
+                            c_integrand4,
+                            c_integrand5,
+                        ],
+                    ))
                 })
                 .collect()
         });
 
         for result in time_and_integrand_results {
-            let (t_idx, c_integrand_plus, c_integrand_minus) = result?;
+            let (t_idx, [arr0, arr1, arr2, arr3, arr4, arr5]) = result?;
             for s in 0..n_sets {
                 for w_idx in 0..n_w {
-                    c_integrand[[0, s, w_idx, t_idx]] += c_integrand_plus[[s, w_idx]];
-                    c_integrand[[1, s, w_idx, t_idx]] += c_integrand_minus[[s, w_idx]];
+                    c0[[s, w_idx, t_idx]] += arr0[[s, w_idx]];
+                    c1[[s, w_idx, t_idx]] += arr1[[s, w_idx]];
+                    c2[[s, w_idx, t_idx]] += arr2[[s, w_idx]];
+                    c3[[s, w_idx, t_idx]] += arr3[[s, w_idx]];
+                    c4[[s, w_idx, t_idx]] += arr4[[s, w_idx]];
+                    c5[[s, w_idx, t_idx]] += arr5[[s, w_idx]];
                 }
             }
         }
 
         let factor = Complex64::new(1.0 / (6.0 * std::f64::consts::PI), 0.0);
-        c_integrand *= factor;
+        c0 *= factor;
+        c1 *= factor;
+        c2 *= factor;
+        c3 *= factor;
+        c4 *= factor;
+        c5 *= factor;
 
-        Ok(c_integrand)
+        Ok(HermitianTensor3::new(c0, c1, c2, c3, c4, c5))
     }
 
-    /// Computes the bubble-specific contribution to $C_{+,\times}(\omega)$:
-    /// $$
-    /// C_{n,\pm}(\omega) = \frac{1}{6\pi} \int_{t_n}^{t_{\text{end}}}
-    /// e^{i\omega(t - z_n)} A_{n,\pm}(\omega, t)\, dt, $$
-    /// using trapezoidal integration over time with parallel evaluation of
-    /// $A_{n,\pm}$. Returns stacked $[C_{n,+}, C_{n,\times}]$.
-    pub fn compute_c_integral_fixed_bubble<W>(
-        &mut self,
-        a_idx: usize,
-        w_arr: W,
-        t_begin: Option<f64>,
-        t_end: f64,
-        n_t: usize,
-    ) -> Result<Array3<Complex64>, GeneralizedBulkFlowError>
-    where
-        W: AsRef<[f64]>,
-    {
-        let w_arr = w_arr.as_ref();
-        let n_sets = self.coefficients_sets.nrows();
-        let n_w = w_arr.len();
-        let t_begin = t_begin.unwrap_or(0.0);
-        if t_begin > t_end {
-            return Err(GeneralizedBulkFlowError::InvalidTimeRange {
-                begin: t_begin,
-                end: t_end,
-            });
-        }
-        let t_arr = Array1::linspace(t_begin, t_end, n_t).to_vec();
-        let dt = if n_t > 1 { t_arr[1] - t_arr[0] } else { 0.0 };
-
-        let z_a = self.lattice_bubbles.interior.spacetime[a_idx][3];
-
-        let first_colliding_bubbles_with_a: Array2<BubbleIndex> =
-            if let Some(cache) = self.first_colliding_bubbles.as_ref() {
-                cache.slice(s![a_idx, .., ..]).to_owned()
-            } else {
-                self.compute_first_colliding_bubble(a_idx)?
-            };
-        let delta_tab = self.compute_delta_tab(a_idx, &first_colliding_bubbles_with_a)?;
-
-        let (c_plus, c_minus) = self.thread_pool.install(|| {
-            t_arr
-                .into_par_iter()
-                .enumerate()
-                .fold(
-                    || (Array2::zeros((n_sets, n_w)), Array2::zeros((n_sets, n_w))),
-                    |(mut integral_plus, mut integral_minus), (t_idx, t)| {
-                        let mut integrand_dt_plus = Array2::zeros((n_sets, n_w));
-                        let mut integrand_dt_minus = Array2::zeros((n_sets, n_w));
-                        let t_nucleation = self.lattice_bubbles.interior.spacetime[a_idx][0];
-                        if t_nucleation <= t {
-                            let (a_plus, a_minus) = self
-                                .compute_a_integral(
-                                    a_idx,
-                                    w_arr,
-                                    t,
-                                    &first_colliding_bubbles_with_a,
-                                    &delta_tab,
-                                )
-                                .unwrap();
-                            for s in 0..n_sets {
-                                for w_idx in 0..n_w {
-                                    let w = w_arr[w_idx];
-                                    let complex_phase = Complex64::new(0.0, w * (t - z_a)).exp();
-                                    let weight = if t_idx == 0 || t_idx == n_t - 1 {
-                                        0.5
-                                    } else {
-                                        1.0
-                                    };
-                                    integrand_dt_plus[[s, w_idx]] +=
-                                        a_plus[[s, w_idx]] * complex_phase * weight;
-                                    integrand_dt_minus[[s, w_idx]] +=
-                                        a_minus[[s, w_idx]] * complex_phase * weight;
-                                }
-                            }
-                            let dt_complex = Complex64::new(dt, 0.0);
-                            integrand_dt_plus *= dt_complex;
-                            integrand_dt_minus *= dt_complex;
-                            for s in 0..n_sets {
-                                for w_idx in 0..n_w {
-                                    integral_plus[[s, w_idx]] += integrand_dt_plus[[s, w_idx]];
-                                    integral_minus[[s, w_idx]] += integrand_dt_minus[[s, w_idx]];
-                                }
-                            }
-                        }
-                        (integral_plus, integral_minus)
-                    },
-                )
-                .reduce(
-                    || (Array2::zeros((n_sets, n_w)), Array2::zeros((n_sets, n_w))),
-                    |(plus1, minus1), (plus2, minus2)| (plus1 + plus2, minus1 + minus2),
-                )
-        });
-        let factor = Complex64::new(1.0 / (6.0 * std::f64::consts::PI), 0.0);
-        let c_plus = c_plus * factor;
-        let c_minus = c_minus * factor;
-        stack(Axis(0), &[c_plus.view(), c_minus.view()]).map_err(|e| {
-            GeneralizedBulkFlowError::ArrayShapeMismatch(format!("Failed to stack arrays: {}", e))
-        })
-    }
-
-    pub fn compute_c_integrand<W>(
+    pub fn compute_c_tensor_integrand<W>(
         &self,
         w_arr: W,
         t_begin: Option<f64>,
         t_end: f64,
         n_t: usize,
         selected_bubbles: Option<&[usize]>,
-    ) -> Result<Array4<Complex64>, GeneralizedBulkFlowError>
-    where
-        W: AsRef<[f64]>,
-    {
-        let w_arr = w_arr.as_ref();
-        let n_interior = self.lattice_bubbles.interior.n_bubbles();
-        let n_sets = self.coefficients_sets.nrows();
-        let n_w = w_arr.len();
-
-        if n_t < 2 {
-            return Err(GeneralizedBulkFlowError::InvalidResolution("n_t must be >= 2".into()));
-        }
-
-        // Validate and collect bubble indices
-        let bubble_ids: Vec<usize> = match selected_bubbles {
-            Some(ids) => {
-                if ids.is_empty() {
-                    return Ok(Array4::zeros((2, n_sets, n_w, n_t)));
-                }
-                for &a in ids {
-                    if a >= n_interior {
-                        return Err(GeneralizedBulkFlowError::InvalidIndex {
-                            index: a,
-                            max: n_interior,
-                        });
-                    }
-                }
-                ids.to_vec()
-            },
-            None => (0..n_interior).collect(),
-        };
-
-        let mut total = Array4::zeros((2, n_sets, n_w, n_t));
-        for &a_idx in &bubble_ids {
-            total += &self.compute_c_integrand_fixed_bubble(a_idx, w_arr, t_begin, t_end, n_t)?;
-        }
-
-        Ok(total)
-    }
-
-    /// Computes the total $C_{+}(\omega)$ and $C_{\times}(\omega)$ by summing
-    /// contributions from selected bubbles: $$
-    /// C_{\pm}(\omega) = \sum_{n \in \text{selected}} C_{n,\pm}(\omega),
-    /// $$
-    /// where $C_{n,\pm}$ are computed via `compute_c_integral_fixed_bubble`.
-    /// Result is shape `(2, n_sets, n_w)`, i.e. `[C_+, C_\times]`.
-    pub fn compute_c_integral<W>(
-        &mut self,
-        w_arr: W,
-        t_begin: Option<f64>,
-        t_end: f64,
-        n_t: usize,
-        selected_bubbles: Option<&[usize]>,
-    ) -> Result<Array3<Complex64>, GeneralizedBulkFlowError>
+    ) -> Result<HermitianTensor3<Array3<Complex64>>, GeneralizedBulkFlowError>
     where
         W: AsRef<[f64]>,
     {
@@ -953,7 +1014,15 @@ where
         let bubble_ids: Vec<usize> = match selected_bubbles {
             Some(ids) => {
                 if ids.is_empty() {
-                    return Ok(Array3::zeros((2, n_sets, n_w)));
+                    let zeros = Array3::zeros((n_sets, n_w, n_t));
+                    return Ok(HermitianTensor3::new(
+                        zeros.clone(),
+                        zeros.clone(),
+                        zeros.clone(),
+                        zeros.clone(),
+                        zeros.clone(),
+                        zeros,
+                    ));
                 }
                 for &a in ids {
                     if a >= n_interior {
@@ -968,12 +1037,239 @@ where
             None => (0..n_interior).collect(),
         };
 
-        let mut c_total = Array3::<Complex64>::zeros((2, n_sets, n_w));
+        // Initialize total accumulators: (n_sets, n_w, n_t)
+        let mut total0 = Array3::zeros((n_sets, n_w, n_t));
+        let mut total1 = Array3::zeros((n_sets, n_w, n_t));
+        let mut total2 = Array3::zeros((n_sets, n_w, n_t));
+        let mut total3 = Array3::zeros((n_sets, n_w, n_t));
+        let mut total4 = Array3::zeros((n_sets, n_w, n_t));
+        let mut total5 = Array3::zeros((n_sets, n_w, n_t));
+
+        // Sum integrands over selected bubbles
         for &a_idx in &bubble_ids {
-            c_total += &self.compute_c_integral_fixed_bubble(a_idx, w_arr, t_begin, t_end, n_t)?;
+            let integrand =
+                self.compute_c_tensor_integrand_fixed_bubble(a_idx, w_arr, t_begin, t_end, n_t)?;
+
+            // Borrow components and accumulate
+            total0 += &integrand[0];
+            total1 += &integrand[1];
+            total2 += &integrand[2];
+            total3 += &integrand[3];
+            total4 += &integrand[4];
+            total5 += &integrand[5];
         }
 
-        Ok(c_total)
+        Ok(HermitianTensor3::new(total0, total1, total2, total3, total4, total5))
+    }
+
+    pub fn compute_c_tensor_fixed_bubble<W>(
+        &mut self,
+        a_idx: usize,
+        w_arr: W,
+        t_begin: Option<f64>,
+        t_end: f64,
+        n_t: usize,
+    ) -> Result<HermitianTensor3<Array2<Complex64>>, GeneralizedBulkFlowError>
+    where
+        W: AsRef<[f64]>,
+    {
+        let w_arr = w_arr.as_ref();
+        let n_sets = self.coefficients_sets.nrows();
+        let n_w = w_arr.len();
+        let t_begin = t_begin.unwrap_or(0.0);
+        if t_begin > t_end {
+            return Err(GeneralizedBulkFlowError::InvalidTimeRange {
+                begin: t_begin,
+                end: t_end,
+            });
+        }
+
+        let t_nucleation = self.lattice_bubbles.interior.spacetime[a_idx][0];
+        // // FIXME: see if this is necessary
+        // if t_nucleation >= t_end {
+        //     let zeros = Array2::zeros((n_sets, n_w));
+        //     return Ok(HermitianTensor3::new(
+        //         zeros.clone(),
+        //         zeros.clone(),
+        //         zeros.clone(),
+        //         zeros.clone(),
+        //         zeros.clone(),
+        //         zeros,
+        //     ));
+        // }
+
+        let t_arr = Array1::linspace(t_begin, t_end, n_t).to_vec();
+        let dt = if n_t > 1 { t_arr[1] - t_arr[0] } else { 0.0 };
+        let z_a = self.lattice_bubbles.interior.spacetime[a_idx][3];
+
+        let first_colliding_bubbles_with_a: Array2<BubbleIndex> =
+            if let Some(cache) = self.first_colliding_bubbles.as_ref() {
+                cache.slice(s![a_idx, .., ..]).to_owned()
+            } else {
+                self.compute_first_colliding_bubble(a_idx)?
+            };
+        let delta_tab = self.compute_delta_tab(a_idx, &first_colliding_bubbles_with_a)?;
+
+        let (c0, c1, c2, c3, c4, c5) = self.thread_pool.install(|| {
+            t_arr
+                .into_par_iter()
+                .enumerate()
+                .fold(
+                    || {
+                        (
+                            Array2::zeros((n_sets, n_w)),
+                            Array2::zeros((n_sets, n_w)),
+                            Array2::zeros((n_sets, n_w)),
+                            Array2::zeros((n_sets, n_w)),
+                            Array2::zeros((n_sets, n_w)),
+                            Array2::zeros((n_sets, n_w)),
+                        )
+                    },
+                    |(mut i0, mut i1, mut i2, mut i3, mut i4, mut i5), (t_idx, t)| {
+                        if t <= t_nucleation {
+                            return (i0, i1, i2, i3, i4, i5);
+                        }
+
+                        let a_tensor = self
+                            .compute_a_tensor(
+                                a_idx,
+                                w_arr,
+                                t,
+                                &first_colliding_bubbles_with_a,
+                                &delta_tab,
+                            )
+                            .unwrap();
+
+                        let a0 = a_tensor.xx();
+                        let a1 = a_tensor.xy();
+                        let a2 = a_tensor.xz();
+                        let a3 = a_tensor.yy();
+                        let a4 = a_tensor.yz();
+                        let a5 = a_tensor.zz();
+
+                        let weight = if t_idx == 0 || t_idx == n_t - 1 {
+                            0.5
+                        } else {
+                            1.0
+                        };
+                        let dt_complex = Complex64::new(dt * weight, 0.0);
+
+                        for s in 0..n_sets {
+                            for w_idx in 0..n_w {
+                                let w = w_arr[w_idx];
+                                let phase = Complex64::new(0.0, w * (t - z_a)).exp();
+                                let factor = phase * dt_complex;
+
+                                i0[[s, w_idx]] += a0[[s, w_idx]] * factor;
+                                i1[[s, w_idx]] += a1[[s, w_idx]] * factor;
+                                i2[[s, w_idx]] += a2[[s, w_idx]] * factor;
+                                i3[[s, w_idx]] += a3[[s, w_idx]] * factor;
+                                i4[[s, w_idx]] += a4[[s, w_idx]] * factor;
+                                i5[[s, w_idx]] += a5[[s, w_idx]] * factor;
+                            }
+                        }
+
+                        (i0, i1, i2, i3, i4, i5)
+                    },
+                )
+                .reduce(
+                    || {
+                        (
+                            Array2::zeros((n_sets, n_w)),
+                            Array2::zeros((n_sets, n_w)),
+                            Array2::zeros((n_sets, n_w)),
+                            Array2::zeros((n_sets, n_w)),
+                            Array2::zeros((n_sets, n_w)),
+                            Array2::zeros((n_sets, n_w)),
+                        )
+                    },
+                    |(i0a, i1a, i2a, i3a, i4a, i5a), (i0b, i1b, i2b, i3b, i4b, i5b)| {
+                        (i0a + i0b, i1a + i1b, i2a + i2b, i3a + i3b, i4a + i4b, i5a + i5b)
+                    },
+                )
+        });
+
+        let factor = Complex64::new(1.0 / (6.0 * std::f64::consts::PI), 0.0);
+        Ok(HermitianTensor3::new(
+            c0 * factor,
+            c1 * factor,
+            c2 * factor,
+            c3 * factor,
+            c4 * factor,
+            c5 * factor,
+        ))
+    }
+
+    pub fn compute_c_tensor<W>(
+        &mut self,
+        w_arr: W,
+        t_begin: Option<f64>,
+        t_end: f64,
+        n_t: usize,
+        selected_bubbles: Option<&[usize]>,
+    ) -> Result<HermitianTensor3<Array2<Complex64>>, GeneralizedBulkFlowError>
+    where
+        W: AsRef<[f64]>,
+    {
+        let w_arr = w_arr.as_ref();
+        let n_interior = self.lattice_bubbles.interior.n_bubbles();
+        let n_sets = self.coefficients_sets.nrows();
+        let n_w = w_arr.len();
+
+        if n_t < 2 {
+            return Err(GeneralizedBulkFlowError::InvalidResolution(
+                "n_t must be >= 2 for integration".to_string(),
+            ));
+        }
+
+        // Validate and collect bubble indices
+        let bubble_ids: Vec<usize> = match selected_bubbles {
+            Some(ids) => {
+                if ids.is_empty() {
+                    let zeros = Array2::zeros((n_sets, n_w));
+                    return Ok(HermitianTensor3::new(
+                        zeros.clone(),
+                        zeros.clone(),
+                        zeros.clone(),
+                        zeros.clone(),
+                        zeros.clone(),
+                        zeros,
+                    ));
+                }
+                for &a in ids {
+                    if a >= n_interior {
+                        return Err(GeneralizedBulkFlowError::InvalidIndex {
+                            index: a,
+                            max: n_interior,
+                        });
+                    }
+                }
+                ids.to_vec()
+            },
+            None => (0..n_interior).collect(),
+        };
+
+        // Initialize accumulator tensor (time-integrated: (n_sets, n_w))
+        let mut total0 = Array2::zeros((n_sets, n_w));
+        let mut total1 = Array2::zeros((n_sets, n_w));
+        let mut total2 = Array2::zeros((n_sets, n_w));
+        let mut total3 = Array2::zeros((n_sets, n_w));
+        let mut total4 = Array2::zeros((n_sets, n_w));
+        let mut total5 = Array2::zeros((n_sets, n_w));
+
+        // Sum over selected bubbles
+        for &a_idx in &bubble_ids {
+            let c_tensor = self.compute_c_tensor_fixed_bubble(a_idx, w_arr, t_begin, t_end, n_t)?;
+
+            total0 += c_tensor.xx();
+            total1 += c_tensor.xy();
+            total2 += c_tensor.xz();
+            total3 += c_tensor.yy();
+            total4 += c_tensor.yz();
+            total5 += c_tensor.zz();
+        }
+
+        Ok(HermitianTensor3::new(total0, total1, total2, total3, total4, total5))
     }
 
     pub fn delta_squared(&self) -> &DMatrix<f64> {
