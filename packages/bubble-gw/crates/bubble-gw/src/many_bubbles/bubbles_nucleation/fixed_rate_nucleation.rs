@@ -29,7 +29,7 @@ pub struct FixedRateNucleation {
     pub d_p0: f64,
     pub seed: Option<u64>,
     pub volume_method: VolumeRemainingMethod,
-    pub max_attempts: usize,
+    pub max_time_steps: usize,
     pub volume_remaining_fraction_cutoff: f64,
     rng: StdRng,
     points_outside_bubbles: Option<Vec<Point3<f64>>>,
@@ -46,7 +46,7 @@ impl FixedRateNucleation {
         d_p0: f64,
         seed: Option<u64>,
         volume_method: VolumeRemainingMethod,
-        max_attempts: Option<usize>,
+        max_time_steps: Option<usize>,
         volume_remaining_cutoff: Option<f64>,
     ) -> Self {
         let rng = match seed {
@@ -59,7 +59,7 @@ impl FixedRateNucleation {
             .num_threads(default_num_threads)
             .build()
             .unwrap();
-        let max_attempts = max_attempts.unwrap_or(1_000_000);
+        let max_attempts = max_time_steps.unwrap_or(1_000_000);
         let volume_remaining_cutoff = volume_remaining_cutoff.unwrap_or(0.66);
 
         Self {
@@ -69,7 +69,7 @@ impl FixedRateNucleation {
             d_p0,
             seed,
             volume_method,
-            max_attempts,
+            max_time_steps: max_attempts,
             volume_remaining_fraction_cutoff: volume_remaining_cutoff,
             rng,
             points_outside_bubbles: None,
@@ -184,7 +184,7 @@ impl FixedRateNucleation {
         let mut accepted = Vec::with_capacity(n_points);
         let mut attempts = 0;
 
-        while accepted.len() < n_points && attempts < self.max_attempts {
+        while accepted.len() < n_points && attempts < self.max_time_steps {
             let batch_size = (n_points - accepted.len()).min(100);
             let candidate_pts = lattice.sample_points(batch_size, &mut self.rng);
 
@@ -235,7 +235,7 @@ impl<L: GeneralLatticeProperties> NucleationStrategy<L> for FixedRateNucleation 
         self.time_history.clear();
         self.volume_remaining_history.clear();
 
-        for _ in 0..self.max_attempts {
+        for _ in 0..self.max_time_steps {
             let volume_remaining =
                 self.volume_remaining(lattice, t, &bubbles_interior, &bubbles_exterior);
 
