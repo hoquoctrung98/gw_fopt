@@ -53,8 +53,9 @@ impl FixedRateNucleation {
             Some(s) => StdRng::seed_from_u64(s),
             None => StdRng::seed_from_u64(random::<u64>()),
         };
-
-        let default_num_threads = rayon::current_num_threads();
+        let default_num_threads = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1);
         let thread_pool = ThreadPoolBuilder::new()
             .num_threads(default_num_threads)
             .build()
