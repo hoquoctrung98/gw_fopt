@@ -5,8 +5,9 @@ pub mod py_two_bubbles;
 pub mod py_utils;
 
 #[pymodule]
-#[pyo3(name = "py_bubble_gw")]
-fn bubble_gw(py: Python, module_parent: &Bound<'_, PyModule>) -> PyResult<()> {
+#[pyo3(name = "_py_bubble_gw")]
+fn _py_bubble_gw(py: Python, module_parent: &Bound<'_, PyModule>) -> PyResult<()> {
+    // Create submodules
     let module_two_bubbles = PyModule::new(module_parent.py(), "two_bubbles")?;
     module_two_bubbles.add_class::<py_two_bubbles::py_gw_calc::PyGravitationalWaveCalculator>()?;
 
@@ -30,17 +31,21 @@ fn bubble_gw(py: Python, module_parent: &Bound<'_, PyModule>) -> PyResult<()> {
     module_utils.add_function(wrap_pyfunction!(py_utils::sample, module_parent)?)?;
     module_utils.add_function(wrap_pyfunction!(py_utils::sample_arr, module_parent)?)?;
 
+    // Add submodules to parent
     module_parent.add_submodule(&module_two_bubbles)?;
     module_parent.add_submodule(&module_many_bubbles)?;
     module_parent.add_submodule(&module_utils)?;
+
+    // Register in sys.modules with FULL module path
     py.import("sys")?
         .getattr("modules")?
-        .set_item("bubble_gw.two_bubbles", module_two_bubbles)?;
+        .set_item("gw_fopt.bubble_gw.two_bubbles", module_two_bubbles)?;
     py.import("sys")?
         .getattr("modules")?
-        .set_item("bubble_gw.many_bubbles", module_many_bubbles)?;
+        .set_item("gw_fopt.bubble_gw.many_bubbles", module_many_bubbles)?;
     py.import("sys")?
         .getattr("modules")?
-        .set_item("bubble_gw.utils", module_utils)?;
+        .set_item("gw_fopt.bubble_gw.utils", module_utils)?;
+
     Ok(())
 }
