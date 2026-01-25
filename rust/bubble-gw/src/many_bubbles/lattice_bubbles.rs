@@ -399,7 +399,7 @@ where
     ///
     /// # Returns
     /// `Array2<f64>` with shape `(n_bubbles, 4)` → [t, x, y, z]
-    fn load_bubbles_from_csv<P: AsRef<Path>>(
+    pub fn load_bubbles_from_csv<P: AsRef<Path>>(
         path: P,
         has_headers: bool,
     ) -> Result<Array2<f64>, LatticeBubblesError> {

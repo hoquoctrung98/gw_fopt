@@ -1,7 +1,6 @@
 use std::error::Error;
 
-use bubble_gw::many_bubbles::bubbles_nucleation::{NucleationStrategy, VolumeRemainingMethod};
-use bubble_gw::many_bubbles::lattice::{BoundaryConditions, CartesianLattice};
+use bubble_gw::many_bubbles::lattice::CartesianLattice;
 use bubble_gw::many_bubbles::lattice_bubbles::LatticeBubbles;
 use bubble_gw::many_bubbles::{self};
 use nalgebra::{Point3, Vector3};

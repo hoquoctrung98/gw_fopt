@@ -1,6 +1,6 @@
 use std::error::Error;
 
-use bubble_gw::many_bubbles::generalized_bulk_flow_segment::GeneralizedBulkFlow;
+use bubble_gw::many_bubbles::generalized_bulk_flow::GeneralizedBulkFlow;
 use bubble_gw::many_bubbles::lattice::{BoundaryConditions, CartesianLattice};
 use bubble_gw::many_bubbles::lattice_bubbles::LatticeBubbles;
 use nalgebra::{Point3, Vector3};

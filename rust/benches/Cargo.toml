@@ -15,7 +15,6 @@ ndarray = {workspace = true}
 num-traits = {workspace = true}
 puruspe = "0.4.2"
 rand = "0.9.2"
-scirs2-special = "0.1.1"
 
 [[bench]]
 name = "integrate_1d"
@@ -30,9 +29,4 @@ harness = false
 [[bench]]
 name = "first_bubble_bench"
 path = "first_bubble_bench.rs"
-harness = false
-
-[[bench]]
-name = "jn_puruspe_vs_scirs2"
-path = "jn_puruspe_vs_scirs2.rs"
 harness = false
