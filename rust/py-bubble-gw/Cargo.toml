@@ -20,7 +20,7 @@ num = {workspace = true}
 bubble_gw = { path = "../bubble-gw" }
 pyo3 = { version = "0.27", features = ["extension-module", "num-complex", "experimental-inspect"] }
 numpy = {version = "0.27.1", features = ["nalgebra"]}
-thiserror = "2.0.17"
+thiserror = "2.0.18"
 csv = "1.4.0"
 
 [build-dependencies]
