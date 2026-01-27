@@ -2,9 +2,6 @@
 members = [
   "bubble-gw", "py-bubble-gw"
 ]
-# default-members = [
-#   "crates/bubble-gw",
-# ]
 resolver = "2"
 
 [workspace.package]
