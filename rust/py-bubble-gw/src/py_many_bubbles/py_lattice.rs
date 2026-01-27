@@ -155,7 +155,7 @@ impl PyParallelepiped {
     }
 
     #[getter]
-    fn basis_vectors(&self) -> [[f64; 3]; 3] {
+    fn normalized_basis(&self) -> [[f64; 3]; 3] {
         self.concrete.normalized_basis().map(|v| v.into())
     }
 

@@ -1,6 +1,7 @@
 use crate::many_bubbles::lattice::{BoundaryConditions, GeneralLatticeProperties};
 use crate::many_bubbles::lattice_bubbles::{LatticeBubbles, LatticeBubblesError};
 pub mod fixed_rate_nucleation;
+pub mod old_fixed_rate_nucleation;
 pub use fixed_rate_nucleation::{FixedRateNucleation, VolumeRemainingMethod};
 pub mod spontaneous_nucleation;
 pub use spontaneous_nucleation::SpontaneousNucleation;

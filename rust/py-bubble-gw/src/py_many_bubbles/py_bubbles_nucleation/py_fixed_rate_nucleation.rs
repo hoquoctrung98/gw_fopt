@@ -4,6 +4,7 @@ use bubble_gw::many_bubbles::bubbles_nucleation::{
     VolumeRemainingMethod,
 };
 use bubble_gw::many_bubbles::lattice::{BoundaryConditions, BuiltInLattice};
+use numpy::PyArray1;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
@@ -139,13 +140,13 @@ impl PyFixedNucleationRate {
     }
 
     #[getter]
-    fn time_history(&self) -> Vec<f64> {
-        self.inner.time_history.clone()
+    fn time_history(&self, py: Python) -> Py<PyArray1<f64>> {
+        PyArray1::from_vec(py, self.inner.time_history.clone()).into()
     }
 
     #[getter]
-    fn volume_remaining_history(&self) -> Vec<f64> {
-        self.inner.volume_remaining_history.clone()
+    fn volume_remaining_history(&self, py: Python) -> Py<PyArray1<f64>> {
+        PyArray1::from_vec(py, self.inner.volume_remaining_history.clone()).into()
     }
 
     #[pyo3(signature = (lattice, boundary_condition = "periodic"))]

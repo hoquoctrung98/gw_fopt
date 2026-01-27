@@ -7,6 +7,8 @@ use nalgebra::{Point3, Vector4};
 use nalgebra_spacetime::Lorentzian;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng, random};
+use rayon::prelude::*;
+use rayon::{ThreadPool, ThreadPoolBuilder};
 
 use super::{GeneralLatticeProperties, NucleationStrategy};
 use crate::many_bubbles::bubbles::Bubbles;
@@ -30,10 +32,10 @@ pub struct FixedRateNucleation {
     pub max_time_steps: usize,
     pub volume_remaining_fraction_cutoff: f64,
     rng: StdRng,
-    mc_points: Option<Vec<Point3<f64>>>,
-    first_collision_times: Option<Vec<f64>>,
+    points_outside_bubbles: Option<Vec<Point3<f64>>>,
     pub time_history: Vec<f64>,
     pub volume_remaining_history: Vec<f64>,
+    thread_pool: ThreadPool,
 }
 
 impl FixedRateNucleation {
@@ -51,6 +53,13 @@ impl FixedRateNucleation {
             Some(s) => StdRng::seed_from_u64(s),
             None => StdRng::seed_from_u64(random::<u64>()),
         };
+        let default_num_threads = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1);
+        let thread_pool = ThreadPoolBuilder::new()
+            .num_threads(default_num_threads)
+            .build()
+            .unwrap();
         let max_attempts = max_time_steps.unwrap_or(1_000_000);
         let volume_remaining_cutoff = volume_remaining_cutoff.unwrap_or(0.66);
 
@@ -64,44 +73,30 @@ impl FixedRateNucleation {
             max_time_steps: max_attempts,
             volume_remaining_fraction_cutoff: volume_remaining_cutoff,
             rng,
-            mc_points: None,
-            first_collision_times: None,
+            points_outside_bubbles: None,
             time_history: Vec::new(),
             volume_remaining_history: Vec::new(),
+            thread_pool,
         }
     }
 
-    fn update_first_collision_times(&mut self, new_bubble: &Vector4<f64>) {
-        if self.mc_points.is_none() {
-            return;
-        }
-
-        let points = self.mc_points.as_ref().unwrap();
-        let fct = self.first_collision_times.as_mut().unwrap();
-        let t_n = new_bubble[0];
-        let x_n = new_bubble[1];
-        let y_n = new_bubble[2];
-        let z_n = new_bubble[3];
-
-        for (i, pt) in points.iter().enumerate() {
-            let dx = pt.x - x_n;
-            let dy = pt.y - y_n;
-            let dz = pt.z - z_n;
-            let dist = (dx * dx + dy * dy + dz * dz).sqrt();
-            let t_collide = t_n + dist;
-            if t_collide < fct[i] {
-                fct[i] = t_collide;
-            }
-        }
+    pub fn set_num_threads(&mut self, num_threads: usize) -> Result<(), LatticeBubblesError> {
+        self.thread_pool = ThreadPoolBuilder::new()
+            .num_threads(num_threads)
+            .build()
+            .map_err(|e| LatticeBubblesError::Other(format!("ThreadPool build error: {}", e)))?;
+        Ok(())
     }
 
     fn volume_remaining<L: GeneralLatticeProperties>(
-        &self,
+        &mut self,
         lattice: &L,
         t: f64,
         bubbles_interior: &Bubbles,
+        bubbles_exterior: &Bubbles,
     ) -> f64 {
         match &self.volume_method {
+            // volume_remaining = volume_lattice * exp(volume_bubbles / volume_lattice)
             VolumeRemainingMethod::Approximation => {
                 let volume_lattice = lattice.volume();
                 let volume_bubbles: f64 = bubbles_interior
@@ -113,16 +108,46 @@ impl FixedRateNucleation {
                         (4.0 / 3.0) * std::f64::consts::PI * radius.powi(3)
                     })
                     .sum();
-                volume_lattice * (-volume_bubbles / volume_lattice).exp()
+                // The exponential factor partially taken into account the overlapse of bubbles
+                return volume_lattice * (-volume_bubbles / volume_lattice).exp();
             },
+            // volume_remaining = volume_lattice * (n_points_outside_bubbles / n_points)
             VolumeRemainingMethod::MonteCarlo { n_points } => {
                 if *n_points == 0 {
                     return lattice.volume();
                 }
 
-                let fct = self.first_collision_times.as_ref().unwrap();
-                let count_valid = fct.iter().filter(|&&t_collide| t_collide > t).count();
-                let fraction = count_valid as f64 / *n_points as f64;
+                if self.points_outside_bubbles.is_none() {
+                    let points = lattice.sample_points(*n_points, &mut self.rng);
+                    self.points_outside_bubbles = Some(points);
+                }
+
+                let points_outside_bubbles = self.points_outside_bubbles.as_mut().unwrap();
+                let all_bubbles: Vec<&Vector4<f64>> = bubbles_interior
+                    .spacetime
+                    .iter()
+                    .chain(bubbles_exterior.spacetime.iter())
+                    .collect();
+
+                let valid_points = self.thread_pool.install(|| {
+                    points_outside_bubbles
+                        .par_iter()
+                        .filter_map(|pt| {
+                            let candidate = Vector4::new(t, pt.x, pt.y, pt.z);
+                            for &bubble in &all_bubbles {
+                                let delta = candidate - bubble;
+                                if delta.scalar(&delta) < 0.0 {
+                                    return None;
+                                }
+                            }
+                            Some(*pt)
+                        })
+                        .collect::<Vec<Point3<f64>>>()
+                });
+
+                *points_outside_bubbles = valid_points;
+
+                let fraction = points_outside_bubbles.len() as f64 / *n_points as f64;
                 (fraction * lattice.volume()).max(0.0)
             },
         }
@@ -211,19 +236,9 @@ impl<L: GeneralLatticeProperties> NucleationStrategy<L> for FixedRateNucleation 
         self.time_history.clear();
         self.volume_remaining_history.clear();
 
-        // Initialize MC state
-        if matches!(self.volume_method, VolumeRemainingMethod::MonteCarlo { .. }) {
-            if let VolumeRemainingMethod::MonteCarlo { n_points } = self.volume_method {
-                if n_points > 0 {
-                    let points = lattice.sample_points(n_points, &mut self.rng);
-                    self.mc_points = Some(points);
-                    self.first_collision_times = Some(vec![f64::INFINITY; n_points]);
-                }
-            }
-        }
-
         for _ in 0..self.max_time_steps {
-            let volume_remaining = self.volume_remaining(lattice, t, &bubbles_interior);
+            let volume_remaining =
+                self.volume_remaining(lattice, t, &bubbles_interior, &bubbles_exterior);
 
             if volume_remaining < volume_cutoff {
                 break;
@@ -236,25 +251,11 @@ impl<L: GeneralLatticeProperties> NucleationStrategy<L> for FixedRateNucleation 
             if x <= self.d_p0 {
                 let new_bubble =
                     if matches!(self.volume_method, VolumeRemainingMethod::MonteCarlo { .. })
-                        && self.mc_points.is_some()
+                        && self.points_outside_bubbles.is_some()
+                        && !self.points_outside_bubbles.as_ref().unwrap().is_empty()
                     {
-                        let first_collision_times = self.first_collision_times.as_ref().unwrap();
-                        let points = self.mc_points.as_ref().unwrap();
-
-                        let mut candidate_pt = None;
-                        for i in 0..points.len() {
-                            if first_collision_times[i] > t {
-                                candidate_pt = Some(points[i]);
-                                break;
-                            }
-                        }
-
-                        if let Some(pt) = candidate_pt {
-                            let candidate_vec = Vector4::new(t, pt.x, pt.y, pt.z);
-                            Some(candidate_vec)
-                        } else {
-                            None
-                        }
+                        let pt = self.points_outside_bubbles.as_mut().unwrap().pop().unwrap();
+                        Some(Vector4::new(t, pt.x, pt.y, pt.z))
                     } else {
                         if let Some(new_bubbles) = self.sample_points_outside_bubbles(
                             lattice,
@@ -277,14 +278,9 @@ impl<L: GeneralLatticeProperties> NucleationStrategy<L> for FixedRateNucleation 
                     let dummy_interior = Bubbles::new(vec![bubble_new]);
                     let exterior_bubbles =
                         lattice.generate_bubbles_exterior(&dummy_interior, boundary_condition);
-                    let exterior_spacetime_ref = &exterior_bubbles.spacetime;
-
-                    self.update_first_collision_times(&bubble_new);
-                    for exterior_bubble in exterior_spacetime_ref {
-                        self.update_first_collision_times(exterior_bubble);
-                    }
-
-                    bubbles_exterior.spacetime.extend(exterior_spacetime_ref);
+                    bubbles_exterior
+                        .spacetime
+                        .extend(exterior_bubbles.spacetime);
                 }
             }
 
@@ -297,6 +293,7 @@ impl<L: GeneralLatticeProperties> NucleationStrategy<L> for FixedRateNucleation 
             Some(bubbles_exterior.to_array2()),
             lattice.clone(),
         )?;
+
         Ok(lattice_bubbles)
     }
 }
