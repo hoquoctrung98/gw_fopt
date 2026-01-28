@@ -1,5 +1,6 @@
 use bubble_gw::many_bubbles::bubbles_nucleation::{
     FixedRateNucleation,
+    FixedRateNucleationError,
     NucleationStrategy,
     VolumeRemainingMethod,
 };
@@ -69,18 +70,27 @@ impl PyFixedNucleationRate {
             },
         };
 
-        Ok(PyFixedNucleationRate {
-            inner: FixedRateNucleation::new(
-                beta,
-                gamma0,
-                t0,
-                d_p0,
-                seed,
-                volume_method,
-                max_time_steps,
-                volume_remaining_fraction_cutoff,
-            ),
-        })
+        // Handle the Result from FixedRateNucleation::new()
+        let inner = FixedRateNucleation::new(
+            beta,
+            gamma0,
+            t0,
+            d_p0,
+            seed,
+            volume_method,
+            max_time_steps,
+            volume_remaining_fraction_cutoff,
+        )
+        .map_err(|e| match e {
+            FixedRateNucleationError::RngInitializationError(err) => {
+                PyValueError::new_err(format!("Failed to initialize RNG: {}", err))
+            },
+            FixedRateNucleationError::LatticeBubblesError(err) => {
+                PyValueError::new_err(format!("Lattice bubbles error: {}", err))
+            },
+        })?;
+
+        Ok(PyFixedNucleationRate { inner })
     }
 
     pub fn __repr__(&self) -> PyResult<String> {

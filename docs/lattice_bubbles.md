@@ -32,7 +32,7 @@ We therefore need to pass an argument `method`, which currently corresponds to t
 + `method = 'montecarlo'`: We use Monte-Carlo with uniform sampling, counting number of points are outside all bubbles and take fraction with number of sampling points, multiplied by lattice volume.
 This approach is much slower, but we correctly take into account the overlapping bubbles.
 
-![V_FV](./examples/figures/many_bubbles/V_FV.png)
+![V_FV](./examples/figures/many_bubbles/f_FV.png)
 
 ## Example code
 
@@ -57,3 +57,9 @@ An example of creating a lattice, attaching with bubbles_interior and do various
 > Bubbles at a given time slice
 
 ![bubble at fixed time](./examples/figures/many_bubbles/many_bubbles_at_time_spherical.png)
+
+### Generate multiple histories using FixedNucleationRate
+
+![distributions over histories](./examples/figures/many_bubbles/distributions_over_histories.png)
+
+![V_FV over histories](./examples/figures/many_bubbles/V_FV_over_histories.png)

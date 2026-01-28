@@ -8,7 +8,7 @@
 #       format_version: '1.3'
 #       jupytext_version: 1.17.2
 #   kernelspec:
-#     display_name: Python 3
+#     display_name: gw-fopt
 #     language: python
 #     name: python3
 # ---
@@ -26,6 +26,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
+
 from gw_fopt.bubble_gw import many_bubbles
 
 # %%
@@ -865,11 +866,13 @@ fig.show()
 L = 1.0
 nucleation_strategy_apprx = many_bubbles.FixedNucleationRate(
     beta=1,
-    gamma0=1,
+    gamma0=1.0e-3,
     t0=0.0,
     d_p0=0.01,
     seed=0,
     method="approximation",
+    volume_remaining_fraction_cutoff=1e-3,
+    max_time_steps=1_000_000,
 )
 lattice_bubbles_apprx = nucleation_strategy_apprx.nucleate(
     lattice=many_bubbles.SphericalLattice(center=[0.0, 0.0, 0.0], radius=2 * L),
@@ -878,11 +881,14 @@ lattice_bubbles_apprx = nucleation_strategy_apprx.nucleate(
 
 nucleation_strategy_montecarlo = many_bubbles.FixedNucleationRate(
     beta=1,
-    gamma0=1,
+    gamma0=1.0e-3,
     t0=0.0,
     d_p0=0.01,
     seed=0,
     method="montecarlo",
+    n_points=10000,
+    volume_remaining_fraction_cutoff=1e-3,
+    max_time_steps=1_000_000,
 )
 lattice_bubbles_montecarlo = nucleation_strategy_montecarlo.nucleate(
     lattice=many_bubbles.SphericalLattice(center=[0.0, 0.0, 0.0], radius=2 * L),
@@ -893,29 +899,257 @@ lattice_bubbles_montecarlo = nucleation_strategy_montecarlo.nucleate(
 fig, ax = plt.subplots(figsize=(10, 6))
 ax.plot(
     nucleation_strategy_apprx.time_history,
-    nucleation_strategy_apprx.volume_remaining_history,
+    nucleation_strategy_apprx.volume_remaining_history / lattice_bubbles_apprx.volume,
     color="tab:orange",
-    label=r"Approximation: $V_\text{FV} = V_\text{lattice} - \dfrac{4 \pi}{3} \displaystyle\sum_n R_n^3$",
+    label=r"Approximation: $f_\text{FV} = 1 - \dfrac{4 \pi}{3 V_\text{lattice}} \displaystyle\sum_n R_n^3$",
 )
 ax.plot(
     nucleation_strategy_montecarlo.time_history,
-    nucleation_strategy_montecarlo.volume_remaining_history,
+    nucleation_strategy_montecarlo.volume_remaining_history
+    / lattice_bubbles_montecarlo.volume,
     color="tab:blue",
     label=rf"Monte-Carlo, $n_\text{{points}} = {nucleation_strategy_montecarlo.n_points}$",
 )
 ax.set_xlabel(r"$t$", fontsize=18)
-ax.set_ylabel(r"$V_\text{FV}$", fontsize=18)
+ax.set_ylabel(r"$f_{\text{FV}} = V_{\text{FV}} / V_{\text{lattice}}$", fontsize=12)
 ax.grid(True)
 ax.set_title(
-    r"Volume of False Vacuum (i.e volume of lattice that are outside all existing bubbles at time $t$)",
+    r"Volume fraction of False Vacuum (i.e volume of lattice that are outside all existing bubbles at time $t$)",
     fontsize=14,
 )
-ax.set_xlim(left=0.0)
 ax.set_ylim(bottom=0.0)
 ax.legend()
 fig.savefig(
-    f"./figures/many_bubbles/V_FV.png",
+    f"./figures/many_bubbles/f_FV.png",
     bbox_inches="tight",
     facecolor="white",
 )
 fig
+
+# %% [markdown]
+# ## Distributions over different nucleation histories
+
+# %%
+from concurrent.futures import ProcessPoolExecutor
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+# Parameters for lattice/nucleation strategies
+beta = 0.05
+w_peak = 1 / beta
+L_beta = 20
+L_box = L_beta / beta
+V_box = L_box**3
+d_p0 = 1e-2
+gamma0 = 1e-3
+volume_remaining_fraction_cutoff = 1e-3
+n_points = 20000
+
+
+def run_single_realization(_):
+    """Run a single realization with independent random seed.
+
+    Args:
+        _: Dummy argument (ignored), used to trigger multiple calls via executor.map
+
+    Returns:
+        tuple: (n_bubbles, time_history, volume_remaining_history)
+    """
+    nucleation_strategy = many_bubbles.FixedNucleationRate(
+        beta=beta,
+        gamma0=gamma0,
+        t0=0.0,
+        d_p0=d_p0,
+        seed=None,  # Each process gets independent random seed via getrandom
+        method="montecarlo",
+        n_points=n_points,
+        volume_remaining_fraction_cutoff=volume_remaining_fraction_cutoff,
+        max_time_steps=1_000_000,
+    )
+
+    lattice_bubbles = nucleation_strategy.nucleate(
+        lattice=many_bubbles.CartesianLattice(
+            origin=[0.0, 0.0, 0.0],
+            basis=[
+                [L_box, 0.0, 0.0],
+                [0.0, L_box, 0.0],
+                [0.0, 0.0, L_box],
+            ],
+        ),
+        boundary_condition="periodic",
+    )
+
+    # Extract histories before nucleation_strategy goes out of scope
+    time_history = nucleation_strategy.time_history
+    volume_remaining_history = nucleation_strategy.volume_remaining_history
+    n_bubbles = len(lattice_bubbles.bubbles_interior)
+
+    return n_bubbles, time_history, volume_remaining_history
+
+
+def interpolate_histories_to_common_grid(
+    time_histories, volume_histories, lattice_volume, n_points=1000
+):
+    """
+    Interpolate all histories onto a common time grid.
+
+    Args:
+        time_histories: List of numpy arrays, each containing time points for one realization
+        volume_histories: List of numpy arrays, each containing volume values for one realization
+        lattice_volume: Total volume of the lattice
+        n_points: Number of points in the common time grid
+
+    Returns:
+        t_common: Common time grid
+        f_interp: Array of shape (n_histories, n_points) with interpolated fractions
+    """
+    # Find global time range across all histories
+    t_min = min(th[0] for th in time_histories)
+    t_max = max(th[-1] for th in time_histories)
+
+    # Create common time grid
+    t_common = np.linspace(t_min, t_max, n_points)
+
+    # Interpolate each history onto common grid
+    n_histories = len(time_histories)
+    f_interp = np.zeros((n_histories, n_points))
+
+    for i, (t_hist, v_hist) in enumerate(zip(time_histories, volume_histories)):
+        # Convert to fraction
+        f_hist = np.array(v_hist) / lattice_volume
+
+        # Interpolate onto common grid
+        f_interp[i, :] = np.interp(t_common, t_hist, f_hist)
+
+    return t_common, f_interp
+
+
+# %%
+# ============================================================================
+# Run simulations
+# ============================================================================
+
+n_histories = 1024
+
+print(f"Running {n_histories} realizations...")
+with ProcessPoolExecutor() as executor:
+    results = list(
+        executor.map(
+            run_single_realization,
+            range(n_histories),
+        )
+    )
+
+# Unpack results
+bubbles_len, time_histories, volume_histories = zip(*results)
+bubbles_len = np.array(bubbles_len)
+
+# Extract first and last bubble times from time_histories
+t_first_bubble = np.array([th[0] for th in time_histories])
+t_last_bubble = np.array([th[-1] for th in time_histories])
+
+# %%
+# ============================================================================
+# Plot 1: Distribution plots
+# ============================================================================
+
+fig, ax = plt.subplots(1, 2, figsize=(12, 6), sharey=True)
+
+# Left plot: Total number of bubbles
+ax[0].hist(bubbles_len, bins=20)
+y_min, y_max = ax[0].get_ylim()
+ax[0].vlines(
+    bubbles_len.mean(),
+    y_min,
+    y_max,
+    color="lime",
+    label=f"Mean(Code) = {bubbles_len.mean():.2f}",
+)
+ax[0].vlines(
+    316.8,
+    y_min,
+    y_max,
+    color="red",
+    linestyles="--",
+    label=r"Mean(Paper) $\sim 316.8$",
+)
+ax[0].set_ylim(y_min, y_max)
+ax[0].set_xlabel(r"Total $\#$ bubbles")
+ax[0].set_ylabel(r"$\#$ of configurations")
+ax[0].legend()
+
+# Right plot: Duration
+duration = (t_last_bubble - t_first_bubble) * beta
+ax[1].hist(duration, bins=20)
+y_min, y_max = ax[1].get_ylim()
+ax[1].vlines(
+    duration.mean(), y_min, y_max, color="lime", label=f"Mean = {duration.mean():.2f}"
+)
+ax[1].vlines(
+    7.5,
+    y_min,
+    y_max,
+    color="red",
+    linestyles="--",
+    label=r"Mean(Paper) $\sim 7.5$",
+)
+ax[1].set_xlabel(r"$\beta (t_\text{last bubble} - t_\text{first bubble})$")
+
+for i in range(2):
+    ax[i].legend()
+    ax[i].grid(True, alpha=0.5)
+
+fig.suptitle(f"Distribution over {len(bubbles_len)} histories")
+fig.savefig(
+    f"./figures/many_bubbles/distributions_over_histories.png",
+    bbox_inches="tight",
+    facecolor="white",
+)
+fig.show()
+
+# %%
+# ============================================================================
+# Plot 2: Volume fraction vs time with error band
+# ============================================================================
+
+# Interpolate all histories to common grid
+lattice_volume = V_box
+t_common, f_interp = interpolate_histories_to_common_grid(
+    time_histories, volume_histories, lattice_volume, n_points=1000
+)
+
+# Calculate statistics at each time point
+f_mean = np.mean(f_interp, axis=0)
+f_min = np.min(f_interp, axis=0)
+f_max = np.max(f_interp, axis=0)
+
+# Create plot
+fig, ax = plt.subplots(figsize=(10, 6))
+
+# Plot error band (min-max)
+ax.fill_between(t_common, f_min, f_max, alpha=0.3, color="blue", label="Min-Max range")
+
+# Plot mean
+ax.plot(
+    t_common,
+    f_mean,
+    color="blue",
+    linewidth=2,
+    label=f"Mean over {n_histories} histories",
+)
+
+ax.set_xlim(t_common.min(), t_common.max())
+ax.set_ylim(bottom=0.0)
+ax.set_xlabel(r"$t$", fontsize=12)
+ax.set_ylabel(r"$f_{\text{FV}} = V_{\text{FV}} / V_{\text{lattice}}$", fontsize=12)
+ax.set_title("Volume Remaining Fraction vs Time", fontsize=14)
+ax.grid(True, alpha=0.3)
+ax.legend(fontsize=10)
+
+fig.savefig(
+    f"./figures/many_bubbles/V_FV_over_histories.png",
+    bbox_inches="tight",
+    facecolor="white",
+)
+fig.show()

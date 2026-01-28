@@ -8,7 +8,7 @@
 #       format_version: '1.3'
 #       jupytext_version: 1.17.2
 #   kernelspec:
-#     display_name: Python 3
+#     display_name: gw-fopt
 #     language: python
 #     name: python3
 # ---
@@ -24,6 +24,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
+
 from gw_fopt.bubble_dynamics.bubble_simulator import LatticeSetup, PDEBubbleSolver
 from gw_fopt.bubble_dynamics.bubble_simulator.potentials import (
     QuarticPotential,
@@ -78,18 +79,6 @@ c2, c3, c4 = couplings
 # User may also define their own potential as well
 potential = QuarticPotential(c2=c2, c3=c3, c4=c4)
 
-# True Vacuum and False Vacuum
-phi_tv = np.array([c2 / np.sqrt(8 * c4 * lambdabar) * (3 + np.sqrt(9 - 8 * lambdabar))])
-phi_fv = np.array([0.0])
-phi_local_max = np.array(
-    [c2 / np.sqrt(8 * c4 * lambdabar) * (3 - np.sqrt(9 - 8 * lambdabar))]
-)  # local maximum
-m_meta = c2  # mass in the unbroken phase
-m_abs = c2 * np.sqrt(
-    (-8 * lambdabar + 3 * np.sqrt(9 - 8 * lambdabar) + 9) / (4 * lambdabar)
-)  # mass in the broken phase
-rho_vac = (m_abs**4 - m_meta**4) / (12 * c4)  # vacuum energy
-
 phi_range = (-1, 2)  # plotting range
 fig, ax = plt.subplots(figsize=(10, 6))
 potential.plot_potential(fig=fig, ax=ax, phi_range=phi_range, num_points=100000)
@@ -100,7 +89,7 @@ fig.savefig(
 )
 
 setup = LatticeSetup(potential)
-setup.set_tunnelling_phi(phi_tv=phi_tv, phi_fv=phi_fv)
+setup.set_tunnelling_phi(phi_tv=potential.phi_tv, phi_fv=potential.phi_fv)
 fig, ax = setup.plot_profiles(npoints=1000)
 ax.legend()
 fig.savefig(
@@ -115,7 +104,6 @@ scale_z = 3  # larger means larger simulation size on z-axis
 d = 20  # bubbles separation
 smax = d * 2  # simulation time
 
-setup.set_tunnelling_phi(phi_tv=phi_tv, phi_fv=phi_fv)
 # set the distance between two bubbles at s=0
 # you can also call method set_gamma instead of set_d if you know the boost factor of the wall beforehand
 setup.set_d(d=d)
@@ -194,7 +182,7 @@ dE_dlogw_dcosthetak = gw_calc.compute_angular_gw_spectrum(
 dE_dlogw = 2 * np.trapezoid(dE_dlogw_dcosthetak, axis=0, x=cos_thetak_arr)
 
 fig, ax = plt.subplots()
-ax.plot(w_arr, dE_dlogw, marker="o", ms=4)
+ax.plot(w_arr, dE_dlogw / potential.rho_vacuum**2, marker="o", ms=4)
 ax.set_xscale("log")
 ax.set_yscale("log")
 ax.set_xlabel(r"$\omega$")

@@ -37,6 +37,7 @@ dependencies = [
  "approx",
  "array-init",
  "csv",
+ "getrandom 0.3.4",
  "nalgebra 0.33.2",
  "nalgebra-spacetime",
  "ndarray",
