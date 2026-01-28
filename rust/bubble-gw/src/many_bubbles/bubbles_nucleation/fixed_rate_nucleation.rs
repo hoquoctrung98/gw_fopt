@@ -6,12 +6,22 @@
 use nalgebra::{Point3, Vector4};
 use nalgebra_spacetime::Lorentzian;
 use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng, random};
+use rand::{Rng, SeedableRng};
+use thiserror::Error;
 
 use super::{GeneralLatticeProperties, NucleationStrategy};
 use crate::many_bubbles::bubbles::Bubbles;
 use crate::many_bubbles::lattice::BoundaryConditions;
 use crate::many_bubbles::lattice_bubbles::{LatticeBubbles, LatticeBubblesError};
+
+#[derive(Error, Debug)]
+pub enum FixedRateNucleationError {
+    #[error("Failed to initialize random number generator: {0}")]
+    RngInitializationError(#[from] getrandom::Error),
+
+    #[error("Lattice bubbles error: {0}")]
+    LatticeBubblesError(#[from] LatticeBubblesError),
+}
 
 #[derive(Clone, Debug)]
 pub enum VolumeRemainingMethod {
@@ -46,15 +56,22 @@ impl FixedRateNucleation {
         volume_method: VolumeRemainingMethod,
         max_time_steps: Option<usize>,
         volume_remaining_cutoff: Option<f64>,
-    ) -> Self {
+    ) -> Result<Self, FixedRateNucleationError> {
         let rng = match seed {
             Some(s) => StdRng::seed_from_u64(s),
-            None => StdRng::seed_from_u64(random::<u64>()),
+            None => {
+                // Use getrandom for truly independent seeds across processes
+                // Note that calling StdRng::seed_from_u64(rng.random::<u64>())
+                // produces wrong distribution from python examples using multiprocessing
+                let random_seed = getrandom::u64()?;
+                StdRng::seed_from_u64(random_seed)
+            },
         };
+
         let max_attempts = max_time_steps.unwrap_or(1_000_000);
         let volume_remaining_cutoff = volume_remaining_cutoff.unwrap_or(0.66);
 
-        Self {
+        Ok(Self {
             beta,
             gamma0,
             t0,
@@ -68,7 +85,7 @@ impl FixedRateNucleation {
             first_collision_times: None,
             time_history: Vec::new(),
             volume_remaining_history: Vec::new(),
-        }
+        })
     }
 
     fn update_first_collision_times(&mut self, new_bubble: &Vector4<f64>) {

@@ -26,6 +26,7 @@ ndarray-csv = "0.5.4"
 nalgebra.workspace = true
 nalgebra-spacetime = "0.5.0"
 approx = { version = "0.5.1", features = ["num-complex"] }
+getrandom = "0.3.4"
 
 [lib]
 # crate-type = ["cdylib", "lib"]
