@@ -186,7 +186,7 @@ class LatticeSetup:
         ax.set_xlabel("r")
         ax.set_ylabel("Field profiles")
         ax.set_title(
-            rf"Field profiles, $L_w={np.max(outer_radii - inner_radii):.2e}$, $R_c={np.max(self.compute_radii()):.2f}$"
+            rf"$L_w={np.max(outer_radii - inner_radii):.2e}$, $R_c={np.max(self.compute_radii()):.2f}$"
         )
         ax.grid(True)
 
@@ -209,7 +209,7 @@ class LatticeSetup:
         scale_z=3.0,
     ):
         """
-        Compute the z_arr and interpolated profiles for two bubbles configuration.
+        Compute the z_grid and interpolated profiles for two bubbles configuration.
 
         Parameters:
         - layout: "full" for two bubbles at ±d, "positive half" for one bubble at d/2,
@@ -217,7 +217,7 @@ class LatticeSetup:
         - npoints: Number of points to use in find_profiles (default 1000)
 
         Returns:
-        - z_arr: Array of z values (range depends on layout)
+        - z_grid: Array of z values (range depends on layout)
         - phi_z: Interpolated profiles (sum of two for "full", single for "positive half" or "negative half")
         - d: Distance between bubble centers (for "full") or twice the center position (for "half" types)
         """
@@ -253,25 +253,25 @@ class LatticeSetup:
         dz = min(dz, dz_max)
 
         if layout == "full":
-            # Create z_arr from -3d to 3d with step dz
-            z_arr = np.arange(-scale_z * d, scale_z * d + dz, dz)
+            # Create z_grid from -3d to 3d with step dz
+            z_grid = np.arange(-scale_z * d, scale_z * d + dz, dz)
             # Interpolate profiles centered at z0 = -d and z0 = d, then sum them
-            phi_z1 = self.interpolate_profiles(z_arr, z0=-d / 2, npoints=npoints)
-            phi_z2 = self.interpolate_profiles(z_arr, z0=d / 2, npoints=npoints)
+            phi_z1 = self.interpolate_profiles(z_grid, z0=-d / 2, npoints=npoints)
+            phi_z2 = self.interpolate_profiles(z_grid, z0=d / 2, npoints=npoints)
             phi_z = phi_z1 + phi_z2
         elif layout == "positive half":
-            # Create z_arr from 0 to 3d with step dz
-            z_arr = np.arange(0, scale_z * d + dz, dz)
+            # Create z_grid from 0 to 3d with step dz
+            z_grid = np.arange(0, scale_z * d + dz, dz)
             # Interpolate a single profile centered at z0 = d/2
-            phi_z = self.interpolate_profiles(z_arr, z0=d / 2, npoints=npoints)
+            phi_z = self.interpolate_profiles(z_grid, z0=d / 2, npoints=npoints)
         elif layout == "negative half":
-            # Create z_arr from -3d to 0 with step dz
-            z_arr = np.arange(-scale_z * d, 0 + dz, dz)
+            # Create z_grid from -3d to 0 with step dz
+            z_grid = np.arange(-scale_z * d, 0 + dz, dz)
             # Interpolate a single profile centered at z0 = -d/2
-            phi_z = self.interpolate_profiles(z_arr, z0=-d / 2, npoints=npoints)
+            phi_z = self.interpolate_profiles(z_grid, z0=-d / 2, npoints=npoints)
         else:
             raise ValueError(
                 "layout must be either 'full', 'positive half', or 'negative half'"
             )
 
-        return z_arr, phi_z, d
+        return z_grid, phi_z, d
