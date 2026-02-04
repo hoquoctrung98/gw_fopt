@@ -5,6 +5,7 @@
 
 use nalgebra::{Point3, Vector4};
 use nalgebra_spacetime::Lorentzian;
+use ndarray::Array1;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use thiserror::Error;
@@ -23,10 +24,12 @@ pub enum FixedRateNucleationError {
     LatticeBubblesError(#[from] LatticeBubblesError),
 }
 
-#[derive(Clone, Debug)]
-pub enum FixedRateNucleationMethod {
-    Approximation,
-    MonteCarlo { n_points: usize },
+/// Result of nucleation containing bubbles and history.
+#[derive(Debug)]
+pub struct FixedRateNucleationResult<L: GeneralLatticeProperties> {
+    pub lattice_bubbles: LatticeBubbles<L>,
+    pub time_history: Array1<f64>,
+    pub volume_false_vacuum_history: Array1<f64>,
 }
 
 #[derive(Debug)]
@@ -36,14 +39,12 @@ pub struct FixedRateNucleation {
     pub t0: f64,
     pub d_p0: f64,
     pub seed: Option<u64>,
-    pub method: FixedRateNucleationMethod,
+    pub n_points: usize,
     pub max_time_iterations: usize,
     pub cutoff_false_vacuum_fraction: f64,
     rng: StdRng,
     sample_points: Option<Vec<Point3<f64>>>,
     first_collision_times: Option<Vec<f64>>,
-    pub time_history: Vec<f64>,
-    pub volume_false_vacuum_history: Vec<f64>,
 }
 
 impl FixedRateNucleation {
@@ -53,7 +54,7 @@ impl FixedRateNucleation {
         t0: f64,
         d_p0: f64,
         seed: Option<u64>,
-        method: FixedRateNucleationMethod,
+        n_points: usize,
         max_time_iterations: Option<usize>,
         cutoff_fraction_false_vacuum: Option<f64>,
     ) -> Result<Self, FixedRateNucleationError> {
@@ -77,14 +78,12 @@ impl FixedRateNucleation {
             t0,
             d_p0,
             seed,
-            method,
+            n_points,
             max_time_iterations,
             cutoff_false_vacuum_fraction,
             rng,
             sample_points: None,
             first_collision_times: None,
-            time_history: Vec::new(),
-            volume_false_vacuum_history: Vec::new(),
         })
     }
 
@@ -116,33 +115,16 @@ impl FixedRateNucleation {
         &self,
         lattice: &L,
         t: f64,
-        bubbles_interior: &Bubbles,
+        _bubbles_interior: &Bubbles,
     ) -> f64 {
-        match &self.method {
-            FixedRateNucleationMethod::Approximation => {
-                let volume_lattice = lattice.volume();
-                let volume_bubbles: f64 = bubbles_interior
-                    .spacetime
-                    .iter()
-                    .map(|v| {
-                        let t_n = v[0];
-                        let radius = (t - t_n).max(0.0);
-                        (4.0 / 3.0) * std::f64::consts::PI * radius.powi(3)
-                    })
-                    .sum();
-                volume_lattice * (-volume_bubbles / volume_lattice).exp()
-            },
-            FixedRateNucleationMethod::MonteCarlo { n_points } => {
-                if *n_points == 0 {
-                    return lattice.volume();
-                }
-
-                let fct = self.first_collision_times.as_ref().unwrap();
-                let count_valid = fct.iter().filter(|&&t_collide| t_collide > t).count();
-                let fraction = count_valid as f64 / *n_points as f64;
-                (fraction * lattice.volume()).max(0.0)
-            },
+        if self.n_points == 0 {
+            return lattice.volume();
         }
+
+        let fct = self.first_collision_times.as_ref().unwrap();
+        let count_valid = fct.iter().filter(|&&t_collide| t_collide > t).count();
+        let fraction = count_valid as f64 / self.n_points as f64;
+        (fraction * lattice.volume()).max(0.0)
     }
 
     fn check_points_outside_bubbles(
@@ -214,7 +196,7 @@ impl FixedRateNucleation {
         &mut self,
         lattice: &L,
         boundary_condition: BoundaryConditions,
-    ) -> Result<LatticeBubbles<L>, LatticeBubblesError> {
+    ) -> Result<FixedRateNucleationResult<L>, LatticeBubblesError> {
         let volume_lattice = lattice.volume();
         let volume_cutoff = self.cutoff_false_vacuum_fraction * volume_lattice;
 
@@ -223,17 +205,14 @@ impl FixedRateNucleation {
         let mut bubbles_interior = Bubbles::new(Vec::new());
         let mut bubbles_exterior = Bubbles::new(Vec::new());
 
-        self.time_history.clear();
-        self.volume_false_vacuum_history.clear();
+        let mut time_history = Vec::new();
+        let mut volume_false_vacuum_history = Vec::new();
 
-        if matches!(self.method, FixedRateNucleationMethod::MonteCarlo { .. }) {
-            if let FixedRateNucleationMethod::MonteCarlo { n_points } = self.method {
-                if n_points > 0 {
-                    let points = lattice.sample_points(n_points, &mut self.rng);
-                    self.sample_points = Some(points);
-                    self.first_collision_times = Some(vec![f64::INFINITY; n_points]);
-                }
-            }
+        // Initialize Monte Carlo state
+        if self.n_points > 0 {
+            let points = lattice.sample_points(self.n_points, &mut self.rng);
+            self.sample_points = Some(points);
+            self.first_collision_times = Some(vec![f64::INFINITY; self.n_points]);
         }
 
         for _ in 0..self.max_time_iterations {
@@ -248,44 +227,41 @@ impl FixedRateNucleation {
 
             let x: f64 = self.rng.random();
             if x <= self.d_p0 {
-                let new_bubble =
-                    if matches!(self.method, FixedRateNucleationMethod::MonteCarlo { .. })
-                        && self.sample_points.is_some()
-                    {
-                        let first_collision_times = self.first_collision_times.as_ref().unwrap();
-                        let points = self.sample_points.as_ref().unwrap();
+                let new_bubble = if self.n_points > 0 && self.sample_points.is_some() {
+                    let first_collision_times = self.first_collision_times.as_ref().unwrap();
+                    let points = self.sample_points.as_ref().unwrap();
 
-                        let mut candidate_pt = None;
-                        for i in 0..points.len() {
-                            if first_collision_times[i] > t {
-                                candidate_pt = Some(points[i]);
-                                break;
-                            }
+                    let mut candidate_pt = None;
+                    for i in 0..points.len() {
+                        if first_collision_times[i] > t {
+                            candidate_pt = Some(points[i]);
+                            break;
                         }
+                    }
 
-                        if let Some(pt) = candidate_pt {
-                            let candidate_vec = Vector4::new(t, pt.x, pt.y, pt.z);
-                            Some(candidate_vec)
-                        } else {
-                            None
-                        }
+                    if let Some(pt) = candidate_pt {
+                        let candidate_vec = Vector4::new(t, pt.x, pt.y, pt.z);
+                        Some(candidate_vec)
                     } else {
-                        if let Some(new_bubbles) = self.sample_points_outside_bubbles(
-                            lattice,
-                            t,
-                            &bubbles_interior,
-                            &bubbles_exterior,
-                            1,
-                        ) {
-                            new_bubbles.spacetime.into_iter().next()
-                        } else {
-                            None
-                        }
-                    };
+                        None
+                    }
+                } else {
+                    if let Some(new_bubbles) = self.sample_points_outside_bubbles(
+                        lattice,
+                        t,
+                        &bubbles_interior,
+                        &bubbles_exterior,
+                        1,
+                    ) {
+                        new_bubbles.spacetime.into_iter().next()
+                    } else {
+                        None
+                    }
+                };
 
                 if let Some(bubble_new) = new_bubble {
-                    self.time_history.push(t);
-                    self.volume_false_vacuum_history.push(volume_remaining);
+                    time_history.push(t);
+                    volume_false_vacuum_history.push(volume_remaining);
 
                     bubbles_interior.spacetime.push(bubble_new);
                     let dummy_interior = Bubbles::new(vec![bubble_new]);
@@ -311,6 +287,13 @@ impl FixedRateNucleation {
             Some(bubbles_exterior.to_array2()),
             lattice.clone(),
         )?;
-        Ok(lattice_bubbles)
+        let time_history = Array1::from_vec(time_history);
+        let volume_false_vacuum_history = Array1::from_vec(volume_false_vacuum_history);
+
+        Ok(FixedRateNucleationResult {
+            lattice_bubbles,
+            time_history,
+            volume_false_vacuum_history,
+        })
     }
 }
