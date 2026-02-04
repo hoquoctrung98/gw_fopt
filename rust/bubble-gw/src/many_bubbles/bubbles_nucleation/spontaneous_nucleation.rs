@@ -3,7 +3,7 @@ use nalgebra_spacetime::Lorentzian;
 use rand::rngs::StdRng;
 use rand::{SeedableRng, random};
 
-use super::{GeneralLatticeProperties, NucleationStrategy};
+use super::GeneralLatticeProperties;
 use crate::many_bubbles::bubbles::Bubbles;
 use crate::many_bubbles::lattice::BoundaryConditions;
 use crate::many_bubbles::lattice_bubbles::{LatticeBubbles, LatticeBubblesError};
@@ -85,10 +85,8 @@ impl SpontaneousNucleation {
 
         Ok(Bubbles::new(accepted_spacetime))
     }
-}
 
-impl<L: GeneralLatticeProperties> NucleationStrategy<L> for SpontaneousNucleation {
-    fn nucleate(
+    pub fn nucleate<L: GeneralLatticeProperties>(
         &mut self,
         lattice: &L,
         boundary_condition: BoundaryConditions,

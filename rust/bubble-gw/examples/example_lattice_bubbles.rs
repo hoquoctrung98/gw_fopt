@@ -1,6 +1,6 @@
 use std::error::Error;
 
-use bubble_gw::many_bubbles::bubbles_nucleation::{NucleationStrategy, VolumeRemainingMethod};
+use bubble_gw::many_bubbles::bubbles_nucleation::FixedRateNucleationMethod;
 use bubble_gw::many_bubbles::lattice::BoundaryConditions;
 use bubble_gw::many_bubbles::{self};
 use nalgebra::{Point3, Vector3};
@@ -23,10 +23,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         0.0,
         0.01,
         Some(0),
-        VolumeRemainingMethod::Approximation,
+        FixedRateNucleationMethod::Approximation,
         None,
         None,
-    );
+    )?;
     let lattice_bubbles = nucleation_strategy.nucleate(&lattice, BoundaryConditions::Periodic)?;
 
     // dbg!(nucleation_strategy.volume_remaining_history);

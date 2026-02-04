@@ -1,4 +1,4 @@
-use bubble_gw::many_bubbles::bubbles_nucleation::{NucleationStrategy, SpontaneousNucleation};
+use bubble_gw::many_bubbles::bubbles_nucleation::SpontaneousNucleation;
 use bubble_gw::many_bubbles::lattice::{BoundaryConditions, BuiltInLattice};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;

@@ -1,8 +1,7 @@
 use bubble_gw::many_bubbles::bubbles_nucleation::{
     FixedRateNucleation,
     FixedRateNucleationError,
-    NucleationStrategy,
-    VolumeRemainingMethod,
+    FixedRateNucleationMethod,
 };
 use bubble_gw::many_bubbles::lattice::{BoundaryConditions, BuiltInLattice};
 use numpy::PyArray1;
@@ -35,7 +34,7 @@ impl PyFixedNucleationRate {
     /// Note:
     ///     If seed is None, a new random seed is used.
     #[new]
-    #[pyo3(signature = (beta, gamma0, t0, d_p0, seed=None, method="approximation", n_points=10000, max_time_steps=None, volume_remaining_fraction_cutoff=None))]
+    #[pyo3(signature = (beta, gamma0, t0, d_p0, seed=None, method="approximation", n_points=10000, max_time_iterations=None, cutoff_fraction_false_vacuum=None))]
     fn new(
         beta: f64,
         gamma0: f64,
@@ -44,8 +43,8 @@ impl PyFixedNucleationRate {
         seed: Option<u64>,
         method: &str,
         n_points: usize,
-        max_time_steps: Option<usize>,
-        volume_remaining_fraction_cutoff: Option<f64>,
+        max_time_iterations: Option<usize>,
+        cutoff_fraction_false_vacuum: Option<f64>,
     ) -> PyResult<Self> {
         if beta.is_nan() || gamma0.is_nan() || t0.is_nan() || d_p0.is_nan() {
             return Err(PyValueError::new_err("Parameters must be finite"));
@@ -60,9 +59,9 @@ impl PyFixedNucleationRate {
             return Err(PyValueError::new_err("n_points must be > 0 for Monte Carlo"));
         }
 
-        let volume_method = match method.to_lowercase().as_str() {
-            "approximation" => VolumeRemainingMethod::Approximation,
-            "montecarlo" => VolumeRemainingMethod::MonteCarlo { n_points },
+        let method = match method.to_lowercase().as_str() {
+            "approximation" => FixedRateNucleationMethod::Approximation,
+            "montecarlo" => FixedRateNucleationMethod::MonteCarlo { n_points },
             _ => {
                 return Err(PyValueError::new_err(
                     "method must be 'approximation' or 'montecarlo'",
@@ -77,9 +76,9 @@ impl PyFixedNucleationRate {
             t0,
             d_p0,
             seed,
-            volume_method,
-            max_time_steps,
-            volume_remaining_fraction_cutoff,
+            method,
+            max_time_iterations,
+            cutoff_fraction_false_vacuum,
         )
         .map_err(|e| match e {
             FixedRateNucleationError::RngInitializationError(err) => {
@@ -101,9 +100,9 @@ impl PyFixedNucleationRate {
             self.inner.t0,
             self.inner.d_p0,
             self.inner.seed,
-            match &self.inner.volume_method {
-                VolumeRemainingMethod::Approximation => "approximation",
-                VolumeRemainingMethod::MonteCarlo { .. } => "montecarlo",
+            match &self.inner.method {
+                FixedRateNucleationMethod::Approximation => "approximation",
+                FixedRateNucleationMethod::MonteCarlo { .. } => "montecarlo",
             }
         ))
     }
@@ -135,17 +134,17 @@ impl PyFixedNucleationRate {
 
     #[getter]
     fn n_points(&self) -> usize {
-        match self.inner.volume_method {
-            VolumeRemainingMethod::Approximation => 0,
-            VolumeRemainingMethod::MonteCarlo { n_points } => n_points,
+        match self.inner.method {
+            FixedRateNucleationMethod::Approximation => 0,
+            FixedRateNucleationMethod::MonteCarlo { n_points } => n_points,
         }
     }
 
     #[getter]
     fn method(&self) -> String {
-        match &self.inner.volume_method {
-            VolumeRemainingMethod::Approximation => "approximation".to_string(),
-            VolumeRemainingMethod::MonteCarlo { .. } => "montecarlo".to_string(),
+        match &self.inner.method {
+            FixedRateNucleationMethod::Approximation => "approximation".to_string(),
+            FixedRateNucleationMethod::MonteCarlo { .. } => "montecarlo".to_string(),
         }
     }
 
@@ -155,8 +154,8 @@ impl PyFixedNucleationRate {
     }
 
     #[getter]
-    fn volume_remaining_history(&self, py: Python) -> Py<PyArray1<f64>> {
-        PyArray1::from_vec(py, self.inner.volume_remaining_history.clone()).into()
+    fn volume_false_vacuum_history(&self, py: Python) -> Py<PyArray1<f64>> {
+        PyArray1::from_vec(py, self.inner.volume_false_vacuum_history.clone()).into()
     }
 
     #[pyo3(signature = (lattice, boundary_condition = "periodic"))]

@@ -9,7 +9,7 @@ use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use thiserror::Error;
 
-use super::{GeneralLatticeProperties, NucleationStrategy};
+use super::GeneralLatticeProperties;
 use crate::many_bubbles::bubbles::Bubbles;
 use crate::many_bubbles::lattice::BoundaryConditions;
 use crate::many_bubbles::lattice_bubbles::{LatticeBubbles, LatticeBubblesError};
@@ -24,7 +24,7 @@ pub enum FixedRateNucleationError {
 }
 
 #[derive(Clone, Debug)]
-pub enum VolumeRemainingMethod {
+pub enum FixedRateNucleationMethod {
     Approximation,
     MonteCarlo { n_points: usize },
 }
@@ -36,14 +36,14 @@ pub struct FixedRateNucleation {
     pub t0: f64,
     pub d_p0: f64,
     pub seed: Option<u64>,
-    pub volume_method: VolumeRemainingMethod,
-    pub max_time_steps: usize,
-    pub volume_remaining_fraction_cutoff: f64,
+    pub method: FixedRateNucleationMethod,
+    pub max_time_iterations: usize,
+    pub cutoff_false_vacuum_fraction: f64,
     rng: StdRng,
-    mc_points: Option<Vec<Point3<f64>>>,
+    sample_points: Option<Vec<Point3<f64>>>,
     first_collision_times: Option<Vec<f64>>,
     pub time_history: Vec<f64>,
-    pub volume_remaining_history: Vec<f64>,
+    pub volume_false_vacuum_history: Vec<f64>,
 }
 
 impl FixedRateNucleation {
@@ -53,9 +53,9 @@ impl FixedRateNucleation {
         t0: f64,
         d_p0: f64,
         seed: Option<u64>,
-        volume_method: VolumeRemainingMethod,
-        max_time_steps: Option<usize>,
-        volume_remaining_cutoff: Option<f64>,
+        method: FixedRateNucleationMethod,
+        max_time_iterations: Option<usize>,
+        cutoff_fraction_false_vacuum: Option<f64>,
     ) -> Result<Self, FixedRateNucleationError> {
         let rng = match seed {
             Some(s) => StdRng::seed_from_u64(s),
@@ -68,8 +68,8 @@ impl FixedRateNucleation {
             },
         };
 
-        let max_attempts = max_time_steps.unwrap_or(1_000_000);
-        let volume_remaining_cutoff = volume_remaining_cutoff.unwrap_or(0.66);
+        let max_time_iterations = max_time_iterations.unwrap_or(1_000_000);
+        let cutoff_false_vacuum_fraction = cutoff_fraction_false_vacuum.unwrap_or(0.01);
 
         Ok(Self {
             beta,
@@ -77,23 +77,23 @@ impl FixedRateNucleation {
             t0,
             d_p0,
             seed,
-            volume_method,
-            max_time_steps: max_attempts,
-            volume_remaining_fraction_cutoff: volume_remaining_cutoff,
+            method,
+            max_time_iterations,
+            cutoff_false_vacuum_fraction,
             rng,
-            mc_points: None,
+            sample_points: None,
             first_collision_times: None,
             time_history: Vec::new(),
-            volume_remaining_history: Vec::new(),
+            volume_false_vacuum_history: Vec::new(),
         })
     }
 
     fn update_first_collision_times(&mut self, new_bubble: &Vector4<f64>) {
-        if self.mc_points.is_none() {
+        if self.sample_points.is_none() {
             return;
         }
 
-        let points = self.mc_points.as_ref().unwrap();
+        let points = self.sample_points.as_ref().unwrap();
         let fct = self.first_collision_times.as_mut().unwrap();
         let t_n = new_bubble[0];
         let x_n = new_bubble[1];
@@ -118,8 +118,8 @@ impl FixedRateNucleation {
         t: f64,
         bubbles_interior: &Bubbles,
     ) -> f64 {
-        match &self.volume_method {
-            VolumeRemainingMethod::Approximation => {
+        match &self.method {
+            FixedRateNucleationMethod::Approximation => {
                 let volume_lattice = lattice.volume();
                 let volume_bubbles: f64 = bubbles_interior
                     .spacetime
@@ -132,7 +132,7 @@ impl FixedRateNucleation {
                     .sum();
                 volume_lattice * (-volume_bubbles / volume_lattice).exp()
             },
-            VolumeRemainingMethod::MonteCarlo { n_points } => {
+            FixedRateNucleationMethod::MonteCarlo { n_points } => {
                 if *n_points == 0 {
                     return lattice.volume();
                 }
@@ -177,7 +177,7 @@ impl FixedRateNucleation {
         let mut accepted = Vec::with_capacity(n_points);
         let mut attempts = 0;
 
-        while accepted.len() < n_points && attempts < self.max_time_steps {
+        while accepted.len() < n_points && attempts < self.max_time_iterations {
             let batch_size = (n_points - accepted.len()).min(100);
             let candidate_pts = lattice.sample_points(batch_size, &mut self.rng);
 
@@ -209,16 +209,14 @@ impl FixedRateNucleation {
             None
         }
     }
-}
 
-impl<L: GeneralLatticeProperties> NucleationStrategy<L> for FixedRateNucleation {
-    fn nucleate(
+    pub fn nucleate<L: GeneralLatticeProperties>(
         &mut self,
         lattice: &L,
         boundary_condition: BoundaryConditions,
     ) -> Result<LatticeBubbles<L>, LatticeBubblesError> {
         let volume_lattice = lattice.volume();
-        let volume_cutoff = self.volume_remaining_fraction_cutoff * volume_lattice;
+        let volume_cutoff = self.cutoff_false_vacuum_fraction * volume_lattice;
 
         let mut t = self.t0;
 
@@ -226,20 +224,19 @@ impl<L: GeneralLatticeProperties> NucleationStrategy<L> for FixedRateNucleation 
         let mut bubbles_exterior = Bubbles::new(Vec::new());
 
         self.time_history.clear();
-        self.volume_remaining_history.clear();
+        self.volume_false_vacuum_history.clear();
 
-        // Initialize MC state
-        if matches!(self.volume_method, VolumeRemainingMethod::MonteCarlo { .. }) {
-            if let VolumeRemainingMethod::MonteCarlo { n_points } = self.volume_method {
+        if matches!(self.method, FixedRateNucleationMethod::MonteCarlo { .. }) {
+            if let FixedRateNucleationMethod::MonteCarlo { n_points } = self.method {
                 if n_points > 0 {
                     let points = lattice.sample_points(n_points, &mut self.rng);
-                    self.mc_points = Some(points);
+                    self.sample_points = Some(points);
                     self.first_collision_times = Some(vec![f64::INFINITY; n_points]);
                 }
             }
         }
 
-        for _ in 0..self.max_time_steps {
+        for _ in 0..self.max_time_iterations {
             let volume_remaining = self.volume_remaining(lattice, t, &bubbles_interior);
 
             if volume_remaining < volume_cutoff {
@@ -252,11 +249,11 @@ impl<L: GeneralLatticeProperties> NucleationStrategy<L> for FixedRateNucleation 
             let x: f64 = self.rng.random();
             if x <= self.d_p0 {
                 let new_bubble =
-                    if matches!(self.volume_method, VolumeRemainingMethod::MonteCarlo { .. })
-                        && self.mc_points.is_some()
+                    if matches!(self.method, FixedRateNucleationMethod::MonteCarlo { .. })
+                        && self.sample_points.is_some()
                     {
                         let first_collision_times = self.first_collision_times.as_ref().unwrap();
-                        let points = self.mc_points.as_ref().unwrap();
+                        let points = self.sample_points.as_ref().unwrap();
 
                         let mut candidate_pt = None;
                         for i in 0..points.len() {
@@ -288,7 +285,7 @@ impl<L: GeneralLatticeProperties> NucleationStrategy<L> for FixedRateNucleation 
 
                 if let Some(bubble_new) = new_bubble {
                     self.time_history.push(t);
-                    self.volume_remaining_history.push(volume_remaining);
+                    self.volume_false_vacuum_history.push(volume_remaining);
 
                     bubbles_interior.spacetime.push(bubble_new);
                     let dummy_interior = Bubbles::new(vec![bubble_new]);

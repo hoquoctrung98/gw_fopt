@@ -18,10 +18,10 @@ nalgebra = {workspace = true}
 num-complex = {workspace = true}
 num = {workspace = true}
 bubble_gw = { path = "../bubble-gw" }
-pyo3 = { version = "0.28", features = ["extension-module", "num-complex", "experimental-inspect"] }
+pyo3 = { version = "0.27.1", features = ["extension-module", "num-complex", "experimental-inspect"] }
 numpy = {version = "0.27.1", features = ["nalgebra"]}
 thiserror = "2.0.18"
 csv = "1.4.0"
 
 [build-dependencies]
-pyo3-build-config = "0.28"
+pyo3-build-config = "0.27.1"
