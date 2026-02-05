@@ -1,5 +1,4 @@
 use nalgebra::{DMatrix, Vector4};
-use nalgebra_spacetime::Lorentzian;
 use ndarray::prelude::*;
 use ndarray::stack;
 use num_complex::Complex64;
@@ -10,6 +9,7 @@ use thiserror::Error;
 use crate::many_bubbles::bubbles::Bubbles;
 use crate::many_bubbles::lattice::GeneralLatticeProperties;
 use crate::many_bubbles::lattice_bubbles::{BubbleIndex, LatticeBubbles, LatticeBubblesError};
+use crate::many_bubbles::spacetime::Lorentzian;
 
 /// Represents the causal collision status of a direction $(\cos\theta, \phi)$
 /// relative to a reference bubble $n$, used to evaluate the Heaviside functions

@@ -1,5 +1,4 @@
 use nalgebra::Vector4;
-use nalgebra_spacetime::Lorentzian;
 use rand::rngs::StdRng;
 use rand::{SeedableRng, random};
 
@@ -7,6 +6,7 @@ use super::GeneralLatticeProperties;
 use crate::many_bubbles::bubbles::Bubbles;
 use crate::many_bubbles::lattice::BoundaryConditions;
 use crate::many_bubbles::lattice_bubbles::{LatticeBubbles, LatticeBubblesError};
+use crate::many_bubbles::spacetime::Lorentzian;
 
 /// Nucleates `n_bubbles` bubbles at fixed time `t0`, uniformly distributed
 /// within the lattice. Ensures no two *newly nucleated* bubbles violate

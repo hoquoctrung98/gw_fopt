@@ -15,10 +15,11 @@ rust-version = "1.86"
 
 [workspace.dependencies]
 ndarray = {version = "0.17.2", features = ["rayon", "approx"]}
-nalgebra = "0.33.2"
+nalgebra = "0.34.1"
 num-complex = "0.4.6"
 num = "0.4.3"
 num-traits = "0.2.19"
+differential-equations = "0.5.2"
 
 [profile.release]
 lto = true

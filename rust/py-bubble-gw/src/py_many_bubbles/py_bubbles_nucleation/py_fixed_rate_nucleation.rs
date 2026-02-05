@@ -1,5 +1,7 @@
+use bubble_gw::many_bubbles::bubbles_nucleation::fixed_rate_nucleation::FixedRateNucleationMethod;
 use bubble_gw::many_bubbles::bubbles_nucleation::{FixedRateNucleation, FixedRateNucleationError};
 use bubble_gw::many_bubbles::lattice::{BoundaryConditions, BuiltInLattice};
+use differential_equations::prelude::*;
 use numpy::PyArray1;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -78,7 +80,6 @@ impl PyFixedNucleationRate {
             beta,
             gamma0,
             t0,
-            d_p0,
             seed,
             n_points,
             max_time_iterations,
@@ -98,13 +99,8 @@ impl PyFixedNucleationRate {
 
     pub fn __repr__(&self) -> PyResult<String> {
         Ok(format!(
-            "FixedNucleationRate(beta={}, gamma0={}, t0={}, d_p0={}, seed={:?}, n_points={})",
-            self.inner.beta,
-            self.inner.gamma0,
-            self.inner.t0,
-            self.inner.d_p0,
-            self.inner.seed,
-            self.inner.n_points
+            "FixedNucleationRate(beta={}, gamma0={}, t0={}, seed={:?}, n_points={})",
+            self.inner.beta, self.inner.gamma0, self.inner.t0, self.inner.seed, self.inner.n_points
         ))
     }
 
@@ -124,11 +120,6 @@ impl PyFixedNucleationRate {
     }
 
     #[getter]
-    fn d_p0(&self) -> f64 {
-        self.inner.d_p0
-    }
-
-    #[getter]
     fn seed(&self) -> Option<u64> {
         self.inner.seed
     }
@@ -138,12 +129,32 @@ impl PyFixedNucleationRate {
         self.inner.n_points
     }
 
-    #[pyo3(signature = (lattice, boundary_condition = "periodic"))]
+    #[pyo3(signature = (taumax, volume_lattice, rtol=1e-9, atol=1e-12))]
+    pub fn solve_bubbles_distribution(
+        &self,
+        py: Python,
+        taumax: f64,
+        volume_lattice: f64,
+        rtol: f64,
+        atol: f64,
+    ) -> (Py<PyArray1<f64>>, Py<PyArray1<f64>>) {
+        let mut method = ImplicitRungeKutta::radau5().rtol(rtol).atol(atol);
+        let result = self
+            .inner
+            .solve_bubbles_distribution(taumax, volume_lattice, &mut method);
+        let time_arr = PyArray1::from_vec(py, result.0).into();
+        let n_bubbles_arr = PyArray1::from_vec(py, result.1).into();
+        return (time_arr, n_bubbles_arr);
+    }
+
+    #[pyo3(signature = (lattice, boundary_condition = "periodic", method = "fixed_probability_time_stepping", d_p0 = 0.01))]
     fn nucleate(
         &mut self,
         py: Python,
         lattice: &Bound<'_, PyAny>,
         boundary_condition: &str,
+        method: &str,
+        d_p0: f64,
     ) -> PyResult<PyFixedRateNucleationResult> {
         // Extract builtin lattice
         let lattice: BuiltInLattice = if let Ok(l) = lattice.extract::<PyParallelepiped>() {
@@ -171,9 +182,23 @@ impl PyFixedNucleationRate {
             },
         };
 
+        let method = match method.to_lowercase().as_str() {
+            "fixed_probability_time_stepping" => {
+                FixedRateNucleationMethod::FixedProbabilityTimeStepping { d_p0 }
+            },
+            "fixed_probability_distribution" => {
+                FixedRateNucleationMethod::FixedProbabilitysDistribution
+            },
+            _ => {
+                return Err(PyValueError::new_err(
+                    "Expected a lattice instance: ParallelepipedLattice, CartesianLattice, SphericalLattice, or EmptyLattice",
+                ));
+            },
+        };
+
         let result = self
             .inner
-            .nucleate(&lattice, boundary_condition)
+            .nucleate(&lattice, boundary_condition, method)
             .map_err(|e| PyErr::new::<PyValueError, _>(e.to_string()))?;
 
         let py_result = PyFixedRateNucleationResult {

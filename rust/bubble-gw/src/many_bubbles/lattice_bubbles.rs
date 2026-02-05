@@ -2,7 +2,6 @@ use std::path::Path;
 
 use csv::{ReaderBuilder, Writer};
 use nalgebra::{DMatrix, Vector3, Vector4};
-use nalgebra_spacetime::Lorentzian;
 use ndarray::prelude::*;
 use ndarray_csv::{Array2Reader, Array2Writer, ReadError};
 use thiserror::Error;
@@ -13,6 +12,7 @@ use crate::many_bubbles::lattice::{
     GeneralLatticeProperties,
     TransformationIsometry3,
 };
+use crate::many_bubbles::spacetime::Lorentzian;
 
 /// Represents a bubble index, distinguishing between an interior index,
 /// exterior index, and no collision.

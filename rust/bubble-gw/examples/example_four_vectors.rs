@@ -1,5 +1,5 @@
+use bubble_gw::many_bubbles::spacetime::Lorentzian;
 use nalgebra::{Vector2, Vector3, Vector4};
-use nalgebra_spacetime::Lorentzian;
 
 fn main() {
     let v1 = Vector4::new(1.0, 2.0, 1.0, 3.0);

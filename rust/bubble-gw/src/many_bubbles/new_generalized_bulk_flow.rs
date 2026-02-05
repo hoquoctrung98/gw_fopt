@@ -1,7 +1,6 @@
 use std::fmt::Debug;
 
 use nalgebra::{DMatrix, Vector4};
-use nalgebra_spacetime::Lorentzian;
 use ndarray::prelude::*;
 use ndarray::stack;
 use num::Zero;
@@ -13,6 +12,7 @@ use thiserror::Error;
 use crate::many_bubbles::bubbles::Bubbles;
 use crate::many_bubbles::lattice::GeneralLatticeProperties;
 use crate::many_bubbles::lattice_bubbles::{BubbleIndex, LatticeBubbles, LatticeBubblesError};
+use crate::many_bubbles::spacetime::Lorentzian;
 
 /// A 3×3 Hermitian tensor stored in upper-triangular order:
 /// [xx, xy, xz, yy, yz, zz]

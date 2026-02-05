@@ -22,6 +22,7 @@ pyo3 = { version = "0.27.1", features = ["extension-module", "num-complex", "exp
 numpy = {version = "0.27.1", features = ["nalgebra"]}
 thiserror = "2.0.18"
 csv = "1.4.0"
+differential-equations.workspace = true
 
 [build-dependencies]
 pyo3-build-config = "0.27.1"

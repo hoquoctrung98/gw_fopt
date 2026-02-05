@@ -1,11 +1,13 @@
 use std::error::Error;
 
+use bubble_gw::many_bubbles::bubbles_nucleation::fixed_rate_nucleation::FixedRateNucleationMethod;
 use bubble_gw::many_bubbles::lattice::BoundaryConditions;
 use bubble_gw::many_bubbles::{self};
 use nalgebra::{Point3, Vector3};
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let lbox = 11.;
+    let beta = 0.05;
+    let lbox = 20.0 / beta;
     let lattice = many_bubbles::lattice::CartesianLattice::new(
         Point3::new(0., 0., 0.),
         [
@@ -18,16 +20,19 @@ fn main() -> Result<(), Box<dyn Error>> {
     let lattice = many_bubbles::lattice::BuiltInLattice::Cartesian(lattice);
     let mut nucleation_strategy = many_bubbles::bubbles_nucleation::FixedRateNucleation::new(
         0.05,
-        1.,
+        1.0e-13,
         0.0,
-        0.01,
         Some(0),
         10000,
         None,
         None,
     )?;
     let lattice_bubbles = nucleation_strategy
-        .nucleate(&lattice, BoundaryConditions::Periodic)?
+        .nucleate(
+            &lattice,
+            BoundaryConditions::Periodic,
+            FixedRateNucleationMethod::FixedProbabilityTimeStepping { d_p0: 0.01 },
+        )?
         .lattice_bubbles;
 
     // dbg!(nucleation_strategy.volume_remaining_history);

@@ -24,9 +24,9 @@ serde = "1.0.228"
 thiserror = "2.0.18"
 ndarray-csv = "0.5.4"
 nalgebra.workspace = true
-nalgebra-spacetime = "0.5.0"
 approx = { version = "0.5.1", features = ["num-complex"] }
-getrandom = "0.4.0"
+getrandom = "0.4.1"
+differential-equations.workspace = true
 
 [lib]
 # crate-type = ["cdylib", "lib"]
