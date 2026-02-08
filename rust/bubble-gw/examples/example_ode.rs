@@ -23,13 +23,12 @@ impl ODE<f64, SVector<f64, 4>> for FixedRateNucleation {
 }
 
 impl FixedRateNucleation {
-    fn solve_bubbles_distribution(&self) -> (Vec<f64>, Vec<f64>) {
-        let volume_lattice = (20.0 / self.beta).powi(3);
-
+    fn solve_bubbles_distribution(&self, volume_lattice: f64) -> (Vec<f64>, Vec<f64>) {
         let y0 = vector![0.0, 0.0, 0.0, 0.0];
         let tau0 = 0.0;
         let taumax = 40.0;
-        let mut method = ImplicitRungeKutta::radau5().rtol(1e-9).atol(1e-12);
+        // let mut method = ImplicitRungeKutta::radau5().rtol(1e-9).atol(1e-12);
+        let mut method = ExplicitRungeKutta::rkf45().rtol(1e-9).atol(1e-12);
         let problem = ODEProblem::new(self, tau0, taumax, y0);
 
         let solution = problem.even(0.001).solve(&mut method).unwrap();
@@ -63,7 +62,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let gamma0: f64 = 1e-12;
 
     let ode = FixedRateNucleation { gamma0, beta };
-    let (tau, n_bubbles) = ode.solve_bubbles_distribution();
+    let volume_lattice = (20.0 / ode.beta).powi(3);
+    let (tau, n_bubbles) = ode.solve_bubbles_distribution(volume_lattice);
 
     println!("\nInteger-crossing points (from below → above):");
     println!("tau, t, N_bubbles");

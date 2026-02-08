@@ -15,7 +15,7 @@ use pyo3::types::PyAnyMethods;
 use crate::py_many_bubbles::py_isometry::PyIsometry3;
 use crate::py_many_bubbles::py_lattice::{PyCartesian, PyEmpty, PyParallelepiped, PySpherical};
 
-#[pyclass(name = "LatticeBubbles")]
+#[pyclass(from_py_object, name = "LatticeBubbles")]
 #[derive(Clone, Debug)]
 pub struct PyLatticeBubbles {
     pub(crate) inner: LatticeBubbles<BuiltInLattice>,

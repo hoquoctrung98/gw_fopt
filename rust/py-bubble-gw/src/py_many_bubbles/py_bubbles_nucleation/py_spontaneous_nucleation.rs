@@ -7,7 +7,6 @@ use crate::py_many_bubbles::py_lattice::{PyCartesian, PyEmpty, PyParallelepiped,
 use crate::py_many_bubbles::py_lattice_bubbles::PyLatticeBubbles;
 
 #[pyclass(name = "SpontaneousNucleation")]
-#[derive(Clone)]
 pub struct PySpontaneousNucleation {
     pub(crate) inner: SpontaneousNucleation,
 }

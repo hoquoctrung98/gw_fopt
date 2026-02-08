@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 
 use nalgebra::{Isometry3, Point3, Vector3, Vector4};
-use rand::Rng;
+use rand::RngExt;
 use rand::rngs::StdRng;
 
 use super::{

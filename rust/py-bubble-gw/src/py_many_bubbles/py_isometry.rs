@@ -1,7 +1,7 @@
 use nalgebra::{Isometry3, Matrix3, Rotation3, Translation3, Unit, UnitQuaternion, Vector3};
 use pyo3::prelude::*;
 
-#[pyclass(name = "Isometry3")]
+#[pyclass(from_py_object, name = "Isometry3")]
 #[derive(Clone, Debug)]
 pub struct PyIsometry3 {
     pub(crate) inner: Isometry3<f64>,

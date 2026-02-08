@@ -11,7 +11,7 @@ use differential_equations::prelude::*;
 use nalgebra::{Point3, SVector, Vector4, vector};
 use ndarray::Array1;
 use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
+use rand::{RngExt, SeedableRng};
 use thiserror::Error;
 
 use super::GeneralLatticeProperties;

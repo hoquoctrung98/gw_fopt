@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 
 use approx::{AbsDiffEq, RelativeEq};
 use nalgebra::{Isometry3, Point3, Vector3};
-use rand::Rng;
+use rand::RngExt;
 use rand::rngs::StdRng;
 
 use super::{

@@ -41,28 +41,28 @@ pub type PyResult<T> = Result<T, PyLatticeError>;
 // === Concrete Python lattice wrappers ===
 // Each stores: concrete type (for methods) + BuiltInLattice (for interop)
 
-#[pyclass(name = "ParallelepipedLattice")]
+#[pyclass(from_py_object, name = "ParallelepipedLattice")]
 #[derive(Clone)]
 pub struct PyParallelepiped {
     pub(crate) concrete: ParallelepipedLattice,
     pub(crate) builtin: BuiltInLattice,
 }
 
-#[pyclass(name = "CartesianLattice")]
+#[pyclass(from_py_object, name = "CartesianLattice")]
 #[derive(Clone)]
 pub struct PyCartesian {
     pub(crate) concrete: CartesianLattice,
     pub(crate) builtin: BuiltInLattice,
 }
 
-#[pyclass(name = "SphericalLattice")]
+#[pyclass(from_py_object, name = "SphericalLattice")]
 #[derive(Clone)]
 pub struct PySpherical {
     pub(crate) concrete: SphericalLattice,
     pub(crate) builtin: BuiltInLattice,
 }
 
-#[pyclass(name = "EmptyLattice")]
+#[pyclass(from_py_object, name = "EmptyLattice")]
 #[derive(Clone)]
 pub struct PyEmpty {
     pub(crate) concrete: EmptyLattice,

@@ -11,7 +11,7 @@ use crate::many_bubbles::spacetime::Lorentzian;
 /// Nucleates `n_bubbles` bubbles at fixed time `t0`, uniformly distributed
 /// within the lattice. Ensures no two *newly nucleated* bubbles violate
 /// causality (i.e., no overlap at formation).
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct SpontaneousNucleation {
     pub n_bubbles: usize,
     pub t0: f64,
