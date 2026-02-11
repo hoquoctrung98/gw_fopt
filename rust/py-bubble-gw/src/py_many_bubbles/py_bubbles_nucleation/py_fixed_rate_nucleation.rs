@@ -147,7 +147,7 @@ impl PyFixedNucleationRate {
         return (time_arr, n_bubbles_arr);
     }
 
-    #[pyo3(signature = (lattice, boundary_condition = "periodic", method = "fixed_probability_time_stepping", d_p0 = 0.01))]
+    #[pyo3(signature = (lattice, boundary_condition = "periodic", method = "fixed_probability_distribution", d_p0 = 0.01))]
     fn nucleate(
         &mut self,
         py: Python,
