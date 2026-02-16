@@ -16,7 +16,7 @@ puruspe = "0.4.3"
 rayon = "1.11"
 peroxide = { version = "0.40.2", features = ["complex"] }
 rand = "0.10.0"
-rand_distr = "0.5.1"
+rand_distr = "0.6.0"
 array-init = "2.1.0"
 num-traits = "0.2.19"
 csv = "1.4.0"
