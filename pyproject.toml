@@ -25,6 +25,7 @@ dependencies = [
     "joblib>=1.5.3",
     "psweep>=0.15.0",
     "pre-commit>=4.5.1",
+    "lmfit>=1.3.4",
 ]
 
 [project.optional-dependencies]
