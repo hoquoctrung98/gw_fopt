@@ -279,6 +279,7 @@ class GwBulkflowVisualizer:
         fit_ranges: Union[Tuple[float, float], List[Tuple[float, float]]],
         model: Optional[lmfit.Model] = None,
         params_list: Optional[List[lmfit.Parameters]] = None,
+        **kwargs_fit,
     ) -> Self:
         """
         Fit GW spectra using lmfit with optional custom model/parameters.
@@ -389,10 +390,8 @@ class GwBulkflowVisualizer:
                 params_i,
                 w=w_fit,
                 weights=1.0 / sigma_fit,
-                nan_policy="propagate",
+                **kwargs_fit,
             )
-            # compute 1 sigma confidence interval
-            result.conf_interval(sigmas=[1])
 
             # Store MINIMAL result: only essential metadata + full lmfit result
             lmfit_result_entry = {
@@ -415,6 +414,7 @@ class GwBulkflowVisualizer:
         fit_params_labels: Optional[dict[str, str]] = None,
         show_fit_range: bool = False,
         show_fit_errors: bool = True,
+        ci_sigma: float = 1.0,
         params_per_line: int = 2,
         allow_vary: bool = True,
         **kwargs,
@@ -496,7 +496,7 @@ class GwBulkflowVisualizer:
         for i, fit_entry in self.lmfit_results.iterrows():
             color = self.colors[i]
             result: lmfit.model.ModelResult = fit_entry["lmfit_result"]
-            ci_out = result.conf_interval(sigmas=[1])
+            ci_out = result.conf_interval(sigmas=[ci_sigma])
 
             # Dynamically extract parameters from lmfit result
             params = result.params
@@ -523,13 +523,10 @@ class GwBulkflowVisualizer:
                         # Otherwise use symmetric stderr
                         ci_param = ci_out[param_name]
                         # ci is typically [(conf_level, lower, upper), ...]
-                        # Get 1σ (68.3%) confidence interval
-                        for conf, bound in ci_param:
-                            if np.isclose(conf, 0.6826894921370859):
-                                if bound > param_value:
-                                    err_high = bound - param_value
-                                else:
-                                    err_low = param_value - bound
+                        # Get confidence interval corresponding to sigma
+                        low, _, high = sorted([ci[1] for ci in ci_param])
+                        err_high = high - param_value
+                        err_low = param_value - low
                         # LaTeX superscript/subscript format: ^{+high}_{-low}
                         value_str = rf"${param_value:.2e}^{{+{err_high:.2e}}}_{{-{err_low:.2e}}}$, "
                     else:
