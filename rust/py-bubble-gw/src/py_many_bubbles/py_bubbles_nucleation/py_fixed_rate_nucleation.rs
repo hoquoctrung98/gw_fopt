@@ -20,15 +20,15 @@ pub struct PyFixedRateNucleationResult {
     pub volume_false_vacuum_history: Py<PyArray1<f64>>,
 }
 
-#[pyclass(name = "FixedNucleationRate")]
+#[pyclass(name = "FixedRateNucleation")]
 #[derive(Debug)]
-pub struct PyFixedNucleationRate {
+pub struct PyFixedRateNucleation {
     pub inner: FixedRateNucleation,
 }
 
 #[pymethods]
-impl PyFixedNucleationRate {
-    /// Create a new FixedNucleationRate strategy (Monte Carlo only).
+impl PyFixedRateNucleation {
+    /// Create a new FixedRateNucleation strategy (Monte Carlo only).
     ///
     /// Args:
     ///     beta (float): Inverse timescale of rate growth.
@@ -94,12 +94,12 @@ impl PyFixedNucleationRate {
             },
         })?;
 
-        Ok(PyFixedNucleationRate { inner })
+        Ok(PyFixedRateNucleation { inner })
     }
 
     pub fn __repr__(&self) -> PyResult<String> {
         Ok(format!(
-            "FixedNucleationRate(beta={}, gamma0={}, t0={}, seed={:?}, n_points={})",
+            "FixedRateNucleation(beta={}, gamma0={}, t0={}, seed={:?}, n_points={})",
             self.inner.beta, self.inner.gamma0, self.inner.t0, self.inner.seed, self.inner.n_points
         ))
     }
