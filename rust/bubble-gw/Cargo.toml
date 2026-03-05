@@ -25,7 +25,7 @@ thiserror = "2.0.18"
 ndarray-csv = "0.5.4"
 nalgebra.workspace = true
 approx = { version = "0.5.1", features = ["num-complex"] }
-getrandom = "0.4.1"
+getrandom = "0.4.2"
 differential-equations.workspace = true
 
 [lib]
