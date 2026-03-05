@@ -783,7 +783,7 @@ fig.savefig(
 fig.show()
 
 # %%
-nucleation_strategy = many_bubbles.FixedNucleationRate(
+nucleation_strategy = many_bubbles.FixedRateNucleation(
     beta=1,
     gamma0=1,
     t0=0.0,
@@ -864,7 +864,7 @@ fig.show()
 
 # %%
 L = 1.0
-nucleation_strategy_apprx = many_bubbles.FixedNucleationRate(
+nucleation_strategy_apprx = many_bubbles.FixedRateNucleation(
     beta=1,
     gamma0=1.0e-3,
     t0=0.0,
@@ -879,7 +879,7 @@ lattice_bubbles_apprx = nucleation_strategy_apprx.nucleate(
     boundary_condition="reflection",
 )
 
-nucleation_strategy_montecarlo = many_bubbles.FixedNucleationRate(
+nucleation_strategy_montecarlo = many_bubbles.FixedRateNucleation(
     beta=1,
     gamma0=1.0e-3,
     t0=0.0,
@@ -956,7 +956,7 @@ def run_single_realization(_):
     Returns:
         tuple: (n_bubbles, time_history, volume_remaining_history)
     """
-    nucleation_strategy = many_bubbles.FixedNucleationRate(
+    nucleation_strategy = many_bubbles.FixedRateNucleation(
         beta=beta,
         gamma0=gamma0,
         t0=0.0,

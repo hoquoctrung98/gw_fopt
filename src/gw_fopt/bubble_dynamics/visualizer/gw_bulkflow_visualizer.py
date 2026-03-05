@@ -393,18 +393,13 @@ class GwBulkflowVisualizer:
                 **kwargs_fit,
             )
 
-            # Store MINIMAL result: only essential metadata + full lmfit result
             lmfit_result_entry = {
                 "original_label": orig_label,
                 "fit_range": fit_range,
                 "lmfit_result": result,  # Single source of truth for all fit info
             }
             self.lmfit_results.append(lmfit_result_entry)
-
-        # Convert to DataFrame for easy indexing (optional, keeps API compatible)
-        self.lmfit_results = pd.DataFrame(self.lmfit_results).set_index(
-            pd.RangeIndex(n_sets, name="index_power_sets")
-        )
+        self.lmfit_results = pd.DataFrame(self.lmfit_results)
 
         return self
 
@@ -413,10 +408,12 @@ class GwBulkflowVisualizer:
         ax: plt.Axes,
         fit_params_labels: Optional[dict[str, str]] = None,
         show_fit_range: bool = False,
+        show_fit_values: bool = True,
         show_fit_errors: bool = True,
         ci_sigma: float = 1.0,
         params_per_line: int = 2,
         allow_vary: bool = True,
+        w_plot: Optional[np.ndarray] = None,
         **kwargs,
     ) -> Self:
         """
@@ -452,6 +449,10 @@ class GwBulkflowVisualizer:
             )
         if self.lmfit_results is None:
             raise RuntimeError("Call method get_fit_results first")
+        if w_plot is None:
+            w_plot = np.logspace(
+                np.log10(self.w_plot.min()), np.log10(self.w_plot.max()), 500
+            )
 
         # Default label mapping for common parameters
         default_param_labels_dict = {
@@ -505,49 +506,47 @@ class GwBulkflowVisualizer:
             else:
                 param_items = [(name, p) for name, p in params.items() if p.vary]
 
-            # Build label with dynamic parameter names and values
-            label_parts = [f"Fitting {fit_entry['original_label']}\n"]
+            if show_fit_values:
+                # Build label with dynamic parameter names and values
+                label_parts = [f"Fitting {fit_entry['original_label']}\n"]
+                for idx, (param_name, param_obj) in enumerate(param_items):
+                    param_value = param_obj.value
 
-            for idx, (param_name, param_obj) in enumerate(param_items):
-                param_value = param_obj.value
+                    # Get display name from label mapping
+                    display_name = param_labels.get(param_name, param_name)
 
-                # Get display name from label mapping
-                display_name = param_labels.get(param_name, param_name)
+                    # Add error bars if requested and available
+                    if show_fit_errors:
+                        stderr = param_obj.stderr
 
-                # Add error bars if requested and available
-                if show_fit_errors:
-                    stderr = param_obj.stderr
-
-                    if stderr is not None and np.isfinite(stderr) and stderr > 0:
-                        # Compute asymmetric errors using profile likelihood if available
-                        # Otherwise use symmetric stderr
-                        ci_param = ci_out[param_name]
-                        # ci is typically [(conf_level, lower, upper), ...]
-                        # Get confidence interval corresponding to sigma
-                        low, _, high = sorted([ci[1] for ci in ci_param])
-                        err_high = high - param_value
-                        err_low = param_value - low
-                        # LaTeX superscript/subscript format: ^{+high}_{-low}
-                        value_str = rf"${param_value:.2e}^{{+{err_high:.2e}}}_{{-{err_low:.2e}}}$, "
+                        if stderr is not None and np.isfinite(stderr) and stderr > 0:
+                            # Compute asymmetric errors using profile likelihood if available
+                            # Otherwise use symmetric stderr
+                            ci_param = ci_out[param_name]
+                            # ci is typically [(conf_level, lower, upper), ...]
+                            # Get confidence interval corresponding to sigma
+                            low, _, high = sorted([ci[1] for ci in ci_param])
+                            err_high = high - param_value
+                            err_low = param_value - low
+                            # LaTeX superscript/subscript format: ^{+high}_{-low}
+                            value_str = rf"${param_value:.2e}^{{+{err_high:.2e}}}_{{-{err_low:.2e}}}$, "
+                        else:
+                            value_str = rf"${param_value:.2e}$,  "
                     else:
                         value_str = rf"${param_value:.2e}$,  "
-                else:
-                    value_str = rf"${param_value:.2e}$,  "
 
-                label_parts.append(f"{display_name}={value_str}")
+                    label_parts.append(f"{display_name}={value_str}")
 
-                # Insert newline after every params_per_line parameters
-                if (idx + 1) % params_per_line == 0 and idx < len(param_items) - 1:
-                    label_parts.append("\n")
-
-            # Join parts, handling newlines properly
-            label = " ".join(label_parts).replace(" \n", "\n")
+                    # Insert newline after every params_per_line parameters
+                    if (idx + 1) % params_per_line == 0 and idx < len(param_items) - 1:
+                        label_parts.append("\n")
+                # Join parts, handling newlines properly
+                label = " ".join(label_parts).replace(" \n", "\n")
+            else:
+                label = f"Fitting {fit_entry['original_label']}"
 
             # Evaluate fit on fine grid using lmfit's built-in eval
-            w_fine = np.logspace(
-                np.log10(self.w_plot.min()), np.log10(self.w_plot.max()), 500
-            )
-            spectrum_fitted = result.eval(w=w_fine)
+            spectrum_fitted = result.eval(w=w_plot)
 
             # Plot with merged kwargs
             default_kwargs = {
@@ -556,6 +555,6 @@ class GwBulkflowVisualizer:
                 "linestyle": self.linestyles[i],
             }
             merged_kwargs = {**default_kwargs, **kwargs}
-            ax.plot(w_fine, spectrum_fitted, **merged_kwargs)
+            ax.plot(w_plot, spectrum_fitted, **merged_kwargs)
 
         return self
