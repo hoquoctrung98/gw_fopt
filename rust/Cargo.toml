@@ -28,6 +28,10 @@ opt-level = 3
 panic = "abort"
 incremental = true
 
+[profile.profiling]
+inherits = "release"
+debug = true
+
 [profile.bench]
 lto = true
 codegen-units = 1
