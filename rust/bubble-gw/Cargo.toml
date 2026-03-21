@@ -12,9 +12,9 @@ rust-version.workspace = true
 ndarray = {workspace = true}
 num-complex = {workspace = true}
 num = {workspace = true}
-puruspe = "0.4.3"
+puruspe = "0.4.4"
 rayon = "1.11"
-peroxide = { version = "0.40.2", features = ["complex"] }
+peroxide = { version = "0.41.0", features = ["complex"] }
 rand = "0.10.0"
 rand_distr = "0.6.0"
 array-init = "2.1.0"

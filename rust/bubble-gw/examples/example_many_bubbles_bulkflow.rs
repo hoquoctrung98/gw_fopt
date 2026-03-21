@@ -33,7 +33,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     lattice_bubbles.with_boundary_condition(BoundaryConditions::Periodic);
 
     let mut generalized_bulk_flow = GeneralizedBulkFlow::new(lattice_bubbles)?;
-    generalized_bulk_flow.set_resolution(100, 200, true)?;
+    generalized_bulk_flow.set_resolution(500, 500, true)?;
 
     let w_arr = Array1::geomspace(1e-2, 1e2, 100).unwrap().to_vec();
     let coefficients_sets = vec![vec![0.0], vec![1.0]];

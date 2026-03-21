@@ -135,6 +135,10 @@ class GwBulkflowVisualizer:
         self.gw_mean = self.gw_plot.mean(axis=0)  # (n_sets, n_freq)
         gw_data_std = self.gw_plot.std(axis=0)
         n_histories = self.gw_plot.shape[0]
+        log_gw = np.log(self.gw_plot)
+        log_mean = log_gw.mean(axis=0)
+        self.gw_mean = np.exp(log_mean)
+        log_std = log_gw.std(axis=0, ddof=1)
 
         if error_bars == MeanErrorType.SEM:
             err = gw_data_std / np.sqrt(n_histories)
