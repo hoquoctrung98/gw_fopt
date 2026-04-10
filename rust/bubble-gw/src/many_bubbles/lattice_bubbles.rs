@@ -364,6 +364,113 @@ where
         self.delta_squared = delta_squared;
     }
 
+    // =========================================================================
+    // Explicit Time Translation (by specified amount)
+    // =========================================================================
+
+    /// Performs in-place time translation on all bubbles by a specified amount.
+    ///
+    /// Adds `t_shift` to the nucleation time (component 0) of every bubble
+    /// in both `interior` and `exterior`.
+    ///
+    /// # Arguments
+    /// * `t_shift` - Amount to add to all bubble times (can be negative)
+    ///
+    /// # Effects
+    /// - Modifies the time component of all `Vector4<f64>` entries
+    /// - `delta` and `delta_squared` remain **unchanged** (invariant under
+    ///   uniform time translation)
+    ///
+    /// # Example
+    /// ```ignore
+    /// // Shift all bubbles forward by 10 time units
+    /// lattice_bubbles.translate_time_mut(10.0);
+    ///
+    /// // Shift backward by 2.5 time units
+    /// lattice_bubbles.translate_time_mut(-2.5);
+    /// ```
+    pub fn translate_time_mut(&mut self, t_shift: f64) {
+        // Apply shift to interior bubbles
+        for bubble in self.interior.spacetime.iter_mut() {
+            bubble[0] += t_shift;
+        }
+        // Apply shift to exterior bubbles
+        for bubble in self.exterior.spacetime.iter_mut() {
+            bubble[0] += t_shift;
+        }
+        // delta/delta_squared invariant under uniform time translation
+    }
+
+    /// Returns a new `LatticeBubbles` with explicit time translation applied.
+    ///
+    /// Functional (non-mutating) variant of `translate_time_mut`.
+    ///
+    /// # Arguments
+    /// * `t_shift` - Amount to add to all bubble times
+    ///
+    /// # Returns
+    /// A new instance with translated bubble times; precomputed matrices cloned.
+    pub fn translate_time(&self, t_shift: f64) -> Self {
+        let mut result = self.clone();
+        result.translate_time_mut(t_shift);
+        result
+    }
+
+    // =========================================================================
+    // Auto-Normalization (shift so earliest bubble nucleates at t=0)
+    // =========================================================================
+
+    /// Performs in-place time normalization: shifts all bubbles so the earliest
+    /// nucleation time becomes 0.
+    ///
+    /// Computes `shift = -min(interior_times ∪ exterior_times)` and applies
+    /// it via `translate_time_mut`.
+    ///
+    /// # Effects
+    /// - After this call, `min(bubble_times) == 0.0` (within floating-point precision)
+    /// - If both bubble collections are empty, no change is made
+    /// - `delta` and `delta_squared` remain unchanged (invariant)
+    ///
+    /// # Example
+    /// ```ignore
+    /// // Normalize so earliest bubble nucleates at t=0
+    /// lattice_bubbles.normalize_time_mut();
+    /// ```
+    pub fn normalize_time_mut(&mut self) {
+        // Find minimum time across all bubbles
+        let min_interior = self
+            .interior
+            .spacetime
+            .iter()
+            .map(|v| v[0])
+            .fold(f64::INFINITY, f64::min);
+        let min_exterior = self
+            .exterior
+            .spacetime
+            .iter()
+            .map(|v| v[0])
+            .fold(f64::INFINITY, f64::min);
+        let min_time = min_interior.min(min_exterior);
+
+        // Only apply shift if we found valid bubbles
+        if min_time.is_finite() {
+            self.translate_time_mut(-min_time);
+        }
+        // If empty: no-op, nothing to normalize
+    }
+
+    /// Returns a new `LatticeBubbles` with time normalization applied.
+    ///
+    /// Functional variant: shifts copy so earliest bubble nucleates at t=0.
+    ///
+    /// # Returns
+    /// A new instance with normalized bubble times.
+    pub fn normalize_time(&self) -> Self {
+        let mut result = self.clone();
+        result.normalize_time_mut();
+        result
+    }
+
     /// Create a new `Bubbles` instance by reading interior and exterior bubbles
     /// from CSV files.
     ///

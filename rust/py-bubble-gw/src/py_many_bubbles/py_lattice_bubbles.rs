@@ -162,6 +162,120 @@ impl PyLatticeBubbles {
         self.inner.with_boundary_condition(bc);
         Ok(())
     }
+
+    // =========================================================================
+    // Explicit Time Translation Bindings
+    // =========================================================================
+
+    /// Shifts the nucleation time of all bubbles by a specified amount.
+    ///
+    /// This method modifies the object in-place.
+    ///
+    /// Parameters
+    /// ----------
+    /// t_shift : float
+    ///     Amount to add to all bubble times (can be negative).
+    ///
+    /// Returns
+    /// -------
+    /// None
+    ///
+    /// Notes
+    /// -----
+    /// Spacetime intervals are invariant under uniform time translation,
+    /// so precomputed collision data remains valid.
+    ///
+    /// Examples
+    /// --------
+    /// >>> # Shift forward by 10 time units
+    /// >>> lb.translate_time_mut(10.0)
+    ///
+    /// >>> # Shift backward by 2.5 time units
+    /// >>> lb.translate_time_mut(-2.5)
+    fn translate_time_mut(&mut self, t_shift: f64) -> PyResult<()> {
+        self.inner.translate_time_mut(t_shift);
+        Ok(())
+    }
+
+    /// Returns a new LatticeBubbles with explicit time translation applied.
+    ///
+    /// Functional (non-mutating) variant: original object unchanged.
+    ///
+    /// Parameters
+    /// ----------
+    /// t_shift : float
+    ///     Amount to add to all bubble times.
+    ///
+    /// Returns
+    /// -------
+    /// LatticeBubbles
+    ///     New instance with translated bubble times.
+    ///
+    /// Examples
+    /// --------
+    /// >>> # Get shifted copy without modifying original
+    /// >>> lb_shifted = lb.translate_time(5.0)
+    fn translate_time(&self, t_shift: f64) -> Self {
+        let new_inner = self.inner.translate_time(t_shift);
+        Self { inner: new_inner }
+    }
+
+    // =========================================================================
+    // Auto-Normalization Bindings
+    // =========================================================================
+
+    /// Normalizes bubble times so the earliest nucleation occurs at t=0.
+    ///
+    /// This method modifies the object in-place. Computes the minimum time
+    /// across all interior and exterior bubbles, then shifts all times by
+    /// `-min_time`.
+    ///
+    /// Parameters
+    /// ----------
+    /// None
+    ///
+    /// Returns
+    /// -------
+    /// None
+    ///
+    /// Notes
+    /// -----
+    /// - After normalization: `min(bubbles_interior[:, 0]) == 0.0`
+    /// - If no bubbles exist, this is a no-op
+    /// - Precomputed spacetime intervals remain valid
+    ///
+    /// Examples
+    /// --------
+    /// >>> # Normalize so earliest bubble nucleates at t=0
+    /// >>> lb.normalize_time_mut()
+    /// >>> assert abs(lb.bubbles_interior[:, 0].min()) < 1e-10
+    fn normalize_time_mut(&mut self) -> PyResult<()> {
+        self.inner.normalize_time_mut();
+        Ok(())
+    }
+
+    /// Returns a new LatticeBubbles with time normalization applied.
+    ///
+    /// Functional variant: returns copy with earliest bubble at t=0.
+    ///
+    /// Parameters
+    /// ----------
+    /// None
+    ///
+    /// Returns
+    /// -------
+    /// LatticeBubbles
+    ///     New instance with normalized bubble times.
+    ///
+    /// Examples
+    /// --------
+    /// >>> # Get normalized copy without modifying original
+    /// >>> lb_normalized = lb.normalize_time()
+    /// >>> # Original lb is unchanged
+    fn normalize_time(&self) -> Self {
+        let new_inner = self.inner.normalize_time();
+        Self { inner: new_inner }
+    }
 }
 
 fn bubbles_to_array2(bubbles: &Bubbles) -> Array2<f64> {
