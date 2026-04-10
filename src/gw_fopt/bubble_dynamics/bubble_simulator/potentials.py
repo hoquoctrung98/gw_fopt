@@ -137,7 +137,7 @@ class U1Potential(GenericPotential):
         ax.legend()
 
 
-class QuarticPotential:
+class QuarticPotential(GenericPotential):
     def __init__(self, c2: float, c3: float, c4: float):
         self.name = "quartic"
         self.name_latex = r"$V(\phi) = \dfrac{c_2}{2} \phi^2 - \dfrac{c_3}{3} \phi^3 + \dfrac{c_4}{4} \phi^4$"
