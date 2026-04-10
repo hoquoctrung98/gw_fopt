@@ -101,6 +101,7 @@ class GwBulkflowVisualizer:
         labels: Optional[List[str]] = None,
         colors: Optional[List] = None,
         linestyles: Optional[List[str]] = None,
+        use_log_scale=False,
     ) -> Self:
         """
         Setup the plot state and compute statistics.
@@ -119,6 +120,8 @@ class GwBulkflowVisualizer:
             Custom colors for each set.
         linestyles : list of str, optional
             Custom linestyles for each set.
+        use_log_scale: bool
+            Use log scale in computing the error bands
 
         Returns
         -------
@@ -132,26 +135,40 @@ class GwBulkflowVisualizer:
         self.gw_plot = scale_factors[1] * self.gw_data
 
         # Compute statistics
-        self.gw_mean = self.gw_plot.mean(axis=0)  # (n_sets, n_freq)
-        gw_data_std = self.gw_plot.std(axis=0)
         n_histories = self.gw_plot.shape[0]
         log_gw = np.log(self.gw_plot)
         log_mean = log_gw.mean(axis=0)
         self.gw_mean = np.exp(log_mean)
         log_std = log_gw.std(axis=0, ddof=1)
 
-        if error_bars == MeanErrorType.SEM:
-            err = gw_data_std / np.sqrt(n_histories)
-            self.gw_lower = self.gw_mean - scale_error * err
-            self.gw_upper = self.gw_mean + scale_error * err
-        elif error_bars == MeanErrorType.STD:
-            self.gw_lower = self.gw_mean - scale_error * gw_data_std
-            self.gw_upper = self.gw_mean + scale_error * gw_data_std
-        elif error_bars == MeanErrorType.ABS:
-            self.gw_lower = self.gw_plot.min(axis=0)
-            self.gw_upper = self.gw_plot.max(axis=0)
+        if use_log_scale:
+            if error_bars == MeanErrorType.SEM:
+                log_sem = log_std / np.sqrt(n_histories)
+                self.gw_lower = np.exp(log_mean - scale_error * log_sem)
+                self.gw_upper = np.exp(log_mean + scale_error * log_sem)
+            elif error_bars == MeanErrorType.STD:
+                self.gw_lower = np.exp(log_mean - scale_error * log_std)
+                self.gw_upper = np.exp(log_mean + scale_error * log_std)
+            elif error_bars == MeanErrorType.ABS:
+                self.gw_lower = self.gw_plot.min(axis=0)
+                self.gw_upper = self.gw_plot.max(axis=0)
+            else:
+                raise ValueError(f"Unsupported error_bars: {error_bars}")
         else:
-            raise ValueError(f"Unsupported error_bars: {error_bars}")
+            self.gw_mean = self.gw_plot.mean(axis=0)  # (n_sets, n_freq)
+            gw_data_std = self.gw_plot.std(axis=0)
+            if error_bars == MeanErrorType.SEM:
+                err = gw_data_std / np.sqrt(n_histories)
+                self.gw_lower = self.gw_mean - scale_error * err
+                self.gw_upper = self.gw_mean + scale_error * err
+            elif error_bars == MeanErrorType.STD:
+                self.gw_lower = self.gw_mean - scale_error * gw_data_std
+                self.gw_upper = self.gw_mean + scale_error * gw_data_std
+            elif error_bars == MeanErrorType.ABS:
+                self.gw_lower = self.gw_plot.min(axis=0)
+                self.gw_upper = self.gw_plot.max(axis=0)
+            else:
+                raise ValueError(f"Unsupported error_bars: {error_bars}")
 
         # Generate labels and colors
         self.labels = labels if labels is not None else self.generate_labels()

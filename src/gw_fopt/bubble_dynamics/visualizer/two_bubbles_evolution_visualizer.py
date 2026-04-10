@@ -5,6 +5,8 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import LogNorm
+from matplotlib.ticker import LogFormatterSciNotation, LogLocator
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy.optimize import curve_fit
 
 
@@ -172,50 +174,48 @@ class TwoBubblesEvolutionVisualizer:
         with open(file_path, "wb") as f:
             pickle.dump(data, f)
 
-    def plot_gradient_energy_density(self, fig, ax, plot_boundaries=False, cutoff=None):
+    def plot_gradient_energy_density(self, fig, ax, plot_boundaries=False, cutoff=1e-3):
         """
         Plot the gradient energy density with a logarithmic colorbar and optional max rho_grad path.
-
-        Parameters:
-        - plot_boundaries: Boolean flag to plot the max rho_grad path and boundaries (default: False).
-        - cutoff: Optional float, values of rho_grad below this are set to cutoff for plotting (default: None).
-                 If None, set to 5 orders of magnitude below the max rho_grad (rounded down to nearest power of 10).
-
-        Returns:
-        - fig: Matplotlib figure object.
-        - ax: Matplotlib axes object.
-
-        Raises:
-        - ValueError: If plot_boundaries=True and compute_max_gradient_energy_density has not been called.
         """
         if plot_boundaries and self.z_max_coords is None:
             raise ValueError(
                 "Must call compute_max_gradient_energy_density before plotting boundaries."
             )
 
-        if cutoff is None:
-            max_rho_grad = np.max(self.rho_grad)
-            base_power = 10 ** np.floor(np.log10(max_rho_grad))
-            cutoff = base_power / 1e5
-            cutoff = max(cutoff, 1e-10)
+        # Prepare data
+        plot_data = np.maximum(self.rho_grad / np.max(np.abs(self.rho_grad)), cutoff)
+        vmin = max(cutoff, 1e-10)
 
-        if cutoff is not None:
-            plot_data = np.maximum(self.rho_grad, cutoff)
-            vmin = max(cutoff, 1e-10)
-        else:
-            plot_data = self.rho_grad
-            vmin = max(np.min(self.rho_grad), 1e-10)
-
+        # Plot the image
         im = ax.imshow(
             plot_data[::-1],
             extent=[min(self.z_grid), max(self.z_grid), 0, self.s_max],
             cmap=mpl.cm.inferno.reversed(),
-            norm=LogNorm(vmin=vmin, vmax=np.max(self.rho_grad)),
+            norm=LogNorm(vmin=vmin, vmax=1.0),
         )
-        ax.set_ylabel("s")
-        ax.set_xlabel("z")
-        cbar = fig.colorbar(im, ax=ax)
-        cbar.set_label(r"$\rho$", rotation=0, labelpad=-40, x=1.2, y=1.1)
+
+        ax.set_xlabel(r"$z$", fontsize=16)
+        ax.set_ylabel(r"$s$", fontsize=16)
+
+        # --- FIX: Align colorbar height with axes ---
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="3%", pad=0.2)
+
+        # Pass the new 'cax' to the colorbar function
+        cbar = fig.colorbar(im, cax=cax)
+        # --------------------------------------------
+
+        cbar.set_label(
+            r"$\rho_z / \text{max} \rho_z$",
+            rotation=0,
+            labelpad=-40,
+            x=1.2,
+            y=1.2,
+            fontsize=14,
+        )
+        cbar.ax.yaxis.set_major_locator(LogLocator(base=10.0, numticks=12))
+        cbar.ax.yaxis.set_major_formatter(LogFormatterSciNotation(base=10.0))
 
         if plot_boundaries:
             z_center = self.z_max_coords
@@ -226,8 +226,62 @@ class TwoBubblesEvolutionVisualizer:
             ax.plot(z_lower, s_plot, color="g", linestyle="--", linewidth=1)
             ax.plot(z_upper, s_plot, color="g", linestyle="--", linewidth=1)
 
+        return fig, ax
+
+    # def plot_gradient_energy_density(self, fig, ax, plot_boundaries=False, cutoff=1e-3):
+    #     """
+    #     Plot the gradient energy density with a logarithmic colorbar and optional max rho_grad path.
+
+    #     Parameters:
+    #     - plot_boundaries: Boolean flag to plot the max rho_grad path and boundaries (default: False).
+    #     - cutoff: Optional float, values of rho_grad below this are set to cutoff for plotting (default: None).
+    #              If None, set to 5 orders of magnitude below the max rho_grad (rounded down to nearest power of 10).
+
+    #     Returns:
+    #     - fig: Matplotlib figure object.
+    #     - ax: Matplotlib axes object.
+
+    #     Raises:
+    #     - ValueError: If plot_boundaries=True and compute_max_gradient_energy_density has not been called.
+    #     """
+    #     if plot_boundaries and self.z_max_coords is None:
+    #         raise ValueError(
+    #             "Must call compute_max_gradient_energy_density before plotting boundaries."
+    #         )
+
+    #     plot_data = np.maximum(self.rho_grad / np.max(np.abs(self.rho_grad)), cutoff)
+    #     vmin = max(cutoff, 1e-10)
+
+    #     im = ax.imshow(
+    #         plot_data[::-1],
+    #         extent=[min(self.z_grid), max(self.z_grid), 0, self.s_max],
+    #         cmap=mpl.cm.inferno.reversed(),
+    #         norm=LogNorm(vmin=vmin, vmax=1.0),
+    #     )
+    #     ax.set_ylabel("s")
+    #     ax.set_xlabel("z")
+    #     cbar = fig.colorbar(im, ax=ax)
+    #     cbar.set_label(
+    #         r"$\rho_z / \text{max} \rho_z$", rotation=0, labelpad=-40, x=1.2, y=1.1
+    #     )
+
+    #     if plot_boundaries:
+    #         z_center = self.z_max_coords
+    #         z_lower = z_center - self.integration_width / 2
+    #         z_upper = z_center + self.integration_width / 2
+    #         s_plot = self.s_coords_valid
+    #         ax.plot(z_center, s_plot, color="g", linestyle="-", linewidth=1)
+    #         ax.plot(z_lower, s_plot, color="g", linestyle="--", linewidth=1)
+    #         ax.plot(z_upper, s_plot, color="g", linestyle="--", linewidth=1)
+
     def plot_surface_tension(
-        self, small_s_range=(3e-1, 7e-1), large_s_range=(1.05, 1.3), normalized=False
+        self,
+        ax,
+        small_s_range=(3e-1, 7e-1),
+        large_s_range=(1.05, 1.3),
+        show_fit=True,
+        normalized=False,
+        **kwargs_plot,
     ):
         """
         Plot the surface tension sigma with power-law fits for small and large s regions.
@@ -258,65 +312,120 @@ class TwoBubblesEvolutionVisualizer:
         def power_law(s_scaled, a, b):
             return a * (s_scaled**b)
 
-        small_s_mask = (s_scaled >= small_s_range[0]) & (s_scaled <= small_s_range[1])
-        s_small = s_scaled[small_s_mask]
-        sigma_small = sigma[small_s_mask]
-        popt_small, _ = curve_fit(power_law, s_small, sigma_small, p0=[1.0, 1.0])
+        ax.plot(s_scaled, sigma, **kwargs_plot)
 
-        large_s_mask = (s_scaled >= large_s_range[0]) & (s_scaled <= large_s_range[1])
-        s_large = s_scaled[large_s_mask]
-        sigma_large = sigma[large_s_mask]
-        popt_large, _ = curve_fit(power_law, s_large, sigma_large, p0=[1.0, 1.0])
+        if show_fit:
+            small_s_mask = (s_scaled >= small_s_range[0]) & (
+                s_scaled <= small_s_range[1]
+            )
+            s_small = s_scaled[small_s_mask]
+            sigma_small = sigma[small_s_mask]
+            popt_small, _ = curve_fit(power_law, s_small, sigma_small, p0=[1.0, 1.0])
 
-        sigma_fit_small = power_law(s_small, *popt_small)
-        sigma_fit_large = power_law(s_large, *popt_large)
+            large_s_mask = (s_scaled >= large_s_range[0]) & (
+                s_scaled <= large_s_range[1]
+            )
+            s_large = s_scaled[large_s_mask]
+            sigma_large = sigma[large_s_mask]
+            popt_large, _ = curve_fit(power_law, s_large, sigma_large, p0=[1.0, 1.0])
 
-        fig, ax = plt.subplots()
-        ax.plot(s_scaled, sigma, "k-", label="Surface tension")
-        ax.fill_between(
-            s_scaled,
-            0,
-            sigma,
-            where=small_s_mask,
-            color="lightblue",
-            alpha=0.5,
-            label="Small s fit region",
-        )
-        ax.fill_between(
-            s_scaled,
-            0,
-            sigma,
-            where=large_s_mask,
-            color="lightcoral",
-            alpha=0.5,
-            label="Large s fit region",
-        )
-        ax.plot(
-            s_small,
-            sigma_fit_small,
-            "b--",
-            label=rf"Small $s/s_{{\text{{col}}}}$ fit: {popt_small[0]:.2f} $(s/s_{{\text{{col}}}})^{{{popt_small[1]:.2f}}}$",
-        )
-        ax.plot(
-            s_large,
-            sigma_fit_large,
-            "r--",
-            label=rf"Large $s/s_{{\text{{col}}}}$ fit: {popt_large[0]:.2f} $(s/s_{{\text{{col}}}})^{{{popt_large[1]:.2f}}}$",
-        )
+            sigma_fit_small = power_law(s_small, *popt_small)
+            sigma_fit_large = power_law(s_large, *popt_large)
+
+            ax.fill_between(
+                s_scaled,
+                0,
+                sigma,
+                where=small_s_mask,
+                color="lightblue",
+                alpha=0.5,
+                label="Small s fit region",
+            )
+            ax.fill_between(
+                s_scaled,
+                0,
+                sigma,
+                where=large_s_mask,
+                color="lightcoral",
+                alpha=0.5,
+                label="Large s fit region",
+            )
+            ax.plot(
+                s_small,
+                sigma_fit_small,
+                "b--",
+                label=rf"Small $s/s_{{\text{{col}}}}$ fit: {popt_small[0]:.2f} $(s/s_{{\text{{col}}}})^{{{popt_small[1]:.2f}}}$",
+            )
+            ax.plot(
+                s_large,
+                sigma_fit_large,
+                "r--",
+                label=rf"Large $s/s_{{\text{{col}}}}$ fit: {popt_large[0]:.2f} $(s/s_{{\text{{col}}}})^{{{popt_large[1]:.2f}}}$",
+            )
 
         ax.set_xscale("log")
         ax.set_yscale("log")
         ax.set_xlabel(r"$s/s_{\text{col}}$")
         ax.set_ylabel(r"$\sigma$")
-        ax.set_title(
-            rf"Surface Tension $\sigma = \int_{{z_{{\text{{wall}}}}-\Delta}}^{{z_{{\text{{wall}}}}+\Delta}} dz \rho_{{\text{{grad}}}}^{{\text{{wall}}}}$ "
-            rf", $d={self.d:.2f}$, $\Delta = {{{self.integration_width:.2f}}}$"
-        )
-        ax.grid(True)
-        ax.legend()
-        ax.set_xlim(left=1e-1)
 
-        return fig, ax
+    # def plot_field_evolution(
+    #     self,
+    #     fig,
+    #     ax,
+    #     field_idx: int = 0,
+    #     field_name: Optional[str] = None,
+    #     title: str = "",
+    #     max_npoints_plot: Optional[Tuple[int, int]] = None,
+    #     **kwargs_imshow,
+    # ):
+    #     phi_scaled = self.phi1[field_idx, :, :]  # Shape: (n_s, n_z)
+    #     s = self.s_grid
+    #     z = self.z_grid
+
+    #     if max_npoints_plot is not None:
+    #         max_s_points, max_z_points = max_npoints_plot
+    #         if len(s) > max_s_points:
+    #             s_step = max(1, len(s) // max_s_points)
+    #             s = s[::s_step]
+    #             phi_scaled = phi_scaled[::s_step, :]
+    #         if len(z) > max_z_points:
+    #             z_step = max(1, len(z) // max_z_points)
+    #             z = z[::z_step]
+    #             phi_scaled = phi_scaled[:, ::z_step]
+
+    #     im = ax.imshow(
+    #         phi_scaled[::-1],
+    #         cmap="RdBu_r",
+    #         extent=[min(z), max(z), 0, max(s)],
+    #         **kwargs_imshow,
+    #     )
+
+    #     ax.set_xlabel(r"$z$", fontsize=16)
+    #     ax.set_ylabel(r"$s$", rotation=0, fontsize=16)
+
+    #     # --- FIX: Align colorbar height with axes ---
+    #     divider = make_axes_locatable(ax)
+    #     cax = divider.append_axes("right", size="3%", pad=0.2)
+
+    #     cbar = fig.colorbar(im, cax=cax)
+    #     # --------------------------------------------
+
+    #     cbar.set_label(
+    #         r"$\Phi_{%d}$" % (field_idx + 1) if field_name is None else field_name,
+    #         rotation=0,
+    #         labelpad=-40,
+    #         x=1.2,
+    #         y=1.1,
+    #         fontsize=14,
+    #     )
+
+    #     ax.set_title(
+    #         f"Field {field_idx + 1} {title}".strip()
+    #         if field_name is None
+    #         else f"Field = {field_name} {title}".strip()
+    #     )
+
+    #     return fig, ax
 
     def plot_field_evolution(
         self,
