@@ -88,8 +88,11 @@ fig.savefig(
     rf"./figures/two_bubbles/potential.png", bbox_inches="tight", facecolor="white"
 )
 
-setup = LatticeSetup(potential)
-setup.set_tunnelling_phi(phi_tv=potential.phi_tv, phi_fv=potential.phi_fv)
+setup = (
+    LatticeSetup(potential)
+    .with_tunnelling_phi(phi_tv=potential.phi_tv, phi_fv=potential.phi_fv)
+    .with_profiles()
+)
 fig, ax = setup.plot_profiles(npoints=1000)
 ax.legend()
 fig.savefig(
@@ -105,20 +108,24 @@ d = 20  # bubbles separation
 smax = d * 2  # simulation time
 
 # set the distance between two bubbles at s=0
-# you can also call method set_gamma instead of set_d if you know the boost factor of the wall beforehand
-setup.set_d(d=d)
+# you can also call method with_boost instead of set_d if you know the boost factor of the wall beforehand
+setup.with_distance(d=d)
 z_grid, phi_initial, d = setup.two_bubbles(
     layout="full", scale_dz=scale_dz, scale_z=scale_z
 )
-phi_initial = phi_initial.T  # initial 2-bubbles profile
+phi1_initial = phi1_initial.T  # initial 2-bubbles profile
 dz = abs(z_grid[1] - z_grid[0])  # space step
 # time step. The factor ds/dz should be smaller than 1 so that the leapfrog integrator does not diverge
 ds = dz * 0.9
 
 # number of time steps before saving, smaller means better time resolution
 history_interval = 4
-solver = PDEBubbleSolver(
-    phi1_initial=phi_initial, z_grid=z_grid, ds=ds, dz=dz, potential=potential, d=d
+solver = (
+    PDEBubbleSolverConfig(potential)
+    .with_grid(z_grid, ds)
+    .with_distance(d)
+    .with_initial_condition(phi1_initial)
+    .build()
 )
 # Evolve field over time from s=0 to s~smax.
 # Note that the end of the simulation is not exactly smax, but within smax +- ds
@@ -133,7 +140,7 @@ analyzer = TwoBubblesEvolutionVisualizer(
 )
 # width of a window whose center tracing the maximum of gradient energy density
 # surface tension is obtained by integrating gradient energy density along this window
-integration_width = 2 * setup.compute_radii().max()
+integration_width = 2 * setup.radii.max()
 # width of a window centering around the wall location,
 # over which we find the maximum of gradient energy density
 window_width = 0.5 * integration_width
