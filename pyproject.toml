@@ -26,6 +26,9 @@ dependencies = [
     "psweep>=0.15.0",
     "pre-commit>=4.5.1",
     "lmfit>=1.3.4",
+    "emcee>=3.1.6",
+    "tqdm>=4.67.3",
+    "numba>=0.64.0",
 ]
 
 [project.optional-dependencies]
@@ -49,4 +52,4 @@ python-source = "src"
 include = ["src/**/*.pyi"]
 
 [tool.uv]
-cache-keys = [{file = "**/*.toml"}, {file = "**/*.rs"}, {file = "**/*.py"}]
+cache-keys = [{file = "**/Cargo.toml"}, {file = "**/*.rs"}, {file = "**/*.py"}]
