@@ -198,20 +198,16 @@ class TwoBubblesEvolutionVisualizer:
         ax.set_xlabel(r"$z$", fontsize=16)
         ax.set_ylabel(r"$s$", fontsize=16)
 
-        # --- FIX: Align colorbar height with axes ---
         divider = make_axes_locatable(ax)
         cax = divider.append_axes("right", size="3%", pad=0.2)
-
-        # Pass the new 'cax' to the colorbar function
         cbar = fig.colorbar(im, cax=cax)
-        # --------------------------------------------
 
         cbar.set_label(
             r"$\rho_z / \text{max} \rho_z$",
             rotation=0,
             labelpad=-40,
-            x=1.2,
-            y=1.2,
+            x=1.1,
+            y=1.1,
             fontsize=14,
         )
         cbar.ax.yaxis.set_major_locator(LogLocator(base=10.0, numticks=12))
@@ -228,51 +224,6 @@ class TwoBubblesEvolutionVisualizer:
 
         return fig, ax
 
-    # def plot_gradient_energy_density(self, fig, ax, plot_boundaries=False, cutoff=1e-3):
-    #     """
-    #     Plot the gradient energy density with a logarithmic colorbar and optional max rho_grad path.
-
-    #     Parameters:
-    #     - plot_boundaries: Boolean flag to plot the max rho_grad path and boundaries (default: False).
-    #     - cutoff: Optional float, values of rho_grad below this are set to cutoff for plotting (default: None).
-    #              If None, set to 5 orders of magnitude below the max rho_grad (rounded down to nearest power of 10).
-
-    #     Returns:
-    #     - fig: Matplotlib figure object.
-    #     - ax: Matplotlib axes object.
-
-    #     Raises:
-    #     - ValueError: If plot_boundaries=True and compute_max_gradient_energy_density has not been called.
-    #     """
-    #     if plot_boundaries and self.z_max_coords is None:
-    #         raise ValueError(
-    #             "Must call compute_max_gradient_energy_density before plotting boundaries."
-    #         )
-
-    #     plot_data = np.maximum(self.rho_grad / np.max(np.abs(self.rho_grad)), cutoff)
-    #     vmin = max(cutoff, 1e-10)
-
-    #     im = ax.imshow(
-    #         plot_data[::-1],
-    #         extent=[min(self.z_grid), max(self.z_grid), 0, self.s_max],
-    #         cmap=mpl.cm.inferno.reversed(),
-    #         norm=LogNorm(vmin=vmin, vmax=1.0),
-    #     )
-    #     ax.set_ylabel("s")
-    #     ax.set_xlabel("z")
-    #     cbar = fig.colorbar(im, ax=ax)
-    #     cbar.set_label(
-    #         r"$\rho_z / \text{max} \rho_z$", rotation=0, labelpad=-40, x=1.2, y=1.1
-    #     )
-
-    #     if plot_boundaries:
-    #         z_center = self.z_max_coords
-    #         z_lower = z_center - self.integration_width / 2
-    #         z_upper = z_center + self.integration_width / 2
-    #         s_plot = self.s_coords_valid
-    #         ax.plot(z_center, s_plot, color="g", linestyle="-", linewidth=1)
-    #         ax.plot(z_lower, s_plot, color="g", linestyle="--", linewidth=1)
-    #         ax.plot(z_upper, s_plot, color="g", linestyle="--", linewidth=1)
 
     def plot_surface_tension(
         self,
@@ -368,65 +319,6 @@ class TwoBubblesEvolutionVisualizer:
         ax.set_xlabel(r"$s/s_{\text{col}}$")
         ax.set_ylabel(r"$\sigma$")
 
-    # def plot_field_evolution(
-    #     self,
-    #     fig,
-    #     ax,
-    #     field_idx: int = 0,
-    #     field_name: Optional[str] = None,
-    #     title: str = "",
-    #     max_npoints_plot: Optional[Tuple[int, int]] = None,
-    #     **kwargs_imshow,
-    # ):
-    #     phi_scaled = self.phi1[field_idx, :, :]  # Shape: (n_s, n_z)
-    #     s = self.s_grid
-    #     z = self.z_grid
-
-    #     if max_npoints_plot is not None:
-    #         max_s_points, max_z_points = max_npoints_plot
-    #         if len(s) > max_s_points:
-    #             s_step = max(1, len(s) // max_s_points)
-    #             s = s[::s_step]
-    #             phi_scaled = phi_scaled[::s_step, :]
-    #         if len(z) > max_z_points:
-    #             z_step = max(1, len(z) // max_z_points)
-    #             z = z[::z_step]
-    #             phi_scaled = phi_scaled[:, ::z_step]
-
-    #     im = ax.imshow(
-    #         phi_scaled[::-1],
-    #         cmap="RdBu_r",
-    #         extent=[min(z), max(z), 0, max(s)],
-    #         **kwargs_imshow,
-    #     )
-
-    #     ax.set_xlabel(r"$z$", fontsize=16)
-    #     ax.set_ylabel(r"$s$", rotation=0, fontsize=16)
-
-    #     # --- FIX: Align colorbar height with axes ---
-    #     divider = make_axes_locatable(ax)
-    #     cax = divider.append_axes("right", size="3%", pad=0.2)
-
-    #     cbar = fig.colorbar(im, cax=cax)
-    #     # --------------------------------------------
-
-    #     cbar.set_label(
-    #         r"$\Phi_{%d}$" % (field_idx + 1) if field_name is None else field_name,
-    #         rotation=0,
-    #         labelpad=-40,
-    #         x=1.2,
-    #         y=1.1,
-    #         fontsize=14,
-    #     )
-
-    #     ax.set_title(
-    #         f"Field {field_idx + 1} {title}".strip()
-    #         if field_name is None
-    #         else f"Field = {field_name} {title}".strip()
-    #     )
-
-    #     return fig, ax
-
     def plot_field_evolution(
         self,
         fig,
@@ -460,7 +352,10 @@ class TwoBubblesEvolutionVisualizer:
         )
         ax.set_xlabel("z")
         ax.set_ylabel("s", rotation=0)
-        cbar = fig.colorbar(im, ax=ax)
+
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="3%", pad=0.2)
+        cbar = fig.colorbar(im, cax=cax)
         cbar.set_label(
             r"$\Phi_{%d}$" % (field_idx + 1) if field_name is None else field_name,
             rotation=0,
@@ -474,6 +369,7 @@ class TwoBubblesEvolutionVisualizer:
             else f"Field = {field_name} {title}".strip()
         )
         im.set_clim(1 - np.max(phi_scaled), np.max(phi_scaled))
+        im.set_clim(np.min(phi_scaled), np.max(phi_scaled))
 
     def plot_norm_field_evolution(
         self,
@@ -504,7 +400,10 @@ class TwoBubblesEvolutionVisualizer:
         )
         ax.set_xlabel("z")
         ax.set_ylabel("s", rotation=0)
-        cbar = fig.colorbar(im, ax=ax)
+
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="3%", pad=0.2)
+        cbar = fig.colorbar(im, cax=cax)
         cbar.set_label(
             r"$\sqrt{\sum_{i} \Phi_i^2}$", rotation=0, labelpad=-40, x=1.2, y=1.1
         )
