@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import List, Union
 
 import numpy as np
+import psutil
 from numba import njit
 from numpy.typing import NDArray
 from scipy.interpolate import interp1d
@@ -454,17 +455,13 @@ class PDEBubbleSolver:
         self.history_interval = history_interval
 
         phi_init = self.phi1_initial.copy()
-        try:
-            self.phi1 = np.full(
-                (self.Ndim, self.n_s, self.n_z), np.nan, dtype=np.float64
-            )
-        except MemoryError:
-            n_bytes = self.Ndim * self.n_s * self.n_z * 8
+        if self.Ndim * self.n_s * self.n_z * 8 > psutil.virtual_memory().available:
             raise MemoryError(
                 f"Insufficient memory to allocate phi1 of shape "
                 f"({self.Ndim}, {self.n_s}, {self.n_z}) "
-                f"({n_bytes / 1e9:.2f} GB required)."
+                f"({self.Ndim * self.n_s * self.n_z * 8 / 1e9:.2f} GB required)."
             )
+        self.phi1 = np.full((self.Ndim, self.n_s, self.n_z), np.nan, dtype=np.float64)
         self.s_grid = np.linspace(0, self.s_max, self.n_s)
         self.phi1[:, 0, :] = phi_init
 
