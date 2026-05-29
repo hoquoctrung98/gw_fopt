@@ -1,3 +1,4 @@
+empty_item_single_line = false
 # use spaces instead of tabs
 hard_tabs = false
 
