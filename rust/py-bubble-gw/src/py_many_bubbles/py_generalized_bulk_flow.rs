@@ -55,7 +55,7 @@ pub enum PyBubblesError {
 
 /// Python-facing error
 #[derive(Error, Debug)]
-pub enum PyBulkFlowError {
+pub enum PyGeneralizedBulkFlowError {
     #[error("Index {index} out of bounds (max: {max})")]
     InvalidIndex { index: usize, max: usize },
 
@@ -84,45 +84,47 @@ pub enum PyBulkFlowError {
     BubblesError,
 }
 
-impl From<GeneralizedBulkFlowError> for PyBulkFlowError {
+impl From<GeneralizedBulkFlowError> for PyGeneralizedBulkFlowError {
     fn from(err: GeneralizedBulkFlowError) -> Self {
         match err {
             GeneralizedBulkFlowError::InvalidIndex { index, max } => {
-                PyBulkFlowError::InvalidIndex { index, max }
+                PyGeneralizedBulkFlowError::InvalidIndex { index, max }
             },
             GeneralizedBulkFlowError::UninitializedField(field) => {
-                PyBulkFlowError::UninitializedField(field)
+                PyGeneralizedBulkFlowError::UninitializedField(field)
             },
             GeneralizedBulkFlowError::InvalidResolution(msg) => {
-                PyBulkFlowError::InvalidResolution(msg)
+                PyGeneralizedBulkFlowError::InvalidResolution(msg)
             },
             GeneralizedBulkFlowError::InvalidTimeRange { begin, end } => {
-                PyBulkFlowError::InvalidTimeRange { begin, end }
+                PyGeneralizedBulkFlowError::InvalidTimeRange { begin, end }
             },
             GeneralizedBulkFlowError::ArrayShapeMismatch(msg) => {
-                PyBulkFlowError::ArrayShapeMismatch(msg)
+                PyGeneralizedBulkFlowError::ArrayShapeMismatch(msg)
             },
             GeneralizedBulkFlowError::ThreadPoolBuildError(e) => {
-                PyBulkFlowError::ThreadPoolBuildError(e.to_string())
+                PyGeneralizedBulkFlowError::ThreadPoolBuildError(e.to_string())
             },
             GeneralizedBulkFlowError::BubbleFormedInsideBubble { a, b } => {
-                PyBulkFlowError::BubbleFormedInsideBubble { a, b }
+                PyGeneralizedBulkFlowError::BubbleFormedInsideBubble { a, b }
             },
-            GeneralizedBulkFlowError::BubblesError(..) => PyBulkFlowError::BubblesError,
+            GeneralizedBulkFlowError::BubblesError(..) => PyGeneralizedBulkFlowError::BubblesError,
         }
     }
 }
 
-impl From<PyBulkFlowError> for PyErr {
-    fn from(err: PyBulkFlowError) -> Self {
+impl From<PyGeneralizedBulkFlowError> for PyErr {
+    fn from(err: PyGeneralizedBulkFlowError) -> Self {
         match err {
-            PyBulkFlowError::InvalidIndex { .. } => PyIndexError::new_err(err.to_string()),
+            PyGeneralizedBulkFlowError::InvalidIndex { .. } => {
+                PyIndexError::new_err(err.to_string())
+            },
             _ => PyValueError::new_err(err.to_string()),
         }
     }
 }
 
-type PyResult<T> = Result<T, PyBulkFlowError>;
+type PyResult<T> = Result<T, PyGeneralizedBulkFlowError>;
 
 #[pyclass(name = "GeneralizedBulkFlow")]
 /// GeneralizedBulkFlow approximation
@@ -322,9 +324,9 @@ impl PyGeneralizedBulkFlow {
             .compute_c_integrand(&w_arr, t_begin, t_end, n_t, selected_slice)
             .map_err(|e| match e {
                 GeneralizedBulkFlowError::InvalidIndex { index, max } => {
-                    PyBulkFlowError::InvalidIndex { index, max }
+                    PyGeneralizedBulkFlowError::InvalidIndex { index, max }
                 },
-                _ => PyBulkFlowError::from(e),
+                _ => PyGeneralizedBulkFlowError::from(e),
             })?;
 
         let integrand_numpy = integrand.mapv(|c| NumpyComplex64::new(c.re, c.im));
@@ -360,9 +362,9 @@ impl PyGeneralizedBulkFlow {
             .compute_c_integral(&w_arr, t_begin, t_end, n_t, selected_slice)
             .map_err(|e| match e {
                 GeneralizedBulkFlowError::InvalidIndex { index, max } => {
-                    PyBulkFlowError::InvalidIndex { index, max }
+                    PyGeneralizedBulkFlowError::InvalidIndex { index, max }
                 },
-                _ => PyBulkFlowError::from(e),
+                _ => PyGeneralizedBulkFlowError::from(e),
             })?;
 
         let c_matrix_numpy = c_matrix.mapv(|c| NumpyComplex64::new(c.re, c.im));
