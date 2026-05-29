@@ -5,6 +5,7 @@
 
 use core::f64::consts::PI;
 
+use differential_equations::error::Error as DifferentialEquationsError;
 use differential_equations::interpolate::Interpolation;
 use differential_equations::ode::OrdinaryNumericalMethod;
 use differential_equations::prelude::*;
@@ -26,6 +27,9 @@ pub enum FixedRateNucleationError {
 
     #[error("Lattice bubbles error: {0}")]
     LatticeBubblesError(#[from] LatticeBubblesError),
+
+    #[error("Failed to solve fixed-rate bubble distribution ODE: {0}")]
+    OdeSolveError(#[from] DifferentialEquationsError<f64, SVector<f64, 4>>),
 }
 
 pub enum FixedRateNucleationMethod {
@@ -142,7 +146,7 @@ impl FixedRateNucleation {
         taumax: f64,
         volume_lattice: f64,
         method: S,
-    ) -> (Vec<f64>, Vec<f64>)
+    ) -> Result<(Vec<f64>, Vec<f64>), FixedRateNucleationError>
     where
         S: OrdinaryNumericalMethod<f64, SVector<f64, 4>> + Interpolation<f64, SVector<f64, 4>>,
     {
@@ -153,8 +157,7 @@ impl FixedRateNucleation {
         let solution = IVP::ode(self, tau0, taumax, y0)
             .even(0.001)
             .method(method)
-            .solve()
-            .unwrap();
+            .solve()?;
         let tau: Vec<f64> = solution.iter().map(|(t, _)| *t).collect();
         let m0: Vec<f64> = solution.iter().map(|(_, y)| y[0]).collect();
 
@@ -179,7 +182,7 @@ impl FixedRateNucleation {
             .map(|&i| tau[i] / self.beta)
             .collect();
         let n_bubbles: Vec<f64> = crossing_indices.iter().map(|&i| n_bubbles[i]).collect();
-        return (t, n_bubbles);
+        return Ok((t, n_bubbles));
     }
 
     pub fn nucleate_fixed_probability_time_stepping<L: GeneralLatticeProperties>(
@@ -275,7 +278,7 @@ impl FixedRateNucleation {
         &mut self,
         lattice: &L,
         boundary_condition: BoundaryConditions,
-    ) -> Result<FixedRateNucleationResult<L>, LatticeBubblesError> {
+    ) -> Result<FixedRateNucleationResult<L>, FixedRateNucleationError> {
         let volume_lattice = lattice.volume();
         let volume_cutoff = self.cutoff_false_vacuum_fraction * volume_lattice;
 
@@ -283,7 +286,7 @@ impl FixedRateNucleation {
         let mut bubbles_exterior = Bubbles::new(Vec::new());
 
         let method = ImplicitRungeKutta::radau5().rtol(1e-9).atol(1e-12);
-        let (time_history, _) = self.solve_bubbles_distribution(40.0, lattice.volume(), method);
+        let (time_history, _) = self.solve_bubbles_distribution(40.0, lattice.volume(), method)?;
 
         let mut volume_false_vacuum_history = Vec::new();
 
@@ -357,14 +360,14 @@ impl FixedRateNucleation {
         lattice: &L,
         boundary_condition: BoundaryConditions,
         method: FixedRateNucleationMethod,
-    ) -> Result<FixedRateNucleationResult<L>, LatticeBubblesError> {
+    ) -> Result<FixedRateNucleationResult<L>, FixedRateNucleationError> {
         match method {
             FixedRateNucleationMethod::FixedProbabilityTimeStepping { d_p0 } => {
-                return self.nucleate_fixed_probability_time_stepping(
+                return Ok(self.nucleate_fixed_probability_time_stepping(
                     lattice,
                     boundary_condition,
                     d_p0,
-                );
+                )?);
             },
             FixedRateNucleationMethod::FixedProbabilitysDistribution => {
                 return self.nucleate_fixed_probability_distribution(lattice, boundary_condition);

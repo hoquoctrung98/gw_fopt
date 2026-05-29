@@ -5,9 +5,50 @@ use differential_equations::prelude::*;
 use numpy::PyArray1;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use thiserror::Error;
 
 use crate::py_many_bubbles::py_lattice::{PyCartesian, PyEmpty, PyParallelepiped, PySpherical};
 use crate::py_many_bubbles::py_lattice_bubbles::PyLatticeBubbles;
+
+/// Python-facing error
+#[derive(Error, Debug)]
+pub enum PyFixedRateNucleationError {
+    #[error("Failed to initialize random number generator: {0}")]
+    RngInitializationError(String),
+
+    #[error("Lattice bubbles error: {0}")]
+    LatticeBubblesError(String),
+
+    #[error("Failed to solve fixed-rate bubble distribution ODE: {0}")]
+    OdeSolveError(String),
+
+    #[error(transparent)]
+    PyErr(#[from] pyo3::PyErr),
+}
+
+impl From<FixedRateNucleationError> for PyFixedRateNucleationError {
+    fn from(err: FixedRateNucleationError) -> Self {
+        match err {
+            FixedRateNucleationError::RngInitializationError(err) => {
+                PyFixedRateNucleationError::RngInitializationError(err.to_string())
+            },
+            FixedRateNucleationError::LatticeBubblesError(err) => {
+                PyFixedRateNucleationError::LatticeBubblesError(err.to_string())
+            },
+            FixedRateNucleationError::OdeSolveError(err) => {
+                PyFixedRateNucleationError::OdeSolveError(err.to_string())
+            },
+        }
+    }
+}
+
+impl From<PyFixedRateNucleationError> for PyErr {
+    fn from(err: PyFixedRateNucleationError) -> Self {
+        PyValueError::new_err(err.to_string())
+    }
+}
+
+type PyResult<T> = Result<T, PyFixedRateNucleationError>;
 
 // --- New Result Struct ---
 #[pyclass(name = "FixedRateNucleationResult")]
@@ -64,16 +105,16 @@ impl PyFixedRateNucleation {
         cutoff_fraction_false_vacuum: Option<f64>,
     ) -> PyResult<Self> {
         if beta.is_nan() || gamma0.is_nan() || t0.is_nan() || d_p0.is_nan() {
-            return Err(PyValueError::new_err("Parameters must be finite"));
+            return Err(PyValueError::new_err("Parameters must be finite").into());
         }
         if d_p0 <= 0.0 || d_p0 > 1.0 {
-            return Err(PyValueError::new_err("d_p0 must be in (0, 1]"));
+            return Err(PyValueError::new_err("d_p0 must be in (0, 1]").into());
         }
         if gamma0 < 0.0 {
-            return Err(PyValueError::new_err("gamma0 must be non-negative"));
+            return Err(PyValueError::new_err("gamma0 must be non-negative").into());
         }
         if n_points == 0 {
-            return Err(PyValueError::new_err("n_points must be > 0"));
+            return Err(PyValueError::new_err("n_points must be > 0").into());
         }
 
         let inner = FixedRateNucleation::new(
@@ -84,15 +125,7 @@ impl PyFixedRateNucleation {
             n_points,
             max_time_iterations,
             cutoff_fraction_false_vacuum,
-        )
-        .map_err(|e| match e {
-            FixedRateNucleationError::RngInitializationError(err) => {
-                PyValueError::new_err(format!("Failed to initialize RNG: {}", err))
-            },
-            FixedRateNucleationError::LatticeBubblesError(err) => {
-                PyValueError::new_err(format!("Lattice bubbles error: {}", err))
-            },
-        })?;
+        )?;
 
         Ok(PyFixedRateNucleation { inner })
     }
@@ -137,14 +170,14 @@ impl PyFixedRateNucleation {
         volume_lattice: f64,
         rtol: f64,
         atol: f64,
-    ) -> (Py<PyArray1<f64>>, Py<PyArray1<f64>>) {
+    ) -> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>)> {
         let method = ImplicitRungeKutta::radau5().rtol(rtol).atol(atol);
         let result = self
             .inner
-            .solve_bubbles_distribution(taumax, volume_lattice, method);
+            .solve_bubbles_distribution(taumax, volume_lattice, method)?;
         let time_arr = PyArray1::from_vec(py, result.0).into();
         let n_bubbles_arr = PyArray1::from_vec(py, result.1).into();
-        return (time_arr, n_bubbles_arr);
+        return Ok((time_arr, n_bubbles_arr));
     }
 
     #[pyo3(signature = (lattice, boundary_condition = "periodic", method = "fixed_probability_distribution", d_p0 = 0.01))]
@@ -168,7 +201,8 @@ impl PyFixedRateNucleation {
         } else {
             return Err(PyValueError::new_err(
                 "Expected a lattice instance: ParallelepipedLattice, CartesianLattice, SphericalLattice, or EmptyLattice",
-            ));
+            )
+            .into());
         };
 
         let boundary_condition = match boundary_condition.to_lowercase().as_str() {
@@ -178,7 +212,8 @@ impl PyFixedRateNucleation {
             _ => {
                 return Err(PyValueError::new_err(
                     "Invalid boundary condition. Expected 'periodic', 'reflection', or 'none'.",
-                ));
+                )
+                .into());
             },
         };
 
@@ -192,14 +227,12 @@ impl PyFixedRateNucleation {
             _ => {
                 return Err(PyValueError::new_err(
                     "Expected a lattice instance: ParallelepipedLattice, CartesianLattice, SphericalLattice, or EmptyLattice",
-                ));
+                )
+                .into());
             },
         };
 
-        let result = self
-            .inner
-            .nucleate(&lattice, boundary_condition, method)
-            .map_err(|e| PyErr::new::<PyValueError, _>(e.to_string()))?;
+        let result = self.inner.nucleate(&lattice, boundary_condition, method)?;
 
         let py_result = PyFixedRateNucleationResult {
             lattice_bubbles: PyLatticeBubbles {
