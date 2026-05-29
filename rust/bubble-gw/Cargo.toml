@@ -14,7 +14,7 @@ num-complex = {workspace = true}
 num = {workspace = true}
 puruspe = "0.4.4"
 rayon = "1.12"
-peroxide = { version = "0.41.0", features = ["complex"] }
+peroxide = { version = "0.41.2", features = ["complex"] }
 rand = "0.10.1"
 rand_distr = "0.6.0"
 array-init = "2.1.0"
