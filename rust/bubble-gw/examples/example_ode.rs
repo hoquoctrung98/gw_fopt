@@ -28,10 +28,12 @@ impl FixedRateNucleation {
         let tau0 = 0.0;
         let taumax = 40.0;
         // let mut method = ImplicitRungeKutta::radau5().rtol(1e-9).atol(1e-12);
-        let mut method = ExplicitRungeKutta::rkf45().rtol(1e-9).atol(1e-12);
-        let problem = ODEProblem::new(self, tau0, taumax, y0);
-
-        let solution = problem.even(0.001).solve(&mut method).unwrap();
+        let method = ExplicitRungeKutta::rkf45().rtol(1e-9).atol(1e-12);
+        let solution = IVP::ode(self, tau0, taumax, y0)
+            .even(0.001)
+            .method(method)
+            .solve()
+            .unwrap();
         let tau: Vec<f64> = solution.iter().map(|(t, _)| *t).collect();
         let m0: Vec<f64> = solution.iter().map(|(_, y)| y[0]).collect();
 

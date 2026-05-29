@@ -138,10 +138,10 @@ impl PyFixedRateNucleation {
         rtol: f64,
         atol: f64,
     ) -> (Py<PyArray1<f64>>, Py<PyArray1<f64>>) {
-        let mut method = ImplicitRungeKutta::radau5().rtol(rtol).atol(atol);
+        let method = ImplicitRungeKutta::radau5().rtol(rtol).atol(atol);
         let result = self
             .inner
-            .solve_bubbles_distribution(taumax, volume_lattice, &mut method);
+            .solve_bubbles_distribution(taumax, volume_lattice, method);
         let time_arr = PyArray1::from_vec(py, result.0).into();
         let n_bubbles_arr = PyArray1::from_vec(py, result.1).into();
         return (time_arr, n_bubbles_arr);

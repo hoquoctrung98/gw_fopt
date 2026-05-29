@@ -141,7 +141,7 @@ impl FixedRateNucleation {
         &self,
         taumax: f64,
         volume_lattice: f64,
-        method: &mut S,
+        method: S,
     ) -> (Vec<f64>, Vec<f64>)
     where
         S: OrdinaryNumericalMethod<f64, SVector<f64, 4>> + Interpolation<f64, SVector<f64, 4>>,
@@ -150,8 +150,11 @@ impl FixedRateNucleation {
         let y0 = vector![0.0, 0.0, 0.0, 0.0];
         let tau0 = self.t0 * self.beta;
 
-        let problem = ODEProblem::new(self, tau0, taumax, y0);
-        let solution = problem.even(0.001).solve(method).unwrap();
+        let solution = IVP::ode(self, tau0, taumax, y0)
+            .even(0.001)
+            .method(method)
+            .solve()
+            .unwrap();
         let tau: Vec<f64> = solution.iter().map(|(t, _)| *t).collect();
         let m0: Vec<f64> = solution.iter().map(|(_, y)| y[0]).collect();
 
@@ -279,9 +282,8 @@ impl FixedRateNucleation {
         let mut bubbles_interior = Bubbles::new(Vec::new());
         let mut bubbles_exterior = Bubbles::new(Vec::new());
 
-        let mut method = ImplicitRungeKutta::radau5().rtol(1e-9).atol(1e-12);
-        let (time_history, _) =
-            self.solve_bubbles_distribution(40.0, lattice.volume(), &mut method);
+        let method = ImplicitRungeKutta::radau5().rtol(1e-9).atol(1e-12);
+        let (time_history, _) = self.solve_bubbles_distribution(40.0, lattice.volume(), method);
 
         let mut volume_false_vacuum_history = Vec::new();
 
