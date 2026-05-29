@@ -1,3 +1,4 @@
+// generalize gw_calc.rs in terms of cut-off functions
 use ndarray::prelude::*;
 use num_complex::Complex64;
 use peroxide::numerical::integral::Integral::G30K61;
@@ -8,8 +9,11 @@ use rayon::{ThreadPool, ThreadPoolBuilder};
 use thiserror::Error;
 
 pub trait TimeCutoff: Clone + Send + Sync {
-    fn cutoff(&self, t: f64) -> f64;
-    fn u_max(&self, s: f64) -> f64;
+    fn evaluate(&self, t: f64) -> f64;
+}
+
+pub trait IntegrationDomain: Clone + Send + Sync {
+    fn u_bounds(&self, s: f64, sign: f64) -> (f64, f64);
 }
 
 /// Configuration for cutoff parameters in the gravitational wave calculator.
@@ -29,7 +33,7 @@ impl ExponentialTimeCutoff {
 
 impl TimeCutoff for ExponentialTimeCutoff {
     #[inline]
-    fn cutoff(&self, t: f64) -> f64 {
+    fn evaluate(&self, t: f64) -> f64 {
         if t < self.t_cut {
             1.0
         } else {
@@ -37,11 +41,15 @@ impl TimeCutoff for ExponentialTimeCutoff {
             exponent.exp()
         }
     }
+}
 
+impl IntegrationDomain for ExponentialTimeCutoff {
     /// Cut-off for integral over u
     #[inline]
-    fn u_max(&self, s: f64) -> f64 {
-        1.0 + (self.t_cut + 7.0 * self.t_0) / s
+    fn u_bounds(&self, s: f64, sign: f64) -> (f64, f64) {
+        let u_min = if sign == -1.0 { 1.0 } else { 0.0 };
+        let u_max = 1.0 + (self.t_cut + 7.0 * self.t_0) / s;
+        (u_min, u_max)
     }
 }
 
@@ -54,45 +62,41 @@ pub enum IntegrandType {
     XZ,
 }
 
-/// Struct to hold integrand parameters and precompute shared terms.
-#[derive(Debug, Clone)]
-pub struct IntegrandCalculator<T>
-where
-    T: TimeCutoff,
-{
-    time_cutoff: T,
+#[derive(Debug, Clone, Copy)]
+pub struct IntegrandParams {
+    pub w: f64,
+    pub cos_thetak: f64,
+    pub s: f64,
+    pub sign: f64,
+    pub u: f64,
 }
 
-impl<T> IntegrandCalculator<T>
+pub struct GwIntegrand<'a, T>
 where
     T: TimeCutoff,
 {
-    pub fn new(time_cutoff: T) -> Self {
+    time_cutoff: &'a T,
+}
+
+impl<'a, T> GwIntegrand<'a, T>
+where
+    T: TimeCutoff,
+{
+    pub fn new(time_cutoff: &'a T) -> Self {
         Self { time_cutoff }
     }
 
-    /// Computes both the real and imaginary parts of the integrand at point u.
     #[inline]
-    pub fn compute(
-        &self,
-        w: f64,
-        cos_thetak: f64,
-        s: f64,
-        sign: f64,
-        u: f64,
-        int_type: IntegrandType,
-    ) -> Complex64 {
-        let sin_thetak = (1.0 - cos_thetak * cos_thetak).sqrt();
-        // Precompute common terms
-        let u_squared_plus_sign = u * u + sign;
+    pub fn compute(&self, params: IntegrandParams, int_type: IntegrandType) -> Complex64 {
+        let sin_thetak = (1.0 - params.cos_thetak * params.cos_thetak).sqrt();
+        let u_squared_plus_sign = params.u * params.u + params.sign;
         let sqrt_term = u_squared_plus_sign.sqrt();
-        let bessel_arg = w * sin_thetak * s * sqrt_term;
-        let wsu = w * s * u;
+        let bessel_arg = params.w * sin_thetak * params.s * sqrt_term;
+        let wsu = params.w * params.s * params.u;
         let exp_term_real = wsu.cos();
         let exp_term_imag = wsu.sin();
-        let cutoff_val = self.time_cutoff.cutoff(u * s);
+        let cutoff_val = self.time_cutoff.evaluate(params.u * params.s);
 
-        // Precompute Bessel functions
         let (bessel_0, bessel_1, bessel_2) = match int_type {
             IntegrandType::XX | IntegrandType::YY => {
                 let b0 = Jn(0, bessel_arg);
@@ -124,7 +128,7 @@ where
                 (exp_term_real * bessel_0 * cutoff_val, exp_term_imag * bessel_0 * cutoff_val)
             },
             IntegrandType::XZ => {
-                let factor = sign * sqrt_term;
+                let factor = params.sign * sqrt_term;
                 (
                     factor * exp_term_real * bessel_1 * cutoff_val,
                     factor * exp_term_imag * bessel_1 * cutoff_val,
@@ -132,6 +136,21 @@ where
             },
         };
         Complex64::new(real, imag)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct QuadratureConfig {
+    pub tol: f64,
+    pub max_iter: u32,
+}
+
+impl Default for QuadratureConfig {
+    fn default() -> Self {
+        Self {
+            tol: 1e-5,
+            max_iter: 20,
+        }
     }
 }
 
@@ -202,15 +221,14 @@ pub struct LatticeConfig {
 /// phi1 is the solution for t >= r, phi2 is the solution for t < r.
 pub struct GravitationalWaveCalculator<T>
 where
-    T: TimeCutoff,
+    T: TimeCutoff + IntegrationDomain,
 {
     pub phi1: Array3<f64>,
     pub phi2: Array3<f64>,
     pub precomputed: PrecomputedFieldArrays,
     pub lattice: LatticeConfig,
-    pub integrand: IntegrandCalculator<T>,
-    pub tol: f64,
-    pub max_iter: u32,
+    pub time_cutoff: T,
+    pub quadrature: QuadratureConfig,
     pub s_offset: Array1<f64>,
     pub n_fields: usize,
     thread_pool: ThreadPool,
@@ -218,7 +236,7 @@ where
 
 impl<T> GravitationalWaveCalculator<T>
 where
-    T: TimeCutoff,
+    T: TimeCutoff + IntegrationDomain,
 {
     pub fn new(
         initial_field_status: InitialFieldStatus,
@@ -226,7 +244,7 @@ where
         phi2: Array3<f64>,
         z_grid: Array1<f64>,
         ds: f64,
-        integrand: IntegrandCalculator<T>,
+        time_cutoff: T,
     ) -> Result<Self, GWCalcError> {
         let n_fields = phi1.shape()[0];
         let n_s = phi1.shape()[1];
@@ -267,9 +285,8 @@ where
             phi2,
             precomputed,
             lattice,
-            integrand,
-            tol: 1e-5,
-            max_iter: 20,
+            time_cutoff,
+            quadrature: QuadratureConfig::default(),
             s_offset,
             n_fields,
             thread_pool,
@@ -291,8 +308,7 @@ where
         if max_iter == 0 {
             return Err(GWCalcError::InvalidMaxIter(max_iter));
         }
-        self.tol = tol;
-        self.max_iter = max_iter;
+        self.quadrature = QuadratureConfig { tol, max_iter };
         Ok(())
     }
 
@@ -591,13 +607,26 @@ where
         w: f64,
         sign: f64,
     ) -> Complex64 {
-        let u_min = if sign == -1.0 { 1.0 } else { 0.0 };
-        let u_max = self.integrand.time_cutoff.u_max(s);
+        let (u_min, u_max) = self.time_cutoff.u_bounds(s, sign);
+        let integrand_kernel = GwIntegrand::new(&self.time_cutoff);
+        let integrand = |u: f64| -> Complex64 {
+            integrand_kernel.compute(
+                IntegrandParams {
+                    w,
+                    cos_thetak,
+                    s,
+                    sign,
+                    u,
+                },
+                int_type,
+            )
+        };
 
-        let integrand =
-            |u: f64| -> Complex64 { self.integrand.compute(w, cos_thetak, s, sign, u, int_type) };
-
-        gauss_kronrod_quadrature(integrand, (u_min, u_max), G30K61(self.tol, self.max_iter))
+        gauss_kronrod_quadrature(
+            integrand,
+            (u_min, u_max),
+            G30K61(self.quadrature.tol, self.quadrature.max_iter),
+        )
     }
 
     /// Computes the energy-momentum tensor components (t_xx, t_yy, t_zz, t_xz)
