@@ -1,6 +1,7 @@
 use bubble_gw::many_bubbles::generalized_bulk_flow::GeneralizedBulkFlow;
 use bubble_gw::many_bubbles::lattice::EmptyLattice;
 use bubble_gw::many_bubbles::lattice_bubbles::LatticeBubbles;
+use bubble_gw::time_cutoff::UnitTimeCutoff;
 use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
 use ndarray::{Array1, Array2, arr2};
 
@@ -36,7 +37,7 @@ fn bench_compute_c_integral(c: &mut Criterion) {
         b.iter_batched(
             || setup_bulk_flow(),
             |mut bf| {
-                bf.compute_c_integral(&w_arr, Some(0.0), 15.0, 800, None)
+                bf.compute_c_integral(&w_arr, Some(0.0), 15.0, 800, None, UnitTimeCutoff)
                     .expect("Nalgebra failed");
             },
             BatchSize::SmallInput,

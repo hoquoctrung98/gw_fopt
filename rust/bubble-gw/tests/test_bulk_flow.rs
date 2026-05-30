@@ -6,6 +6,7 @@ use std::io::BufReader;
 use bubble_gw::many_bubbles::generalized_bulk_flow::GeneralizedBulkFlow;
 use bubble_gw::many_bubbles::lattice::EmptyLattice;
 use bubble_gw::many_bubbles::lattice_bubbles::LatticeBubbles;
+use bubble_gw::time_cutoff::UnitTimeCutoff;
 use bubble_gw::utils::is_close::IsClose;
 use ndarray::{Array1, Array2, arr2};
 use num::complex::Complex64;
@@ -91,7 +92,8 @@ fn test_bulk_flow_two_bubbles() -> Result<(), Box<dyn Error>> {
         bulk.set_resolution(n_cos_val as usize, n_phi_val as usize, true)?;
         bulk.set_gradient_scaling_params(coefficients_sets.clone(), powers_sets.clone(), None)?;
 
-        let c_matrix = bulk.compute_c_integral(&w_arr, Some(0.0), 8.0, 1000, None)?;
+        let c_matrix =
+            bulk.compute_c_integral(&w_arr, Some(0.0), 8.0, 1000, None, UnitTimeCutoff)?;
 
         // Extract computed results for coeff=1.0
         let computed_plus: Vec<Complex64> = c_matrix.slice(ndarray::s![0, 0, ..]).to_vec();

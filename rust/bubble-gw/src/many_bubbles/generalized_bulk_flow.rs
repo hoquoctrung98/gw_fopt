@@ -10,6 +10,7 @@ use crate::many_bubbles::bubbles::Bubbles;
 use crate::many_bubbles::lattice::GeneralLatticeProperties;
 use crate::many_bubbles::lattice_bubbles::{BubbleIndex, LatticeBubbles, LatticeBubblesError};
 use crate::many_bubbles::spacetime::Lorentzian;
+use crate::time_cutoff::TimeCutoff;
 
 /// Represents the causal collision status of a direction $(\cos\theta, \phi)$
 /// relative to a reference bubble $n$, used to evaluate the Heaviside functions
@@ -775,16 +776,18 @@ where
     /// e^{i\omega(t - z_n)} A_{n,\pm}(\omega, t)\, dt, $$
     /// using trapezoidal integration over time with parallel evaluation of
     /// $A_{n,\pm}$. Returns stacked $[C_{n,+}, C_{n,\times}]$.
-    pub fn compute_c_integral_fixed_bubble<W>(
+    pub fn compute_c_integral_fixed_bubble<W, C>(
         &mut self,
         a_idx: usize,
         w_arr: W,
         t_begin: Option<f64>,
         t_end: f64,
         n_t: usize,
+        time_cutoff: C,
     ) -> Result<Array3<Complex64>, GeneralizedBulkFlowError>
     where
         W: AsRef<[f64]>,
+        C: TimeCutoff,
     {
         let w_arr = w_arr.as_ref();
         let n_sets = self.coefficients_sets.nrows();
@@ -820,6 +823,7 @@ where
                         let mut integrand_dt_minus = Array2::zeros((n_sets, n_w));
                         let t_nucleation = self.lattice_bubbles.interior.spacetime[a_idx][0];
                         if t_nucleation <= t {
+                            let cutoff_weight = time_cutoff.evaluate(t);
                             let (a_plus, a_minus) = self
                                 .compute_a_integral(
                                     a_idx,
@@ -839,9 +843,11 @@ where
                                         1.0
                                     };
                                     integrand_dt_plus[[s, w_idx]] +=
-                                        a_plus[[s, w_idx]] * complex_phase * weight;
-                                    integrand_dt_minus[[s, w_idx]] +=
-                                        a_minus[[s, w_idx]] * complex_phase * weight;
+                                        a_plus[[s, w_idx]] * complex_phase * weight * cutoff_weight;
+                                    integrand_dt_minus[[s, w_idx]] += a_minus[[s, w_idx]]
+                                        * complex_phase
+                                        * weight
+                                        * cutoff_weight;
                                 }
                             }
                             let dt_complex = Complex64::new(dt, 0.0);
@@ -923,16 +929,18 @@ where
     /// $$
     /// where $C_{n,\pm}$ are computed via `compute_c_integral_fixed_bubble`.
     /// Result is shape `(2, n_sets, n_w)`, i.e. `[C_+, C_\times]`.
-    pub fn compute_c_integral<W>(
+    pub fn compute_c_integral<W, C>(
         &mut self,
         w_arr: W,
         t_begin: Option<f64>,
         t_end: f64,
         n_t: usize,
         selected_bubbles: Option<&[usize]>,
+        time_cutoff: C,
     ) -> Result<Array3<Complex64>, GeneralizedBulkFlowError>
     where
         W: AsRef<[f64]>,
+        C: TimeCutoff,
     {
         let w_arr = w_arr.as_ref();
         let n_interior = self.lattice_bubbles.interior.n_bubbles();
@@ -966,7 +974,14 @@ where
 
         let mut c_total = Array3::<Complex64>::zeros((2, n_sets, n_w));
         for &a_idx in &bubble_ids {
-            c_total += &self.compute_c_integral_fixed_bubble(a_idx, w_arr, t_begin, t_end, n_t)?;
+            c_total += &self.compute_c_integral_fixed_bubble(
+                a_idx,
+                w_arr,
+                t_begin,
+                t_end,
+                n_t,
+                time_cutoff.clone(),
+            )?;
         }
 
         Ok(c_total)

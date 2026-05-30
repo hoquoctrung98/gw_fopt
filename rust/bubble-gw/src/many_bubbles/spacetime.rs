@@ -35,7 +35,9 @@
 
 use std::ops::{Add, Neg, Sub};
 
+pub use approx;
 use approx::{AbsDiffEq, abs_diff_eq};
+pub use nalgebra;
 use nalgebra::base::allocator::Allocator;
 use nalgebra::base::dimension::{U1, U2, U3, U4, U5, U6};
 use nalgebra::constraint::{
@@ -63,7 +65,6 @@ use nalgebra::{
     Unit,
     VectorView,
 };
-pub use {approx, nalgebra};
 
 #[inline]
 fn neg<T: RealField>(n: &mut T) {

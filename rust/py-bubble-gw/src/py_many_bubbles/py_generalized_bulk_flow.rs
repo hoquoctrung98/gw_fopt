@@ -4,6 +4,7 @@ use bubble_gw::many_bubbles::generalized_bulk_flow::{
 };
 use bubble_gw::many_bubbles::lattice::BuiltInLattice;
 use bubble_gw::many_bubbles::lattice_bubbles::BubbleIndex;
+use bubble_gw::time_cutoff::{ExponentialTimeCutoff, UnitTimeCutoff};
 use numpy::{
     Complex64 as NumpyComplex64,
     PyArray1,
@@ -125,6 +126,32 @@ impl From<PyGeneralizedBulkFlowError> for PyErr {
 }
 
 type PyResult<T> = Result<T, PyGeneralizedBulkFlowError>;
+
+#[pyclass(name = "ExponentialTimeCutoff")]
+pub struct PyExponentialTimeCutoff {
+    inner: ExponentialTimeCutoff,
+}
+
+#[pymethods]
+impl PyExponentialTimeCutoff {
+    #[new]
+    #[pyo3(signature = (smax, ratio_t_cut = None, ratio_t_0 = None))]
+    pub fn new(smax: f64, ratio_t_cut: Option<f64>, ratio_t_0: Option<f64>) -> Self {
+        Self {
+            inner: ExponentialTimeCutoff::new(smax, ratio_t_cut, ratio_t_0),
+        }
+    }
+
+    #[getter]
+    pub fn t_cut(&self) -> f64 {
+        self.inner.t_cut
+    }
+
+    #[getter]
+    pub fn t_0(&self) -> f64 {
+        self.inner.t_0
+    }
+}
 
 #[pyclass(name = "GeneralizedBulkFlow")]
 /// GeneralizedBulkFlow approximation
@@ -263,6 +290,7 @@ impl PyGeneralizedBulkFlow {
         Ok(PyArray2::from_array(py, &collision_status_int).into())
     }
 
+    #[pyo3(signature = (a_idx, w_arr, t_begin, t_end, n_t, time_cutoff = None))]
     pub fn compute_c_integral_fixed_bubble(
         &mut self,
         py: Python,
@@ -271,10 +299,27 @@ impl PyGeneralizedBulkFlow {
         t_begin: Option<f64>,
         t_end: f64,
         n_t: usize,
+        time_cutoff: Option<PyRef<'_, PyExponentialTimeCutoff>>,
     ) -> PyResult<Py<PyArray3<NumpyComplex64>>> {
-        let c_matrix = self
-            .inner
-            .compute_c_integral_fixed_bubble(a_idx, &w_arr, t_begin, t_end, n_t)?;
+        let c_matrix = if let Some(time_cutoff) = time_cutoff {
+            self.inner.compute_c_integral_fixed_bubble(
+                a_idx,
+                &w_arr,
+                t_begin,
+                t_end,
+                n_t,
+                time_cutoff.inner,
+            )?
+        } else {
+            self.inner.compute_c_integral_fixed_bubble(
+                a_idx,
+                &w_arr,
+                t_begin,
+                t_end,
+                n_t,
+                UnitTimeCutoff,
+            )?
+        };
         let c_matrix_numpy = c_matrix.mapv(|c| NumpyComplex64::new(c.re, c.im));
         Ok(PyArray3::from_array(py, &c_matrix_numpy).into())
     }
@@ -333,7 +378,7 @@ impl PyGeneralizedBulkFlow {
         Ok(PyArray4::from_owned_array(py, integrand_numpy).into())
     }
 
-    #[pyo3(signature = (w_arr, *, t_begin=None, t_end, n_t, selected_bubbles=None))]
+    #[pyo3(signature = (w_arr, *, t_begin=None, t_end, n_t, selected_bubbles=None, time_cutoff=None))]
     pub fn compute_c_integral(
         &mut self,
         py: Python,
@@ -342,6 +387,7 @@ impl PyGeneralizedBulkFlow {
         t_end: f64,
         n_t: usize,
         selected_bubbles: Option<PyReadonlyArray1<usize>>,
+        time_cutoff: Option<PyRef<'_, PyExponentialTimeCutoff>>,
     ) -> PyResult<Py<PyArray3<NumpyComplex64>>> {
         let selected_vec: Option<Vec<usize>> = selected_bubbles
             .map(|arr| {
@@ -357,15 +403,25 @@ impl PyGeneralizedBulkFlow {
 
         let selected_slice: Option<&[usize]> = selected_vec.as_deref();
 
-        let c_matrix = self
-            .inner
-            .compute_c_integral(&w_arr, t_begin, t_end, n_t, selected_slice)
-            .map_err(|e| match e {
-                GeneralizedBulkFlowError::InvalidIndex { index, max } => {
-                    PyGeneralizedBulkFlowError::InvalidIndex { index, max }
-                },
-                _ => PyGeneralizedBulkFlowError::from(e),
-            })?;
+        let c_matrix = if let Some(time_cutoff) = time_cutoff {
+            self.inner
+                .compute_c_integral(&w_arr, t_begin, t_end, n_t, selected_slice, time_cutoff.inner)
+                .map_err(|e| match e {
+                    GeneralizedBulkFlowError::InvalidIndex { index, max } => {
+                        PyGeneralizedBulkFlowError::InvalidIndex { index, max }
+                    },
+                    _ => PyGeneralizedBulkFlowError::from(e),
+                })?
+        } else {
+            self.inner
+                .compute_c_integral(&w_arr, t_begin, t_end, n_t, selected_slice, UnitTimeCutoff)
+                .map_err(|e| match e {
+                    GeneralizedBulkFlowError::InvalidIndex { index, max } => {
+                        PyGeneralizedBulkFlowError::InvalidIndex { index, max }
+                    },
+                    _ => PyGeneralizedBulkFlowError::from(e),
+                })?
+        };
 
         let c_matrix_numpy = c_matrix.mapv(|c| NumpyComplex64::new(c.re, c.im));
         Ok(PyArray3::from_owned_array(py, c_matrix_numpy).into())

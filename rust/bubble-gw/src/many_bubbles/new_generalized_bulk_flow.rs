@@ -1,3 +1,5 @@
+// experiment on computing GW along an arbitrary direction
+// Don't use this until fully tested
 use std::fmt::Debug;
 
 use nalgebra::{DMatrix, Vector4};

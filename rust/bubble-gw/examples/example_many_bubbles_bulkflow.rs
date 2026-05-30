@@ -3,6 +3,7 @@ use std::error::Error;
 use bubble_gw::many_bubbles::generalized_bulk_flow::GeneralizedBulkFlow;
 use bubble_gw::many_bubbles::lattice::{BoundaryConditions, CartesianLattice};
 use bubble_gw::many_bubbles::lattice_bubbles::LatticeBubbles;
+use bubble_gw::time_cutoff::UnitTimeCutoff;
 use nalgebra::{Point3, Vector3};
 use ndarray::prelude::*;
 
@@ -75,7 +76,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("a_plus[1, 50]: {}", a_plus[[1, 50]]);
     println!("a_minus[1, 50]: {}", a_minus[[1, 50]]);
 
-    let c_matrix = generalized_bulk_flow.compute_c_integral(&w_arr, Some(0.0), 20.0, 1000, None)?;
+    let c_matrix = generalized_bulk_flow.compute_c_integral(
+        &w_arr,
+        Some(0.0),
+        20.0,
+        1000,
+        None,
+        UnitTimeCutoff,
+    )?;
     println!("c_matrix[0, 0, 0]: {}", c_matrix[[0, 0, 0]]);
     println!("c_matrix[1, 0, 0]: {}", c_matrix[[1, 0, 0]]);
     println!("c_matrix[0, 1, 0]: {}", c_matrix[[0, 1, 0]]);

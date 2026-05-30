@@ -20,6 +20,8 @@ fn _py_bubble_gw(py: Python, module_parent: &Bound<'_, PyModule>) -> PyResult<()
     module_many_bubbles.add_class::<crate::py_many_bubbles::py_lattice::PyEmpty>()?;
     module_many_bubbles.add_class::<py_many_bubbles::py_isometry::PyIsometry3>()?;
     module_many_bubbles
+        .add_class::<py_many_bubbles::py_generalized_bulk_flow::PyExponentialTimeCutoff>()?;
+    module_many_bubbles
         .add_class::<py_many_bubbles::py_generalized_bulk_flow::PyGeneralizedBulkFlow>()?;
     module_many_bubbles
         .add_class::<py_many_bubbles::py_new_generalized_bulk_flow::PyNewGeneralizedBulkFlow>()?;
