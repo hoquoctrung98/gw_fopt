@@ -1,8 +1,7 @@
 // generalize gw_calc.rs in terms of cut-off functions
 use ndarray::prelude::*;
 use num_complex::Complex64;
-use peroxide::numerical::integral::Integral::G30K61;
-use peroxide::numerical::integral::gauss_kronrod_quadrature;
+use peroxide::numerical::integral::{Integral, gauss_kronrod_quadrature, integrate};
 use puruspe::Jn;
 use rayon::prelude::*;
 use rayon::{ThreadPool, ThreadPoolBuilder};
@@ -17,17 +16,22 @@ pub trait IntegrationDomain: Clone + Send + Sync {
 }
 
 /// Configuration for cutoff parameters in the gravitational wave calculator.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct ExponentialTimeCutoff {
     pub t_cut: f64,
     pub t_0: f64,
+    inv_t_0_sq: f64,
 }
 
 impl ExponentialTimeCutoff {
     pub fn new(smax: f64, ratio_t_cut: Option<f64>, ratio_t_0: Option<f64>) -> Self {
         let t_cut = ratio_t_cut.unwrap_or(0.999999999) * smax;
         let t_0 = ratio_t_0.unwrap_or(0.25) * (smax - t_cut);
-        Self { t_cut, t_0 }
+        Self {
+            t_cut,
+            t_0,
+            inv_t_0_sq: 1.0 / t_0.powi(2),
+        }
     }
 }
 
@@ -37,7 +41,7 @@ impl TimeCutoff for ExponentialTimeCutoff {
         if t < self.t_cut {
             1.0
         } else {
-            let exponent = -((t - self.t_cut).powi(2)) / self.t_0.powi(2);
+            let exponent = -((t - self.t_cut).powi(2)) * self.inv_t_0_sq;
             exponent.exp()
         }
     }
@@ -62,40 +66,41 @@ pub enum IntegrandType {
     XZ,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct IntegrandParams {
-    pub w: f64,
-    pub cos_thetak: f64,
-    pub s: f64,
-    pub sign: f64,
-    pub u: f64,
-}
-
-pub struct GwIntegrand<'a, T>
+pub struct GwIntegrand<T>
 where
     T: TimeCutoff,
 {
-    time_cutoff: &'a T,
+    time_cutoff: T,
+    w: f64,
+    sin_thetak: f64,
+    s: f64,
+    sign: f64,
 }
 
-impl<'a, T> GwIntegrand<'a, T>
+impl<T> GwIntegrand<T>
 where
     T: TimeCutoff,
 {
-    pub fn new(time_cutoff: &'a T) -> Self {
-        Self { time_cutoff }
+    #[inline]
+    pub fn new(time_cutoff: T, w: f64, cos_thetak: f64, s: f64, sign: f64) -> Self {
+        Self {
+            time_cutoff,
+            w,
+            sin_thetak: (1.0 - cos_thetak * cos_thetak).sqrt(),
+            s,
+            sign,
+        }
     }
 
-    #[inline]
-    pub fn compute(&self, params: IntegrandParams, int_type: IntegrandType) -> Complex64 {
-        let sin_thetak = (1.0 - params.cos_thetak * params.cos_thetak).sqrt();
-        let u_squared_plus_sign = params.u * params.u + params.sign;
+    #[inline(always)]
+    pub fn compute(&self, u: f64, int_type: IntegrandType) -> Complex64 {
+        let u_squared_plus_sign = u * u + self.sign;
         let sqrt_term = u_squared_plus_sign.sqrt();
-        let bessel_arg = params.w * sin_thetak * params.s * sqrt_term;
-        let wsu = params.w * params.s * params.u;
+        let bessel_arg = self.w * self.sin_thetak * self.s * sqrt_term;
+        let wsu = self.w * self.s * u;
         let exp_term_real = wsu.cos();
         let exp_term_imag = wsu.sin();
-        let cutoff_val = self.time_cutoff.evaluate(params.u * params.s);
+        let cutoff_val = self.time_cutoff.evaluate(u * self.s);
 
         let (bessel_0, bessel_1, bessel_2) = match int_type {
             IntegrandType::XX | IntegrandType::YY => {
@@ -128,7 +133,7 @@ where
                 (exp_term_real * bessel_0 * cutoff_val, exp_term_imag * bessel_0 * cutoff_val)
             },
             IntegrandType::XZ => {
-                let factor = params.sign * sqrt_term;
+                let factor = self.sign * sqrt_term;
                 (
                     factor * exp_term_real * bessel_1 * cutoff_val,
                     factor * exp_term_imag * bessel_1 * cutoff_val,
@@ -141,16 +146,60 @@ where
 
 #[derive(Debug, Clone, Copy)]
 pub struct QuadratureConfig {
-    pub tol: f64,
-    pub max_iter: u32,
+    pub method: Integral,
 }
 
 impl Default for QuadratureConfig {
     fn default() -> Self {
         Self {
-            tol: 1e-5,
-            max_iter: 20,
+            method: Integral::G30K61(1e-5, 20),
         }
+    }
+}
+
+#[inline]
+fn integrate_with_method<F>(f: F, interval: (f64, f64), method: Integral) -> Complex64
+where
+    F: Fn(f64) -> Complex64 + Copy,
+{
+    match method {
+        Integral::GaussLegendre(_) | Integral::NewtonCotes(_) => integrate(f, interval, method),
+        Integral::G7K15(tol, max_iter) => {
+            gauss_kronrod_quadrature(f, interval, Integral::G7K15(tol, max_iter))
+        },
+        Integral::G10K21(tol, max_iter) => {
+            gauss_kronrod_quadrature(f, interval, Integral::G10K21(tol, max_iter))
+        },
+        Integral::G15K31(tol, max_iter) => {
+            gauss_kronrod_quadrature(f, interval, Integral::G15K31(tol, max_iter))
+        },
+        Integral::G20K41(tol, max_iter) => {
+            gauss_kronrod_quadrature(f, interval, Integral::G20K41(tol, max_iter))
+        },
+        Integral::G25K51(tol, max_iter) => {
+            gauss_kronrod_quadrature(f, interval, Integral::G25K51(tol, max_iter))
+        },
+        Integral::G30K61(tol, max_iter) => {
+            gauss_kronrod_quadrature(f, interval, Integral::G30K61(tol, max_iter))
+        },
+        Integral::G7K15R(tol, max_iter) => {
+            gauss_kronrod_quadrature(f, interval, Integral::G7K15R(tol, max_iter))
+        },
+        Integral::G10K21R(tol, max_iter) => {
+            gauss_kronrod_quadrature(f, interval, Integral::G10K21R(tol, max_iter))
+        },
+        Integral::G15K31R(tol, max_iter) => {
+            gauss_kronrod_quadrature(f, interval, Integral::G15K31R(tol, max_iter))
+        },
+        Integral::G20K41R(tol, max_iter) => {
+            gauss_kronrod_quadrature(f, interval, Integral::G20K41R(tol, max_iter))
+        },
+        Integral::G25K51R(tol, max_iter) => {
+            gauss_kronrod_quadrature(f, interval, Integral::G25K51R(tol, max_iter))
+        },
+        Integral::G30K61R(tol, max_iter) => {
+            gauss_kronrod_quadrature(f, interval, Integral::G30K61R(tol, max_iter))
+        },
     }
 }
 
@@ -169,6 +218,15 @@ pub enum GWCalcError {
 
     #[error("Maximum iterations must be > 0: got {0}")]
     InvalidMaxIter(u32),
+
+    #[error("Gauss-Legendre integration order must be in 2..=30: got {0}")]
+    InvalidGaussLegendreOrder(usize),
+
+    #[error("Newton-Cotes integration requires at least 1 subinterval: got {0}")]
+    InvalidNewtonCotesOrder(usize),
+
+    #[error("The selected integration method does not accept tolerance/max_iter parameters")]
+    IntegralParamsUnsupported,
 
     #[error("Failed to build thread pool: {0}")]
     ThreadPoolBuildError(#[from] rayon::ThreadPoolBuildError),
@@ -308,8 +366,72 @@ where
         if max_iter == 0 {
             return Err(GWCalcError::InvalidMaxIter(max_iter));
         }
-        self.quadrature = QuadratureConfig { tol, max_iter };
+        self.quadrature.method = match self.quadrature.method {
+            Integral::G7K15(..) => Integral::G7K15(tol, max_iter),
+            Integral::G10K21(..) => Integral::G10K21(tol, max_iter),
+            Integral::G15K31(..) => Integral::G15K31(tol, max_iter),
+            Integral::G20K41(..) => Integral::G20K41(tol, max_iter),
+            Integral::G25K51(..) => Integral::G25K51(tol, max_iter),
+            Integral::G30K61(..) => Integral::G30K61(tol, max_iter),
+            Integral::G7K15R(..) => Integral::G7K15R(tol, max_iter),
+            Integral::G10K21R(..) => Integral::G10K21R(tol, max_iter),
+            Integral::G15K31R(..) => Integral::G15K31R(tol, max_iter),
+            Integral::G20K41R(..) => Integral::G20K41R(tol, max_iter),
+            Integral::G25K51R(..) => Integral::G25K51R(tol, max_iter),
+            Integral::G30K61R(..) => Integral::G30K61R(tol, max_iter),
+            Integral::GaussLegendre(_) | Integral::NewtonCotes(_) => {
+                return Err(GWCalcError::IntegralParamsUnsupported);
+            },
+        };
         Ok(())
+    }
+
+    pub fn set_integration_method(&mut self, method: Integral) -> Result<(), GWCalcError> {
+        Self::validate_integration_method(method)?;
+        self.quadrature.method = method;
+        Ok(())
+    }
+
+    fn validate_integration_method(method: Integral) -> Result<(), GWCalcError> {
+        match method {
+            Integral::GaussLegendre(n) if !(2..=30).contains(&n) => {
+                Err(GWCalcError::InvalidGaussLegendreOrder(n))
+            },
+            Integral::NewtonCotes(0) => Err(GWCalcError::InvalidNewtonCotesOrder(0)),
+            Integral::G7K15(tol, _)
+            | Integral::G10K21(tol, _)
+            | Integral::G15K31(tol, _)
+            | Integral::G20K41(tol, _)
+            | Integral::G25K51(tol, _)
+            | Integral::G30K61(tol, _)
+            | Integral::G7K15R(tol, _)
+            | Integral::G10K21R(tol, _)
+            | Integral::G15K31R(tol, _)
+            | Integral::G20K41R(tol, _)
+            | Integral::G25K51R(tol, _)
+            | Integral::G30K61R(tol, _)
+                if tol <= 0.0 =>
+            {
+                Err(GWCalcError::InvalidTolerance(tol))
+            },
+            Integral::G7K15(_, max_iter)
+            | Integral::G10K21(_, max_iter)
+            | Integral::G15K31(_, max_iter)
+            | Integral::G20K41(_, max_iter)
+            | Integral::G25K51(_, max_iter)
+            | Integral::G30K61(_, max_iter)
+            | Integral::G7K15R(_, max_iter)
+            | Integral::G10K21R(_, max_iter)
+            | Integral::G15K31R(_, max_iter)
+            | Integral::G20K41R(_, max_iter)
+            | Integral::G25K51R(_, max_iter)
+            | Integral::G30K61R(_, max_iter)
+                if max_iter == 0 =>
+            {
+                Err(GWCalcError::InvalidMaxIter(max_iter))
+            },
+            _ => Ok(()),
+        }
     }
 
     pub fn compute_precomputed_arrays(
@@ -608,25 +730,10 @@ where
         sign: f64,
     ) -> Complex64 {
         let (u_min, u_max) = self.time_cutoff.u_bounds(s, sign);
-        let integrand_kernel = GwIntegrand::new(&self.time_cutoff);
-        let integrand = |u: f64| -> Complex64 {
-            integrand_kernel.compute(
-                IntegrandParams {
-                    w,
-                    cos_thetak,
-                    s,
-                    sign,
-                    u,
-                },
-                int_type,
-            )
-        };
+        let integrand_kernel = GwIntegrand::new(self.time_cutoff.clone(), w, cos_thetak, s, sign);
+        let integrand = |u: f64| -> Complex64 { integrand_kernel.compute(u, int_type) };
 
-        gauss_kronrod_quadrature(
-            integrand,
-            (u_min, u_max),
-            G30K61(self.quadrature.tol, self.quadrature.max_iter),
-        )
+        integrate_with_method(integrand, (u_min, u_max), self.quadrature.method)
     }
 
     /// Computes the energy-momentum tensor components (t_xx, t_yy, t_zz, t_xz)

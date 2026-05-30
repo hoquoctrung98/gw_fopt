@@ -1,6 +1,6 @@
 [workspace]
 members = [
-  "bubble-gw", "py-bubble-gw"
+  "bubble-gw", "py-bubble-gw", "benches"
 ]
 resolver = "2"
 
