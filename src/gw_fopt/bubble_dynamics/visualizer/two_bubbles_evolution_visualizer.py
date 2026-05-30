@@ -215,15 +215,14 @@ class TwoBubblesEvolutionVisualizer:
 
         if plot_boundaries:
             z_center = self.z_max_coords
-            z_lower = z_center - self.integration_width / 2
-            z_upper = z_center + self.integration_width / 2
+            z_lower = z_center - self.integration_width
+            z_upper = z_center + self.integration_width
             s_plot = self.s_coords_valid
             ax.plot(z_center, s_plot, color="g", linestyle="-", linewidth=1)
             ax.plot(z_lower, s_plot, color="g", linestyle="--", linewidth=1)
             ax.plot(z_upper, s_plot, color="g", linestyle="--", linewidth=1)
 
         return fig, ax
-
 
     def plot_surface_tension(
         self,
