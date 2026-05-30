@@ -52,4 +52,9 @@ python-source = "src"
 include = ["src/**/*.pyi"]
 
 [tool.uv]
-cache-keys = [{file = "**/Cargo.toml"}, {file = "**/*.rs"}, {file = "**/*.py"}]
+cache-keys = [
+    { file = "pyproject.toml" },
+    { file = "rust/**/Cargo.toml" },
+    { file = "rust/Cargo.lock" },
+    { file = "rust/**/*.rs" },
+]
