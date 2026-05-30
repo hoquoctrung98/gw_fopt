@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Union
+from typing import Any, Dict, Iterable, Union
 
 import numpy as np
 import pandas as pd
@@ -98,9 +98,9 @@ def filter_dataframe(
                 else:  # Set-based check (Subset)
                     v_set = set(v)
                     mask &= col_series.apply(
-                        lambda x: v_set.issubset(set(x))
-                        if isinstance(x, Iterable)
-                        else False
+                        lambda x: (
+                            v_set.issubset(set(x)) if isinstance(x, Iterable) else False
+                        )
                     )
 
             case Constraint.ContainsOrdered(seq):
@@ -116,9 +116,11 @@ def filter_dataframe(
                         )
 
                     mask &= col_series.apply(
-                        lambda x: is_subsequence(list(x), list(seq))
-                        if isinstance(x, Iterable)
-                        else False
+                        lambda x: (
+                            is_subsequence(list(x), list(seq))
+                            if isinstance(x, Iterable)
+                            else False
+                        )
                     )
 
             case _ if pd.api.types.is_numeric_dtype(col_series) and isinstance(

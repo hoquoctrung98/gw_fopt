@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from abc import ABC, abstractmethod
 
+
 class SimulationState(ABC):
     @property
     @abstractmethod
@@ -32,11 +33,11 @@ class NucleationStrategy(ABC):
     def nucleate(self, t: float, state: SimulationState) -> np.ndarray:
         """
         Generate new bubble centers at time t.
-        
+
         Args:
             t (float): Current simulation time.
             state: Reference to the state for accessing grid, remaining volume, etc.
-        
+
         Returns:
             np.ndarray: Array of new bubble centers.
         """
@@ -55,7 +56,7 @@ class BubbleFormationSimulator(SimulationState):
         N: int,
         vw: float,
         dt: float,
-        nucleation_strategy: NucleationStrategy
+        nucleation_strategy: NucleationStrategy,
     ):
         # Store dt and V_remaining as instance variables
         self._dt = dt  # Use _dt for internal storage
@@ -98,13 +99,15 @@ class BubbleFormationSimulator(SimulationState):
             radius = self.vw * (t - tn)
             radius = max(radius, 0)
             if radius > 0:
-                self.is_outside &= (self.dist_to_centers[i] > radius)
+                self.is_outside &= self.dist_to_centers[i] > radius
         return self.grid[self.is_outside]
 
     def _update_remaining_volume_bulk(self, t: float) -> float:
         valid_points = self._get_valid_points(t)
         fraction_remaining = len(valid_points) / len(self.grid)
-        self._V_remaining = self.V_total * fraction_remaining  # Update internal variable
+        self._V_remaining = (
+            self.V_total * fraction_remaining
+        )  # Update internal variable
         return self._V_remaining
 
     def _update_outside_mask(self, new_bubbles: list, t: float):
@@ -120,7 +123,7 @@ class BubbleFormationSimulator(SimulationState):
         for i, (center, tn) in enumerate(zip(new_centers, new_times)):
             radius = self.vw * (t - tn)
             if radius > 0:
-                self.is_outside &= (self.dist_to_centers[-len(new_centers) + i] > radius)
+                self.is_outside &= self.dist_to_centers[-len(new_centers) + i] > radius
 
     def run_simulation(self, T: float, verbose: bool = False):
         t = 0
@@ -138,11 +141,13 @@ class BubbleFormationSimulator(SimulationState):
         if bubble_data:
             self.bubble_df = pd.DataFrame(
                 bubble_data,
-                columns=["center_x", "center_y", "center_z", "nucleation_time"]
+                columns=["center_x", "center_y", "center_z", "nucleation_time"],
             )
             self.bubble_df.insert(0, "bubble_idx", range(len(self.bubble_df)))
         else:
-            self.bubble_df = pd.DataFrame(columns=["center_x", "center_y", "center_z", "nucleation_time"])
+            self.bubble_df = pd.DataFrame(
+                columns=["center_x", "center_y", "center_z", "nucleation_time"]
+            )
         self._update_remaining_volume_bulk(T)
 
     def draw_lattice(self, t: float, max_points_per_side: int = None, smoothness=10):
@@ -154,7 +159,9 @@ class BubbleFormationSimulator(SimulationState):
         elif isinstance(smoothness, (list, tuple)) and len(smoothness) == 2:
             smoothness_u, smoothness_v = map(int, smoothness)
         else:
-            raise ValueError("smoothness must be an integer or a list/tuple of two integers.")
+            raise ValueError(
+                "smoothness must be an integer or a list/tuple of two integers."
+            )
 
         inside_bubble = np.zeros(len(self.grid), dtype=bool)
         for idx, (center, tn) in enumerate(self.bubbles):
@@ -181,14 +188,30 @@ class BubbleFormationSimulator(SimulationState):
             inside_points = self.grid[inside_bubble]
 
         if len(outside_points) > 0:
-            ax.scatter(outside_points[:, 0], outside_points[:, 1], outside_points[:, 2], c="blue", s=1, label="Outside Bubbles")
+            ax.scatter(
+                outside_points[:, 0],
+                outside_points[:, 1],
+                outside_points[:, 2],
+                c="blue",
+                s=1,
+                label="Outside Bubbles",
+            )
         if len(inside_points) > 0:
-            ax.scatter(inside_points[:, 0], inside_points[:, 1], inside_points[:, 2], c="red", s=1, label="Inside Bubbles")
+            ax.scatter(
+                inside_points[:, 0],
+                inside_points[:, 1],
+                inside_points[:, 2],
+                c="red",
+                s=1,
+                label="Inside Bubbles",
+            )
 
         for center, tn in self.bubbles:
             radius = self.vw * (t - tn)
             if radius > 0:
-                u, v = np.mgrid[0:2*np.pi:(smoothness_u*1j), 0:np.pi:(smoothness_v*1j)]
+                u, v = np.mgrid[
+                    0 : 2 * np.pi : (smoothness_u * 1j), 0 : np.pi : (smoothness_v * 1j)
+                ]
                 x = center[0] + radius * np.cos(u) * np.sin(v)
                 y = center[1] + radius * np.sin(u) * np.sin(v)
                 z = center[2] + radius * np.cos(v)
@@ -206,7 +229,7 @@ class BubbleFormationSimulator(SimulationState):
 
     def plot_bubble_formation_histogram(self) -> tuple:
         """
-        Plot a histogram of bubble formation over time, shifted half a step to the right so the left edge 
+        Plot a histogram of bubble formation over time, shifted half a step to the right so the left edge
         of the first bar aligns with t = 0.0.
 
         The x-axis represents time (with bin width equal to dt), and the y-axis represents the number of bubbles formed
@@ -216,7 +239,9 @@ class BubbleFormationSimulator(SimulationState):
             fig, ax: Matplotlib figure and axis objects for the histogram plot.
         """
         if self.t_arr is None or len(self.bubbles) == 0:
-            raise ValueError("Simulation has not been run yet. Please call `run_simulation` first.")
+            raise ValueError(
+                "Simulation has not been run yet. Please call `run_simulation` first."
+            )
 
         # Extract nucleation times of all bubbles
         nucleation_times = np.array([b[1] for b in self.bubbles])
@@ -224,7 +249,9 @@ class BubbleFormationSimulator(SimulationState):
         # Use time array for bins, starting half a step earlier to shift right
         bin_width = self.dt
         shift = bin_width / 2  # Shift by 0.05 for dt = 0.1
-        bins = np.arange(-shift, self.t_arr[-1] + bin_width, bin_width)  # Start at -0.05, step by 0.1, up to 3.1
+        bins = np.arange(
+            -shift, self.t_arr[-1] + bin_width, bin_width
+        )  # Start at -0.05, step by 0.1, up to 3.1
 
         # Compute the histogram with explicit bins, ensuring no data loss at edges
         counts, bin_edges = np.histogram(nucleation_times, bins=bins, density=False)
@@ -235,21 +262,23 @@ class BubbleFormationSimulator(SimulationState):
             bin_edges[:-1] + shift,  # Shift bar positions right by 0.05
             counts,
             width=bin_width,
-            align='edge',  # Align bars to the left edge for exact positioning
+            align="edge",  # Align bars to the left edge for exact positioning
             alpha=0.7,
-            color='blue',
-            edgecolor='black',
-            label=f"Bin width = {bin_width:.3f}"
+            color="blue",
+            edgecolor="black",
+            label=f"Bin width = {bin_width:.3f}",
         )
 
         # Adjust x-axis limits to show the full histogram, aligning the first bar's left edge at 0.0
-        ax.set_xlim(0, self.t_arr[-1] + bin_width)  # From 0 to 3.1 to show all bars fully
+        ax.set_xlim(
+            0, self.t_arr[-1] + bin_width
+        )  # From 0 to 3.1 to show all bars fully
 
         # Set plot labels and title
         ax.set_title("Bubble Formation Histogram", fontsize=16)
         ax.set_xlabel("Time", fontsize=14)
         ax.set_ylabel("Number of Bubbles Formed", fontsize=14)
-        ax.grid(True, linestyle='--', alpha=0.6)
+        ax.grid(True, linestyle="--", alpha=0.6)
         ax.legend()
 
         # Ensure y-axis ticks are integers
@@ -270,7 +299,9 @@ class PoissonNucleation(NucleationStrategy):
 
     def validate(self):
         if not all(key in self.poisson_params for key in ["Gamma0", "beta", "t0"]):
-            raise ValueError("Poisson nucleation requires 'Gamma0', 'beta', and 't0' in poisson_params.")
+            raise ValueError(
+                "Poisson nucleation requires 'Gamma0', 'beta', and 't0' in poisson_params."
+            )
         self.Gamma0 = self.poisson_params["Gamma0"]
         self.beta = self.poisson_params["beta"]
         self.t0 = self.poisson_params["t0"]
@@ -282,7 +313,9 @@ class PoissonNucleation(NucleationStrategy):
         valid_points = simulator._get_valid_points(t)
         if len(valid_points) == 0 or num_bubbles == 0:
             return np.array([])
-        selected_indices = np.random.choice(len(valid_points), size=min(num_bubbles, len(valid_points)), replace=False)
+        selected_indices = np.random.choice(
+            len(valid_points), size=min(num_bubbles, len(valid_points)), replace=False
+        )
         return valid_points[selected_indices]
 
 
@@ -305,18 +338,24 @@ class ManualNucleation(NucleationStrategy):
                 if self._is_point_valid(center_array, t, existing_bubbles):
                     valid_centers.append(center)
                 else:
-                    raise ValueError(f"Bubble at {center} at time {t} overlaps with earlier bubbles.")
+                    raise ValueError(
+                        f"Bubble at {center} at time {t} overlaps with earlier bubbles."
+                    )
             existing_bubbles.extend([(np.array(c), t) for c in valid_centers])
             self.schedule[t] = valid_centers
 
-    def _is_point_valid(self, point: np.ndarray, t: float, existing_bubbles: list) -> bool:
+    def _is_point_valid(
+        self, point: np.ndarray, t: float, existing_bubbles: list
+    ) -> bool:
         for center, tn in existing_bubbles:
-            radius = self.vw * (t - tn) if hasattr(self, 'vw') else 0  # vw would need to come from simulator
+            radius = (
+                self.vw * (t - tn) if hasattr(self, "vw") else 0
+            )  # vw would need to come from simulator
             if radius > 0 and np.linalg.norm(point - center) <= radius:
                 return False
         return True
 
-    def nucleate(self, t: float, simulator: 'BubbleFormationSimulator') -> np.ndarray:
+    def nucleate(self, t: float, simulator: "BubbleFormationSimulator") -> np.ndarray:
         time_range = (t - simulator.dt, t)
         new_centers = []
         for nucleation_time, centers in self.schedule.items():

@@ -1,5 +1,4 @@
 import numpy as np
-import pandas as pd
 from scipy.interpolate import CubicSpline
 
 from gw_fopt.bubble_gw import utils

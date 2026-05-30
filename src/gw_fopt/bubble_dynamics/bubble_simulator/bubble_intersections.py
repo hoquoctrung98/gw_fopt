@@ -9,6 +9,7 @@ from joblib import Parallel, delayed
 from .bubble_formation_simulator import BubbleFormationSimulator
 from ..utils.segment_complement import SegmentComplement
 
+
 class BubbleIntersections:
     def __init__(self, simulator: BubbleFormationSimulator):
         """
@@ -17,13 +18,19 @@ class BubbleIntersections:
         # Extract bubble data as NumPy arrays instead of DataFrame
         # Assuming bubble_df has columns: ['bubble_idx', 'center_x', 'center_y', 'center_z', 'nucleation_time']
         bubble_data = simulator.bubble_df.to_numpy()
-        self.bubble_centers = bubble_data[:, 1:4].astype(float)  # Shape: (n_bubbles, 3) for [center_x, center_y, center_z]
-        self.bubble_nucleation_times = bubble_data[:, 4].astype(float)  # Shape: (n_bubbles,)
+        self.bubble_centers = bubble_data[:, 1:4].astype(
+            float
+        )  # Shape: (n_bubbles, 3) for [center_x, center_y, center_z]
+        self.bubble_nucleation_times = bubble_data[:, 4].astype(
+            float
+        )  # Shape: (n_bubbles,)
         self.bubble_indices = bubble_data[:, 0].astype(int)  # Shape: (n_bubbles,)
         self.vw = simulator.vw
         self.t_arr = simulator.t_arr  # Store the simulation time array
         self.dt = simulator.dt
-        self.intersections = None  # Store intersections as a list of lists/dicts instead of DataFrame
+        self.intersections = (
+            None  # Store intersections as a list of lists/dicts instead of DataFrame
+        )
 
     def compute_radius(self, nucleation_time, t):
         """
@@ -42,31 +49,39 @@ class BubbleIntersections:
         d = np.linalg.norm(center2 - center1)  # Distance between centers
         if d > radius1 + radius2 or d < abs(radius1 - radius2):
             return None  # No intersection (spheres too far apart or one inside without touching)
-        
+
         # Compute the point along the line joining the centers
         x = (radius1**2 - radius2**2 + d**2) / (2 * d)
-        h = np.sqrt(np.maximum(0, radius1**2 - x**2))  # Radius of the intersection circle, ensure non-negative
-        
+        h = np.sqrt(
+            np.maximum(0, radius1**2 - x**2)
+        )  # Radius of the intersection circle, ensure non-negative
+
         if h == 0:
             return None  # No intersection circle (tangent or degenerate case)
-        
+
         # Compute the center of the circle
         v = (center2 - center1) / d
         circle_center = center1 + x * v
-        
+
         return circle_center, h
 
-    def generate_circle_points(self, circle_center, radius, normal_vector, num_points=10000):
+    def generate_circle_points(
+        self, circle_center, radius, normal_vector, num_points=10000
+    ):
         """
         Generates points on the circle in 3D using the parametric equation.
         """
         # Find two orthogonal vectors in the plane of the circle
-        u = np.array([1, 0, 0]) if normal_vector[1] != 0 or normal_vector[2] != 0 else np.array([0, 1, 0])
+        u = (
+            np.array([1, 0, 0])
+            if normal_vector[1] != 0 or normal_vector[2] != 0
+            else np.array([0, 1, 0])
+        )
         v1 = np.cross(normal_vector, u)
         v1 /= np.linalg.norm(v1)
         v2 = np.cross(normal_vector, v1)
         v2 /= np.linalg.norm(v2)
-        
+
         # Generate points on the circle
         t = np.linspace(0, 2 * np.pi, num_points)
         points = circle_center[:, None] + radius * (
@@ -90,20 +105,22 @@ class BubbleIntersections:
         Returns a list of dictionaries with intersection data for all bubbles.
         """
         all_intersections = []
-        
+
         for i in range(len(self.bubble_indices)):
             if self.bubble_nucleation_times[i] > t:
                 continue  # Skip bubbles that haven't nucleated by time `t`
-            
+
             bubble_idx = self.bubble_indices[i]
             bubble_intersections = self.compute_intersections_bubble_idx(bubble_idx, t)
             if bubble_intersections:  # Check if list is not empty
                 all_intersections.extend(bubble_intersections)
-        
+
         self.intersections = all_intersections if all_intersections else []
         return self.intersections
 
-    def find_all_roots_in_range(self, f, u_min=0, u_max=2 * np.pi, num_intervals=8, tol=1e-6):
+    def find_all_roots_in_range(
+        self, f, u_min=0, u_max=2 * np.pi, num_intervals=8, tol=1e-6
+    ):
         """
         Find all roots of the function f(u) within the range [u_min, u_max].
 
@@ -157,41 +174,55 @@ class BubbleIntersections:
         idx = idx[0]  # Take the first match (assuming unique indices)
         ref_center = self.bubble_centers[idx]
         ref_nucleation_time = self.bubble_nucleation_times[idx]
-        
+
         # Skip computation if the reference bubble hasn't nucleated by time `t`
         if t < ref_nucleation_time:
             return []
-        
+
         ref_radius = self.compute_radius(ref_nucleation_time, t)
-        
+
         intersections = []
-        
+
         for j in range(len(self.bubble_indices)):
-            if self.bubble_indices[j] == bubble_idx or self.bubble_nucleation_times[j] > t:
+            if (
+                self.bubble_indices[j] == bubble_idx
+                or self.bubble_nucleation_times[j] > t
+            ):
                 continue  # Skip self-intersection and bubbles not yet nucleated
-            
+
             other_center = self.bubble_centers[j]
             other_radius = self.compute_radius(self.bubble_nucleation_times[j], t)
-            
+
             if ref_radius == 0 or other_radius == 0:
                 continue  # Skip if either bubble has zero radius
-            
-            result = self.compute_circle_of_intersection(ref_center, ref_radius, other_center, other_radius)
+
+            result = self.compute_circle_of_intersection(
+                ref_center, ref_radius, other_center, other_radius
+            )
             if result is not None:
                 circle_center, circle_radius = result
-                
+
                 # Precompute spherical coordinates of the circle's center
-                theta_center, phi_center = self.convert_to_spherical(np.array([circle_center]), ref_center)
+                theta_center, phi_center = self.convert_to_spherical(
+                    np.array([circle_center]), ref_center
+                )
                 cos_theta_center = np.cos(theta_center)
-                
-                intersections.append({
-                    'other_bubble_idx': self.bubble_indices[j],
-                    'circle_center': circle_center,
-                    'circle_radius': circle_radius,
-                    'circle_angles': (phi_center[0], cos_theta_center[0]),  # Store (phi, cos(theta))
-                    'nucleation_time': self.bubble_nucleation_times[j],  # Add nucleation_time of the other bubble
-                })
-        
+
+                intersections.append(
+                    {
+                        "other_bubble_idx": self.bubble_indices[j],
+                        "circle_center": circle_center,
+                        "circle_radius": circle_radius,
+                        "circle_angles": (
+                            phi_center[0],
+                            cos_theta_center[0],
+                        ),  # Store (phi, cos(theta))
+                        "nucleation_time": self.bubble_nucleation_times[
+                            j
+                        ],  # Add nucleation_time of the other bubble
+                    }
+                )
+
         return intersections
 
     def find_circle_line_intersections(self, bubble_idx, t, cos_theta_line, eps=1e-6):
@@ -199,13 +230,13 @@ class BubbleIntersections:
         Computes all intersection points between the horizontal line (cos(theta) = cos_theta_line)
         and the intersection circles for a given bubble at time t.
         Returns a dictionary with intersection data instead of a DataFrame.
-        
+
         Parameters:
             bubble_idx (int): Index of the reference bubble.
             t (float): Current simulation time.
             cos_theta_line (float): Value of cos(theta) for the horizontal line.
             eps (float): Tolerance for considering two solutions as identical.
-        
+
         Returns:
             dict or None: Dictionary containing the original intersection data plus the intersection points and middle point status, or None if no intersections.
         """
@@ -213,76 +244,97 @@ class BubbleIntersections:
         intersections = self.compute_intersections_bubble_idx(bubble_idx, t)
         if not intersections:
             return None  # Return None instead of raising ValueError for consistency
-        
+
         # Extract data for the reference bubble
         idx = np.where(self.bubble_indices == bubble_idx)[0][0]
         ref_center = self.bubble_centers[idx]
         ref_nucleation_time = self.bubble_nucleation_times[idx]
         ref_radius = self.compute_radius(ref_nucleation_time, t)
         z_idx = ref_center[2]  # z-coordinate of the reference bubble's center
-        
+
         # Step 2: Find intersection points for each circle
         updated_intersections = []
-        
+
         for intersection in intersections:
             circle_center = intersection["circle_center"]
             circle_radius = intersection["circle_radius"]
             z_C = circle_center[2]  # z-coordinate of the intersection circle's center
-            R_C = circle_radius     # Radius of the intersection circle
-            
+            R_C = circle_radius  # Radius of the intersection circle
+
             # Define vectors v1 and v2 from generate_circle_points
             normal_vector = ref_center - circle_center
-            u = np.array([1, 0, 0]) if normal_vector[1] != 0 or normal_vector[2] != 0 else np.array([0, 1, 0])
+            u = (
+                np.array([1, 0, 0])
+                if normal_vector[1] != 0 or normal_vector[2] != 0
+                else np.array([0, 1, 0])
+            )
             v1 = np.cross(normal_vector, u)
             v1 /= np.linalg.norm(v1)
             v2 = np.cross(normal_vector, v1)
             v2 /= np.linalg.norm(v2)
             v1z = v1[2]  # z-component of v1
             v2z = v2[2]  # z-component of v2
-            
+
             # Define the function f(u) to solve
             def f(u):
-                return z_C + R_C * (np.cos(u) * v1z + np.sin(u) * v2z) - z_idx - ref_radius * cos_theta_line
-            
+                return (
+                    z_C
+                    + R_C * (np.cos(u) * v1z + np.sin(u) * v2z)
+                    - z_idx
+                    - ref_radius * cos_theta_line
+                )
+
             # Find all roots of f(u) in the range [0, 2*pi]
-            u_values = self.find_all_roots_in_range(f, u_min=0, u_max=2 * np.pi, num_intervals=8, tol=eps)
-            
+            u_values = self.find_all_roots_in_range(
+                f, u_min=0, u_max=2 * np.pi, num_intervals=8, tol=eps
+            )
+
             # Compute intersection points in Cartesian coordinates
             intersection_points_phi = []
             intersection_points_cos_theta = []
             for u in u_values:
-                point = circle_center + circle_radius * (np.cos(u) * v1 + np.sin(u) * v2)
+                point = circle_center + circle_radius * (
+                    np.cos(u) * v1 + np.sin(u) * v2
+                )
                 # Convert to spherical coordinates
-                theta_point, phi_point = self.convert_to_spherical(np.array([point]), ref_center)
+                theta_point, phi_point = self.convert_to_spherical(
+                    np.array([point]), ref_center
+                )
                 cos_theta_point = np.cos(theta_point)
                 # Store intersection points
                 intersection_points_phi.append(phi_point[0])
                 intersection_points_cos_theta.append(cos_theta_point[0])
-            
+
             # Sort intersection points by increasing phi
             sorted_indices = np.argsort(intersection_points_phi)
             sorted_phi = [intersection_points_phi[i] for i in sorted_indices]
-            sorted_cos_theta = [intersection_points_cos_theta[i] for i in sorted_indices]
-            
+            sorted_cos_theta = [
+                intersection_points_cos_theta[i] for i in sorted_indices
+            ]
+
             # Determine the middle point status (if two intersection points exist)
             middle_point_inside = None
             if len(sorted_phi) == 2:  # Two intersection points
                 phi_middle = (sorted_phi[0] + sorted_phi[1]) / 2
                 cos_theta_middle = cos_theta_line
-                
+
                 # Convert the middle point to Cartesian coordinates on the reference circle
                 sin_theta_middle = np.sqrt(1 - cos_theta_middle**2)
                 x_middle = ref_radius * sin_theta_middle * np.cos(phi_middle)
                 y_middle = ref_radius * sin_theta_middle * np.sin(phi_middle)
                 z_middle = ref_radius * cos_theta_middle
-                middle_point_cartesian = ref_center + np.array([x_middle, y_middle, z_middle])
-                
+                middle_point_cartesian = ref_center + np.array(
+                    [x_middle, y_middle, z_middle]
+                )
+
                 # Compute the distance to the other bubble's center
                 other_center = np.array([intersection["circle_center"]])
                 other_radius = self.compute_radius(intersection["nucleation_time"], t)
-                distance_to_other = np.linalg.norm(middle_point_cartesian - other_center)
+                distance_to_other = np.linalg.norm(
+                    middle_point_cartesian - other_center
+                )
                 middle_point_inside = distance_to_other <= other_radius
-            
+
             # Append intersection points and middle point status to the original data
             updated_intersection = {
                 "other_bubble_idx": intersection["other_bubble_idx"],
@@ -294,7 +346,7 @@ class BubbleIntersections:
                 "middle_point_inside": middle_point_inside,
             }
             updated_intersections.append(updated_intersection)
-        
+
         # Step 3: Create a dictionary with the updated intersection data
         updated_ref_data = {
             "bubble_idx": self.bubble_indices[idx],
@@ -302,7 +354,7 @@ class BubbleIntersections:
             "nucleation_time": ref_nucleation_time,
             "intersections": updated_intersections,
         }
-        
+
         return updated_ref_data
 
     def plot_intersections(
@@ -328,7 +380,9 @@ class BubbleIntersections:
             eps (float): Tolerance for root uniqueness.
         """
         # Step 1: Call find_circle_line_intersections to get the updated dictionary
-        ref_data = self.find_circle_line_intersections(bubble_idx, t, cos_theta_line, eps=eps)
+        ref_data = self.find_circle_line_intersections(
+            bubble_idx, t, cos_theta_line, eps=eps
+        )
         if ref_data is None:
             raise ValueError(f"No data available for bubble_idx={bubble_idx}.")
 
@@ -350,7 +404,9 @@ class BubbleIntersections:
             circle_center = intersection["circle_center"]
             circle_radius = intersection["circle_radius"]
             normal_vector = ref_center - circle_center
-            circle_points = self.generate_circle_points(circle_center, circle_radius, normal_vector, num_points=num_points)
+            circle_points = self.generate_circle_points(
+                circle_center, circle_radius, normal_vector, num_points=num_points
+            )
             theta, phi = self.convert_to_spherical(circle_points, ref_center)
             cos_theta = np.cos(theta)
             ax.scatter(phi, cos_theta, marker=".", s=1, color=color)
@@ -362,7 +418,9 @@ class BubbleIntersections:
 
             # Scatter-plot intersection points if they exist
             if cos_theta_line is not None:
-                intersection_points_phi = intersection.get("intersection_points_phi", [])
+                intersection_points_phi = intersection.get(
+                    "intersection_points_phi", []
+                )
                 middle_point_inside = intersection.get("middle_point_inside", None)
 
                 if len(intersection_points_phi) == 2:
@@ -381,7 +439,9 @@ class BubbleIntersections:
             middle_point_inside_list = []
 
             for intersection in intersections:
-                intersection_points_phi = intersection.get("intersection_points_phi", [])
+                intersection_points_phi = intersection.get(
+                    "intersection_points_phi", []
+                )
                 middle_point_inside = intersection.get("middle_point_inside", None)
 
                 if len(intersection_points_phi) == 2:
@@ -389,7 +449,11 @@ class BubbleIntersections:
                     middle_point_inside_list.append(middle_point_inside)
 
             # Flatten the intersection_points_phi_list into a single list of tuples
-            sub_segments = [(phi1, phi2) for phi_pair in intersection_points_phi_list for phi1, phi2 in [phi_pair]]
+            sub_segments = [
+                (phi1, phi2)
+                for phi_pair in intersection_points_phi_list
+                for phi1, phi2 in [phi_pair]
+            ]
 
             # Create an instance of SegmentComplement
             segment_complement = SegmentComplement(bound_segments=(0, 2 * np.pi))
@@ -413,11 +477,17 @@ class BubbleIntersections:
                     color="black",
                     linestyle="-",
                     lw=2,
-                    zorder=10
+                    zorder=10,
                 )
 
             # Draw the horizontal dashed line
-            ax.axhline(cos_theta_line, color="gray", linestyle="--", lw=1, label="Horizontal Line")
+            ax.axhline(
+                cos_theta_line,
+                color="gray",
+                linestyle="--",
+                lw=1,
+                label="Horizontal Line",
+            )
 
         # Set axis limits and labels
         ax.set_xlim(0, 2 * np.pi)
@@ -428,7 +498,17 @@ class BubbleIntersections:
 
         # Customize ticks
         phi_ticks = np.arange(0, 2 * np.pi + 0.01, np.pi / 4)
-        phi_labels = ["$0$", r"$\pi/4$", r"$\pi/2$", r"$3\pi/4$", r"$\pi$", r"$5\pi/4$", r"$3\pi/2$", r"$7\pi/4$", r"$2\pi$"]
+        phi_labels = [
+            "$0$",
+            r"$\pi/4$",
+            r"$\pi/2$",
+            r"$3\pi/4$",
+            r"$\pi$",
+            r"$5\pi/4$",
+            r"$3\pi/2$",
+            r"$7\pi/4$",
+            r"$2\pi$",
+        ]
         ax.set_xticks(phi_ticks)
         ax.set_xticklabels(phi_labels)
 
@@ -455,10 +535,12 @@ class BubbleIntersections:
         Returns:
             np.ndarray: B matrix with shape (2,) containing B_+ and B_- values.
         """
-        B_matrix = np.array([0., 0.])
+        B_matrix = np.array([0.0, 0.0])
 
         # Step 1: Call find_circle_line_intersections to get the updated dictionary
-        ref_data = self.find_circle_line_intersections(bubble_idx, t, cos_theta, eps=eps)
+        ref_data = self.find_circle_line_intersections(
+            bubble_idx, t, cos_theta, eps=eps
+        )
         if ref_data is None:
             return B_matrix
 
@@ -478,7 +560,11 @@ class BubbleIntersections:
                 middle_point_inside_list.append(middle_point_inside)
 
         # Flatten the intersection points into sub-segments
-        sub_segments = [(phi1, phi2) for phi_pair in intersection_points_phi_list for phi1, phi2 in [phi_pair]]
+        sub_segments = [
+            (phi1, phi2)
+            for phi_pair in intersection_points_phi_list
+            for phi1, phi2 in [phi_pair]
+        ]
 
         # Create an instance of SegmentComplement
         segment_complement = SegmentComplement(bound_segments=(0, 2 * np.pi))
@@ -492,12 +578,12 @@ class BubbleIntersections:
 
         # Get complementary segments
         complementary_segments = segment_complement.get_complementary_segments()
-        
+
         # Vectorize the integration over segments
         for segment in complementary_segments:
             B_matrix[0] += np.sin(2.0 * segment[1]) - np.sin(2.0 * segment[0])
             B_matrix[1] += -np.cos(2.0 * segment[1]) + np.cos(2.0 * segment[0])
-        
+
         # Apply the scaling factor
         B_matrix *= 0.25 * (1.0 - cos_theta**2)
         return B_matrix
@@ -532,13 +618,19 @@ class BubbleIntersections:
         cos_theta_arr = np.linspace(-1, 1, n_cos_theta)
 
         # Compute B matrix for all cos_theta values (shape: (n_cos_theta, 2))
-        B_matrix_arr = np.array([self.compute_B_matrix(bubble_idx, t, cos_theta, eps=eps) 
-                                for cos_theta in cos_theta_arr])
+        B_matrix_arr = np.array(
+            [
+                self.compute_B_matrix(bubble_idx, t, cos_theta, eps=eps)
+                for cos_theta in cos_theta_arr
+            ]
+        )
 
         # Vectorize the exponential term over w_arr
         # Shape of exp_term: (n_cos_theta, len(w_arr))
-        exp_term = np.exp(-1j * self.vw * w_arr * (t - tn) * cos_theta_arr[:, np.newaxis])
-        
+        exp_term = np.exp(
+            -1j * self.vw * w_arr * (t - tn) * cos_theta_arr[:, np.newaxis]
+        )
+
         # Compute integrand: multiply exp_term (n_cos_theta, len(w_arr)) by B_matrix_arr (n_cos_theta, 2)
         # Broadcasting gives integrand_arr shape: (n_cos_theta, len(w_arr), 2)
         integrand_arr = exp_term[:, :, np.newaxis] * B_matrix_arr[:, np.newaxis, :]
@@ -563,27 +655,31 @@ class BubbleIntersections:
             np.ndarray: Integrand array with shape (len(w_arr), 2) for this time step.
         """
         integrand = np.zeros((len(w_arr), 2), dtype=complex)
-        
+
         # Iterate over all bubbles
         for idx, bubble_idx in enumerate(self.bubble_indices):
             tn = self.bubble_nucleation_times[idx]
             if t < tn:
                 continue  # Skip bubbles that haven't nucleated yet
-            
+
             # Compute A matrix for this bubble at time t
-            A_matrix = self.compute_A_matrix(bubble_idx, t, w_arr, n_cos_theta=n_cos_theta, eps=eps)  # Shape: (len(w_arr), 2)
-            
+            A_matrix = self.compute_A_matrix(
+                bubble_idx, t, w_arr, n_cos_theta=n_cos_theta, eps=eps
+            )  # Shape: (len(w_arr), 2)
+
             # Compute time-dependent factors
             time_diff = t - tn
             time_factor = time_diff**3
             exp_factor = np.exp(1j * w_arr * time_diff)  # Shape: (len(w_arr),)
-            
+
             # Add contribution to integrand
             integrand += time_factor * exp_factor[:, np.newaxis] * A_matrix
-        
+
         return integrand
 
-    def compute_C_matrix(self, w_arr, n_cores=None, n_cos_theta=1000, eps=1e-6, chunk_size=1000):
+    def compute_C_matrix(
+        self, w_arr, n_cores=None, n_cos_theta=1000, eps=1e-6, chunk_size=1000
+    ):
         """
         Compute the C matrix (C+-) for given angular frequencies w_arr, summing over all bubbles,
         with parallelization over time steps using joblib and processing in chunks to optimize memory.
@@ -602,49 +698,52 @@ class BubbleIntersections:
         w_arr = np.asarray(w_arr)
         if w_arr.ndim == 0:
             w_arr = w_arr[np.newaxis]
-        
+
         # Initialize C matrix
         C_matrix = np.zeros((len(w_arr), 2), dtype=complex)
-        
+
         # Use the simulation time array and parameters
         t_arr = self.t_arr
-        
+
         # Determine number of cores
         if n_cores is None:
             n_cores = joblib.cpu_count()
-        
+
         # Calculate number of chunks
         n_steps = len(t_arr)
-        chunk_size = min(chunk_size, n_steps)  # Ensure chunk_size doesn’t exceed t_arr length
+        chunk_size = min(
+            chunk_size, n_steps
+        )  # Ensure chunk_size doesn’t exceed t_arr length
         n_chunks = (n_steps + chunk_size - 1) // chunk_size  # Ceiling division
-        
+
         # Process each chunk
         for chunk_idx in range(n_chunks):
             start_idx = chunk_idx * chunk_size
             end_idx = min((chunk_idx + 1) * chunk_size, n_steps)
             t_chunk = t_arr[start_idx:end_idx]  # Subset of time steps
-            
+
             # Parallel computation of integrand for this chunk
             integrand_list = Parallel(n_jobs=n_cores)(
                 delayed(self.compute_C_matrix_integrand)(
-                    t,
-                    w_arr,
-                    n_cos_theta=n_cos_theta,
-                    eps=eps
+                    t, w_arr, n_cos_theta=n_cos_theta, eps=eps
                 )
                 for t in t_chunk
             )
-            
+
             # Convert list to array for this chunk
-            integrand_chunk = np.array(integrand_list)  # Shape: (len(t_chunk), len(w_arr), 2)
-            
+            integrand_chunk = np.array(
+                integrand_list
+            )  # Shape: (len(t_chunk), len(w_arr), 2)
+
             # Integrate over this chunk using Simpson’s rule
-            chunk_integral = integrate.simpson(integrand_chunk, x=t_chunk, axis=0)  # Shape: (len(w_arr), 2)
-            
+            chunk_integral = integrate.simpson(
+                integrand_chunk, x=t_chunk, axis=0
+            )  # Shape: (len(w_arr), 2)
+
             # Accumulate the result
             C_matrix += chunk_integral
-        
+
         # Normalize by 1/(6π)
         C_matrix *= 1 / (6 * np.pi)
-        
+
         return C_matrix

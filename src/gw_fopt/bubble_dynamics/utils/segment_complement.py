@@ -1,13 +1,15 @@
 import json
 import matplotlib.pyplot as plt
 
+
 class SegmentComplement:
     """
     A class to manage and compute complementary segments for one or more main segments.
     Parameters:
-        bound_segments (tuple or list of tuples): 
+        bound_segments (tuple or list of tuples):
             A single tuple (start, end) or a list of tuples representing the main segments.
     """
+
     def __init__(self, bound_segments):
         if isinstance(bound_segments, tuple):
             self.bound_segments = [bound_segments]
@@ -19,7 +21,7 @@ class SegmentComplement:
         """
         Dynamically update the main segments.
         Parameters:
-            new_bound_segments (tuple or list of tuples): 
+            new_bound_segments (tuple or list of tuples):
                 A single tuple (start, end) or a list of tuples representing the new main segments.
             reset_sub_segments (bool): If True, clears existing sub-segments.
         """
@@ -30,7 +32,9 @@ class SegmentComplement:
         if reset_sub_segments:
             self.sub_segments_with_flags = []
 
-    def add_sub_segments(self, sub_segments, complement_flags=None, allow_out_of_bounds=False):
+    def add_sub_segments(
+        self, sub_segments, complement_flags=None, allow_out_of_bounds=False
+    ):
         """
         Add sub-segments to the collection, handling unsorted input and optionally allowing out-of-bounds sub-segments.
         Parameters:
@@ -42,6 +46,7 @@ class SegmentComplement:
             allow_out_of_bounds (bool): If True, allows sub-segments to extend beyond the main segment bounds.
                                         If False, raises an error for sub-segments that violate the bounds.
         """
+
         def normalize_sub_segment(sub):
             """Ensure start <= end for each sub-segment."""
             sub_start, sub_end = sub
@@ -59,7 +64,9 @@ class SegmentComplement:
         for sub, flag in zip(normalized_sub_segments, complement_flags):
             if flag:  # If flag is True, append the sub-segment directly
                 self.sub_segments_with_flags.append(sub)
-                self._original_true_sub_segments.append(sub)  # Track original True sub-segments
+                self._original_true_sub_segments.append(
+                    sub
+                )  # Track original True sub-segments
             else:  # If flag is False, compute the complement and append it
                 complement = self._compute_complement_for_single_segment(sub)
                 self.sub_segments_with_flags.extend(complement)
@@ -139,7 +146,8 @@ class SegmentComplement:
         for bound in self.bound_segments:
             current_start = bound[0]
             relevant_sub_segments = [
-                sub for sub in self.sub_segments_with_flags
+                sub
+                for sub in self.sub_segments_with_flags
                 if sub[0] < bound[1] and sub[1] > bound[0]
             ]
             relevant_sub_segments.sort(key=lambda x: x[0])
@@ -182,10 +190,12 @@ class SegmentComplement:
         Returns:
             A JSON string representing the object.
         """
-        return json.dumps({
-            "bound_segments": self.bound_segments,
-            "sub_segments_with_flags": self.sub_segments_with_flags
-        })
+        return json.dumps(
+            {
+                "bound_segments": self.bound_segments,
+                "sub_segments_with_flags": self.sub_segments_with_flags,
+            }
+        )
 
     @classmethod
     def from_json(cls, json_str):
@@ -211,32 +221,60 @@ class SegmentComplement:
 
         # Plot the main segments
         for i, bound in enumerate(self.bound_segments):
-            ax.plot([bound[0], bound[1]], [1, 1], 'b-', linewidth=4, label='Main Segments' if i == 0 else "")
+            ax.plot(
+                [bound[0], bound[1]],
+                [1, 1],
+                "b-",
+                linewidth=4,
+                label="Main Segments" if i == 0 else "",
+            )
 
         # Separate sub-segments by their complement_flags
         true_sub_segments = [sub for sub in self._original_true_sub_segments]
         false_sub_segments = [
-            sub for sub in self.sub_segments_with_flags 
+            sub
+            for sub in self.sub_segments_with_flags
             if sub not in self._original_true_sub_segments
         ]
 
         # Plot sub-segments with complement_flags=True (e.g., red at y=0.7)
         for i, sub in enumerate(true_sub_segments):
-            ax.plot([sub[0], sub[1]], [0.7, 0.7], 'r-', linewidth=3, label='Sub-Segments (True)' if i == 0 else "")
+            ax.plot(
+                [sub[0], sub[1]],
+                [0.7, 0.7],
+                "r-",
+                linewidth=3,
+                label="Sub-Segments (True)" if i == 0 else "",
+            )
 
         # Plot sub-segments with complement_flags=False (e.g., yellow at y=0.3)
         for i, sub in enumerate(false_sub_segments):
-            ax.plot([sub[0], sub[1]], [0.3, 0.3], 'y-', linewidth=3, label='Sub-Segments (False)' if i == 0 else "")
+            ax.plot(
+                [sub[0], sub[1]],
+                [0.3, 0.3],
+                "y-",
+                linewidth=3,
+                label="Sub-Segments (False)" if i == 0 else "",
+            )
 
         # Plot the complementary segments
         for i, comp in enumerate(self.get_complementary_segments()):
-            ax.plot([comp[0], comp[1]], [0, 0], 'g-', linewidth=3, label='Complementary Segments' if i == 0 else "")
+            ax.plot(
+                [comp[0], comp[1]],
+                [0, 0],
+                "g-",
+                linewidth=3,
+                label="Complementary Segments" if i == 0 else "",
+            )
 
         # Add legend and formatting
         ax.set_yticks([])
         ax.set_title("Segment Visualization")
-        ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
-        ax.set_xlim(min(b[0] for b in self.bound_segments) - 1, max(b[1] for b in self.bound_segments) + 1)
+        ax.legend(loc="upper left", bbox_to_anchor=(1, 1))
+        ax.set_xlim(
+            min(b[0] for b in self.bound_segments) - 1,
+            max(b[1] for b in self.bound_segments) + 1,
+        )
         ax.grid(True)
 
         return fig, ax

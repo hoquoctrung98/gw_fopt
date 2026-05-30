@@ -2,7 +2,6 @@ import pickle
 from typing import Optional, Tuple
 
 import matplotlib as mpl
-import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import LogNorm
 from matplotlib.ticker import LogFormatterSciNotation, LogLocator

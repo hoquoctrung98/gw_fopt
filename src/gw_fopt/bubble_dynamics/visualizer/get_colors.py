@@ -3,6 +3,7 @@ import matplotlib.colors as mcolors
 import numpy as np
 from typing import List, Union, Tuple
 
+
 # ------------------------------------------------------------------
 # Fully automatic detection using Matplotlib's own registry
 # ------------------------------------------------------------------
@@ -12,7 +13,7 @@ def _is_qualitative_cmap(cmap_input) -> bool:
     Uses Matplotlib's official categorization — no manual lists!
     """
     # Get the name if it's a Colormap object
-    if hasattr(cmap_input, 'name'):
+    if hasattr(cmap_input, "name"):
         name = cmap_input.name
     elif isinstance(cmap_input, str):
         name = cmap_input
@@ -28,7 +29,7 @@ def _is_qualitative_cmap(cmap_input) -> bool:
         # Fallback: very small number of colors → likely qualitative
         try:
             cmap_obj = plt.get_cmap(name)
-            return hasattr(cmap_obj, 'colors') and len(cmap_obj.colors) <= 32
+            return hasattr(cmap_obj, "colors") and len(cmap_obj.colors) <= 32
         except:
             return False
 
@@ -36,7 +37,9 @@ def _is_qualitative_cmap(cmap_input) -> bool:
 # ------------------------------------------------------------------
 # Clean, readable, and 100% correct main function
 # ------------------------------------------------------------------
-def get_colors_from_cmap(cmap: Union[str, mcolors.Colormap], n_colors: int) -> List[Tuple[float, float, float, float]]:
+def get_colors_from_cmap(
+    cmap: Union[str, mcolors.Colormap], n_colors: int
+) -> List[Tuple[float, float, float, float]]:
     """
     Return n distinct colors from a colormap.
 
@@ -57,7 +60,11 @@ def get_colors_from_cmap(cmap: Union[str, mcolors.Colormap], n_colors: int) -> L
         else:
             colors = [tuple(c) + (1.0,) if len(c) == 3 else tuple(c) for c in colors]
 
-        return colors[:n_colors] if n_colors <= len(colors) else [colors[i % len(colors)] for i in range(n_colors)]
+        return (
+            colors[:n_colors]
+            if n_colors <= len(colors)
+            else [colors[i % len(colors)] for i in range(n_colors)]
+        )
 
     # Continuous / sequential colormaps
     else:
@@ -66,12 +73,14 @@ def get_colors_from_cmap(cmap: Union[str, mcolors.Colormap], n_colors: int) -> L
         positions = np.linspace(0.0, 1.0, n_colors)
         return [cmap_obj(p) for p in positions]
 
+
 if __name__ == "__main__":
     test_cmaps = ["tab10", "Set1", "viridis", "plasma", "turbo", "cividis", "jet"]
     n = 20
 
-    fig, axes = plt.subplots(len(test_cmaps), 1, figsize=(10, 1.5 * len(test_cmaps)),
-                             constrained_layout=True)
+    fig, axes = plt.subplots(
+        len(test_cmaps), 1, figsize=(10, 1.5 * len(test_cmaps)), constrained_layout=True
+    )
 
     for ax, name in zip(axes, test_cmaps):
         colors = get_colors_from_cmap(name, n)

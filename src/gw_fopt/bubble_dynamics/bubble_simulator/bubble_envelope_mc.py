@@ -6,6 +6,7 @@ from scipy.spatial.distance import cdist
 from .bubble_formation_simulator import BubbleFormationSimulator
 from joblib import Parallel, delayed
 
+
 class BubbleEnvelopeMC:
     def __init__(self, simulator: BubbleFormationSimulator):
         """
@@ -36,7 +37,9 @@ class BubbleEnvelopeMC:
             )
 
         # Precompute bubble radii for all time steps
-        bubble_centers = self.simulator.bubble_df[["center_x", "center_y", "center_z"]].to_numpy()
+        bubble_centers = self.simulator.bubble_df[
+            ["center_x", "center_y", "center_z"]
+        ].to_numpy()
         nucleation_times = self.simulator.bubble_df["nucleation_time"].to_numpy()
         bubble_radii_over_time = np.maximum(
             self.simulator.vw * (self.simulator.t_arr[:, None] - nucleation_times), 0
@@ -110,7 +113,8 @@ class BubbleEnvelopeMC:
 
         # Parallelize computation across time steps
         total_surface_areas = Parallel(n_jobs=n_jobs)(
-            delayed(compute_for_time_step)(t_idx) for t_idx in range(len(self.simulator.t_arr))
+            delayed(compute_for_time_step)(t_idx)
+            for t_idx in range(len(self.simulator.t_arr))
         )
 
         return np.array(total_surface_areas)
@@ -159,8 +163,12 @@ class BubbleEnvelopeMC:
             pd.DataFrame: DataFrame with non-overlapping surface areas.
         """
         results = []
-        bubble_centers = self.simulator.bubble_df[["center_x", "center_y", "center_z"]].to_numpy()
-        bubble_radii = self.simulator.vw * (t - self.simulator.bubble_df["nucleation_time"].to_numpy())
+        bubble_centers = self.simulator.bubble_df[
+            ["center_x", "center_y", "center_z"]
+        ].to_numpy()
+        bubble_radii = self.simulator.vw * (
+            t - self.simulator.bubble_df["nucleation_time"].to_numpy()
+        )
 
         # Define a reference bubble (e.g., a bubble with radius L/2)
         reference_radius = self.simulator.L / 2
@@ -300,8 +308,12 @@ class BubbleEnvelopeMC:
         fig = plt.figure(figsize=(8, 8))
         ax = fig.add_subplot(111, projection="3d")
 
-        bubble_centers = self.simulator.bubble_df[["center_x", "center_y", "center_z"]].to_numpy()
-        bubble_radii = self.simulator.vw * (t - self.simulator.bubble_df["nucleation_time"].to_numpy())
+        bubble_centers = self.simulator.bubble_df[
+            ["center_x", "center_y", "center_z"]
+        ].to_numpy()
+        bubble_radii = self.simulator.vw * (
+            t - self.simulator.bubble_df["nucleation_time"].to_numpy()
+        )
 
         total_surface_area = 4 * np.pi * bubble_radii**2
         total_surface_area[bubble_radii <= 0] = 0
@@ -366,127 +378,152 @@ class BubbleEnvelopeMC:
     ) -> pd.DataFrame:
         """
         Compute the A-matrix for all bubbles at each time step.
-        
+
         Parameters:
             w (float): Frequency parameter in the exponential term.
             k_hat (np.ndarray): Input vector (3 components) that should be normalized before proceeding.
             base_samples (int): Total number of Monte Carlo samples across all bubbles.
             include_isolated_bubbles (bool): Whether to include isolated bubbles in the computation.
             n_jobs (int): Number of parallel jobs for computation (-1 uses all available cores).
-        
+
         Returns:
             pd.DataFrame: DataFrame containing A-matrices for all bubbles at each time step.
         """
         if self.simulator.t_arr is None:
-            raise ValueError("Simulation has not been run yet. Please call `run_simulation` first.")
+            raise ValueError(
+                "Simulation has not been run yet. Please call `run_simulation` first."
+            )
         if len(k_hat) != 3:
             raise ValueError("k_hat must be a 3-dimensional vector.")
-        
+
         # Normalize k_hat
         k_hat = k_hat / np.linalg.norm(k_hat)
-        
+
         # Precompute bubble radii for all time steps
-        bubble_centers = self.simulator.bubble_df[["center_x", "center_y", "center_z"]].to_numpy()
+        bubble_centers = self.simulator.bubble_df[
+            ["center_x", "center_y", "center_z"]
+        ].to_numpy()
         nucleation_times = self.simulator.bubble_df["nucleation_time"].to_numpy()
-        bubble_radii_over_time = np.maximum(self.simulator.vw * (self.simulator.t_arr[:, None] - nucleation_times), 0)
-        
+        bubble_radii_over_time = np.maximum(
+            self.simulator.vw * (self.simulator.t_arr[:, None] - nucleation_times), 0
+        )
+
         # Precompute valid indices (bubbles with positive radii at each time step)
         valid_indices_over_time = bubble_radii_over_time > 0
-        
+
         def compute_A_for_time_step(t_idx):
             valid_indices = valid_indices_over_time[t_idx]
             valid_centers = bubble_centers[valid_indices]
             valid_radii = bubble_radii_over_time[t_idx][valid_indices]
-            
+
             if len(valid_centers) == 0:
                 return []
-            
+
             # Allocate samples proportionally
             total_surface_area = 4 * np.pi * valid_radii**2
             sample_weights = total_surface_area / np.sum(total_surface_area)
             bubble_samples = np.floor(sample_weights * base_samples).astype(int)
             remaining_samples = int(base_samples - np.sum(bubble_samples))
-            
+
             if remaining_samples > 0:
                 fractional_parts = (sample_weights * base_samples) - bubble_samples
                 additional_samples = np.argsort(fractional_parts)[-remaining_samples:]
                 bubble_samples[additional_samples] += 1
-            
+
             results = []
             t = self.simulator.t_arr[t_idx]
-            
-            for idx, (center, radius, samples) in enumerate(zip(valid_centers, valid_radii, bubble_samples)):
+
+            for idx, (center, radius, samples) in enumerate(
+                zip(valid_centers, valid_radii, bubble_samples)
+            ):
                 if samples == 0 or radius <= 0:
-                    results.append({"bubble_idx": idx, "A_matrix": np.zeros((3, 3), dtype=complex)})
+                    results.append(
+                        {"bubble_idx": idx, "A_matrix": np.zeros((3, 3), dtype=complex)}
+                    )
                     continue
-                
+
                 # Generate points uniformly on the surface of the sphere
                 surface_points = self._sample_sphere_surface(center, radius, samples)
-                
+
                 # Clip points to the lattice boundaries
                 surface_points = np.clip(surface_points, 0, self.simulator.L)
-                
+
                 if len(surface_points) == 0:
-                    results.append({"bubble_idx": idx, "A_matrix": np.zeros((3, 3), dtype=complex)})
+                    results.append(
+                        {"bubble_idx": idx, "A_matrix": np.zeros((3, 3), dtype=complex)}
+                    )
                     continue
-                
+
                 # Check overlap with other bubbles
                 other_indices = np.arange(len(valid_centers)) != idx
                 other_centers = valid_centers[other_indices]
                 other_radii = valid_radii[other_indices]
-                
+
                 if len(other_centers) == 0:
                     non_overlapping_mask = np.ones(len(surface_points), dtype=bool)
                 else:
                     dist_matrix = cdist(surface_points, other_centers)
-                    non_overlapping_mask = np.all(dist_matrix >= other_radii + 1e-8, axis=1)  # Add tolerance
-                
+                    non_overlapping_mask = np.all(
+                        dist_matrix >= other_radii + 1e-8, axis=1
+                    )  # Add tolerance
+
                 non_overlapping_points = surface_points[non_overlapping_mask]
-                
+
                 if len(non_overlapping_points) == 0:
-                    results.append({"bubble_idx": idx, "A_matrix": np.zeros((3, 3), dtype=complex)})
+                    results.append(
+                        {"bubble_idx": idx, "A_matrix": np.zeros((3, 3), dtype=complex)}
+                    )
                     continue
-                
+
                 # Compute unit vectors x_hat for each point on the bubble surface
                 x_hat = (non_overlapping_points - center) / radius
-                
+
                 # Compute the exponential term for each point
                 exponential_term = np.exp(
-                    -1j * w * self.simulator.vw * (t - nucleation_times[valid_indices][idx]) * np.dot(x_hat, k_hat)
+                    -1j
+                    * w
+                    * self.simulator.vw
+                    * (t - nucleation_times[valid_indices][idx])
+                    * np.dot(x_hat, k_hat)
                 )
-                
+
                 # Initialize the symmetric A matrix
                 A = np.zeros((3, 3), dtype=complex)
-                
+
                 # Compute the integral for the upper triangular part of A
                 for i in range(3):
                     for j in range(i, 3):
                         integrand = x_hat[:, i] * x_hat[:, j] * exponential_term
-                        A[i, j] = np.mean(integrand) * (4 * np.pi)  # Monte Carlo estimate of the integral
-                
+                        A[i, j] = np.mean(integrand) * (
+                            4 * np.pi
+                        )  # Monte Carlo estimate of the integral
+
                 # Fill the lower triangular part using symmetry
                 A += A.T  # Add the transpose to fill the lower triangle
                 A /= 2  # Divide the entire matrix by 2 to ensure symmetry
-                
+
                 # Check if the bubble is isolated
                 is_isolated = all(
                     np.linalg.norm(center - c) >= r + radius + 1e-8
                     for c, r in zip(other_centers, other_radii)
                 )
-                
+
                 # Include only non-isolated bubbles if the flag is False
                 if include_isolated_bubbles or not is_isolated:
                     results.append({"bubble_idx": idx, "A_matrix": A})
                 else:
-                    results.append({"bubble_idx": idx, "A_matrix": np.zeros((3, 3), dtype=complex)})
-            
+                    results.append(
+                        {"bubble_idx": idx, "A_matrix": np.zeros((3, 3), dtype=complex)}
+                    )
+
             return results
 
         # Parallelize computation across time steps
         all_results = Parallel(n_jobs=n_jobs)(
-            delayed(compute_A_for_time_step)(t_idx) for t_idx in range(len(self.simulator.t_arr))
+            delayed(compute_A_for_time_step)(t_idx)
+            for t_idx in range(len(self.simulator.t_arr))
         )
-        
+
         # Flatten the results and create a DataFrame
         flattened_results = []
         for t_idx, results in enumerate(all_results):
@@ -498,7 +535,7 @@ class BubbleEnvelopeMC:
                         "A_matrix": result["A_matrix"],
                     }
                 )
-        
+
         return pd.DataFrame(flattened_results)
 
     def compute_C_matrix(
@@ -534,7 +571,9 @@ class BubbleEnvelopeMC:
         k_hat = k_hat / np.linalg.norm(k_hat)
 
         # Precompute bubble centers and nucleation times
-        bubble_centers = self.simulator.bubble_df[["center_x", "center_y", "center_z"]].to_numpy()
+        bubble_centers = self.simulator.bubble_df[
+            ["center_x", "center_y", "center_z"]
+        ].to_numpy()
         nucleation_times = self.simulator.bubble_df["nucleation_time"].to_numpy()
 
         # Compute A matrices over time
