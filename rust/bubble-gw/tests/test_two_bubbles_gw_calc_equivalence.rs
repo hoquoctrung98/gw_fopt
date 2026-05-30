@@ -80,7 +80,7 @@ fn old_and_new_compute_angular_gw_spectrum_match() -> Result<(), Box<dyn Error>>
         time_cutoff,
     )?;
     new_calc.set_num_threads(1)?;
-    new_calc.set_integration_params(Integral::G15K31(1e-8, 40))?;
+    new_calc.set_integration_params(Integral::G30K61(1e-8, 40))?;
     // new_calc.set_integration_params("G15K31", 1e-8, 40)?;
 
     let w_arr = [0.4, 0.9, 1.7];

@@ -13,6 +13,11 @@ pub trait TimeCutoff: Clone + Send + Sync {
 
 pub trait IntegrationDomain: Clone + Send + Sync {
     fn u_bounds(&self, s: f64, sign: f64) -> (f64, f64);
+
+    #[inline]
+    fn u_max(&self, s: f64) -> f64 {
+        self.u_bounds(s, 1.0).1
+    }
 }
 
 /// Configuration for cutoff parameters in the gravitational wave calculator.
@@ -55,6 +60,11 @@ impl IntegrationDomain for ExponentialTimeCutoff {
         let u_max = 1.0 + (self.t_cut + 7.0 * self.t_0) / s;
         (u_min, u_max)
     }
+
+    #[inline]
+    fn u_max(&self, s: f64) -> f64 {
+        1.0 + (self.t_cut + 7.0 * self.t_0) / s
+    }
 }
 
 /// Enum to represent the type of integrand to compute.
@@ -66,81 +76,171 @@ pub enum IntegrandType {
     XZ,
 }
 
-pub struct GwIntegrand<T>
+pub trait SignRegion: Copy + Send + Sync {
+    const SIGN: f64;
+    const U_MIN: f64;
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct PositiveRegion;
+
+impl SignRegion for PositiveRegion {
+    const SIGN: f64 = 1.0;
+    const U_MIN: f64 = 0.0;
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct NegativeRegion;
+
+impl SignRegion for NegativeRegion {
+    const SIGN: f64 = -1.0;
+    const U_MIN: f64 = 1.0;
+}
+
+pub trait TensorComponent: Copy + Send + Sync {
+    fn compute<T, R>(integrand: &GwIntegrand<T, R, Self>, u: f64) -> Complex64
+    where
+        T: TimeCutoff,
+        R: SignRegion;
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct XXComponent;
+
+impl TensorComponent for XXComponent {
+    #[inline(always)]
+    fn compute<T, R>(integrand: &GwIntegrand<T, R, Self>, u: f64) -> Complex64
+    where
+        T: TimeCutoff,
+        R: SignRegion,
+    {
+        let u_squared_plus_sign = u * u + R::SIGN;
+        let sqrt_term = u_squared_plus_sign.sqrt();
+        let bessel_arg = integrand.w * integrand.sin_thetak * integrand.s * sqrt_term;
+        let wsu = integrand.w * integrand.s * u;
+        let exp_term_real = wsu.cos();
+        let exp_term_imag = wsu.sin();
+        let cutoff_val = integrand.time_cutoff.evaluate(u * integrand.s);
+        let bessel_0 = Jn(0, bessel_arg);
+        let bessel_2 = Jn(2, bessel_arg);
+        let bessel_diff = bessel_0 - bessel_2;
+        Complex64::new(
+            u_squared_plus_sign * exp_term_real * bessel_diff * cutoff_val,
+            u_squared_plus_sign * exp_term_imag * bessel_diff * cutoff_val,
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct YYComponent;
+
+impl TensorComponent for YYComponent {
+    #[inline(always)]
+    fn compute<T, R>(integrand: &GwIntegrand<T, R, Self>, u: f64) -> Complex64
+    where
+        T: TimeCutoff,
+        R: SignRegion,
+    {
+        let u_squared_plus_sign = u * u + R::SIGN;
+        let sqrt_term = u_squared_plus_sign.sqrt();
+        let bessel_arg = integrand.w * integrand.sin_thetak * integrand.s * sqrt_term;
+        let wsu = integrand.w * integrand.s * u;
+        let exp_term_real = wsu.cos();
+        let exp_term_imag = wsu.sin();
+        let cutoff_val = integrand.time_cutoff.evaluate(u * integrand.s);
+        let bessel_0 = Jn(0, bessel_arg);
+        let bessel_2 = Jn(2, bessel_arg);
+        let bessel_sum = bessel_0 + bessel_2;
+        Complex64::new(
+            u_squared_plus_sign * exp_term_real * bessel_sum * cutoff_val,
+            u_squared_plus_sign * exp_term_imag * bessel_sum * cutoff_val,
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct ZZComponent;
+
+impl TensorComponent for ZZComponent {
+    #[inline(always)]
+    fn compute<T, R>(integrand: &GwIntegrand<T, R, Self>, u: f64) -> Complex64
+    where
+        T: TimeCutoff,
+        R: SignRegion,
+    {
+        let u_squared_plus_sign = u * u + R::SIGN;
+        let sqrt_term = u_squared_plus_sign.sqrt();
+        let bessel_arg = integrand.w * integrand.sin_thetak * integrand.s * sqrt_term;
+        let wsu = integrand.w * integrand.s * u;
+        let exp_term_real = wsu.cos();
+        let exp_term_imag = wsu.sin();
+        let cutoff_val = integrand.time_cutoff.evaluate(u * integrand.s);
+        let bessel_0 = Jn(0, bessel_arg);
+        Complex64::new(exp_term_real * bessel_0 * cutoff_val, exp_term_imag * bessel_0 * cutoff_val)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct XZComponent;
+
+impl TensorComponent for XZComponent {
+    #[inline(always)]
+    fn compute<T, R>(integrand: &GwIntegrand<T, R, Self>, u: f64) -> Complex64
+    where
+        T: TimeCutoff,
+        R: SignRegion,
+    {
+        let u_squared_plus_sign = u * u + R::SIGN;
+        let sqrt_term = u_squared_plus_sign.sqrt();
+        let bessel_arg = integrand.w * integrand.sin_thetak * integrand.s * sqrt_term;
+        let wsu = integrand.w * integrand.s * u;
+        let exp_term_real = wsu.cos();
+        let exp_term_imag = wsu.sin();
+        let cutoff_val = integrand.time_cutoff.evaluate(u * integrand.s);
+        let bessel_1 = Jn(1, bessel_arg);
+        let factor = R::SIGN * sqrt_term;
+        Complex64::new(
+            factor * exp_term_real * bessel_1 * cutoff_val,
+            factor * exp_term_imag * bessel_1 * cutoff_val,
+        )
+    }
+}
+
+pub struct GwIntegrand<T, R, C>
 where
     T: TimeCutoff,
+    R: SignRegion,
+    C: TensorComponent,
 {
     time_cutoff: T,
     w: f64,
     sin_thetak: f64,
     s: f64,
-    sign: f64,
+    _region: std::marker::PhantomData<R>,
+    _component: std::marker::PhantomData<C>,
 }
 
-impl<T> GwIntegrand<T>
+impl<T, R, C> GwIntegrand<T, R, C>
 where
     T: TimeCutoff,
+    R: SignRegion,
+    C: TensorComponent,
 {
     #[inline]
-    pub fn new(time_cutoff: T, w: f64, cos_thetak: f64, s: f64, sign: f64) -> Self {
+    pub fn new(time_cutoff: T, w: f64, cos_thetak: f64, s: f64) -> Self {
         Self {
             time_cutoff,
             w,
             sin_thetak: (1.0 - cos_thetak * cos_thetak).sqrt(),
             s,
-            sign,
+            _region: std::marker::PhantomData,
+            _component: std::marker::PhantomData,
         }
     }
 
     #[inline(always)]
-    pub fn compute(&self, u: f64, int_type: IntegrandType) -> Complex64 {
-        let u_squared_plus_sign = u * u + self.sign;
-        let sqrt_term = u_squared_plus_sign.sqrt();
-        let bessel_arg = self.w * self.sin_thetak * self.s * sqrt_term;
-        let wsu = self.w * self.s * u;
-        let exp_term_real = wsu.cos();
-        let exp_term_imag = wsu.sin();
-        let cutoff_val = self.time_cutoff.evaluate(u * self.s);
-
-        let (bessel_0, bessel_1, bessel_2) = match int_type {
-            IntegrandType::XX | IntegrandType::YY => {
-                let b0 = Jn(0, bessel_arg);
-                let b2 = Jn(2, bessel_arg);
-                (b0, 0.0, b2)
-            },
-            IntegrandType::ZZ => (Jn(0, bessel_arg), 0.0, 0.0),
-            IntegrandType::XZ => (0.0, Jn(1, bessel_arg), 0.0),
-        };
-
-        let (real, imag) = match int_type {
-            IntegrandType::XX => {
-                let factor = u_squared_plus_sign;
-                let bessel_diff = bessel_0 - bessel_2;
-                (
-                    factor * exp_term_real * bessel_diff * cutoff_val,
-                    factor * exp_term_imag * bessel_diff * cutoff_val,
-                )
-            },
-            IntegrandType::YY => {
-                let factor = u_squared_plus_sign;
-                let bessel_sum = bessel_0 + bessel_2;
-                (
-                    factor * exp_term_real * bessel_sum * cutoff_val,
-                    factor * exp_term_imag * bessel_sum * cutoff_val,
-                )
-            },
-            IntegrandType::ZZ => {
-                (exp_term_real * bessel_0 * cutoff_val, exp_term_imag * bessel_0 * cutoff_val)
-            },
-            IntegrandType::XZ => {
-                let factor = self.sign * sqrt_term;
-                (
-                    factor * exp_term_real * bessel_1 * cutoff_val,
-                    factor * exp_term_imag * bessel_1 * cutoff_val,
-                )
-            },
-        };
-        Complex64::new(real, imag)
+    pub fn compute(&self, u: f64) -> Complex64 {
+        C::compute(self, u)
     }
 }
 
@@ -540,12 +640,12 @@ where
             .lattice
             .s_grid
             .slice(s![1..])
-            .mapv(|s| self.integral_u_quad(IntegrandType::ZZ, s, cos_thetak, w, -1.0));
+            .mapv(|s| self.integral_u_quad::<NegativeRegion, ZZComponent>(s, cos_thetak, w));
         let u_zz_r2: Array1<Complex64> = self
             .lattice
             .s_grid
             .slice(s![1..])
-            .mapv(|s| self.integral_u_quad(IntegrandType::ZZ, s, cos_thetak, w, 1.0));
+            .mapv(|s| self.integral_u_quad::<PositiveRegion, ZZComponent>(s, cos_thetak, w));
 
         let zz_result: Array1<Complex64> = u_zz_r1
             .iter()
@@ -585,10 +685,10 @@ where
         };
         let u_xx_r1: Array1<Complex64> = self
             .s_offset
-            .mapv(|s| self.integral_u_quad(IntegrandType::XX, s, cos_thetak, w, -1.0));
+            .mapv(|s| self.integral_u_quad::<NegativeRegion, XXComponent>(s, cos_thetak, w));
         let u_xx_r2: Array1<Complex64> = self
             .s_offset
-            .mapv(|s| self.integral_u_quad(IntegrandType::XX, s, cos_thetak, w, 1.0));
+            .mapv(|s| self.integral_u_quad::<PositiveRegion, XXComponent>(s, cos_thetak, w));
 
         let xx_result: Array1<Complex64> = u_xx_r1
             .iter()
@@ -634,10 +734,10 @@ where
         };
         let u_yy_r1: Array1<Complex64> = self
             .s_offset
-            .mapv(|s| self.integral_u_quad(IntegrandType::YY, s, cos_thetak, w, -1.0));
+            .mapv(|s| self.integral_u_quad::<NegativeRegion, YYComponent>(s, cos_thetak, w));
         let u_yy_r2: Array1<Complex64> = self
             .s_offset
-            .mapv(|s| self.integral_u_quad(IntegrandType::YY, s, cos_thetak, w, 1.0));
+            .mapv(|s| self.integral_u_quad::<PositiveRegion, YYComponent>(s, cos_thetak, w));
 
         let yy_result: Array1<Complex64> = u_yy_r1
             .iter()
@@ -687,10 +787,10 @@ where
         };
         let u_xz_r1: Array1<Complex64> = self
             .s_offset
-            .mapv(|s| self.integral_u_quad(IntegrandType::XZ, s, cos_thetak, w, -1.0));
+            .mapv(|s| self.integral_u_quad::<NegativeRegion, XZComponent>(s, cos_thetak, w));
         let u_xz_r2: Array1<Complex64> = self
             .s_offset
-            .mapv(|s| self.integral_u_quad(IntegrandType::XZ, s, cos_thetak, w, 1.0));
+            .mapv(|s| self.integral_u_quad::<PositiveRegion, XZComponent>(s, cos_thetak, w));
 
         let xz_result: Array1<Complex64> = u_xz_r1
             .iter()
@@ -723,17 +823,17 @@ where
         t_xz
     }
 
-    pub fn integral_u_quad(
-        &self,
-        int_type: IntegrandType,
-        s: f64,
-        cos_thetak: f64,
-        w: f64,
-        sign: f64,
-    ) -> Complex64 {
-        let (u_min, u_max) = self.time_cutoff.u_bounds(s, sign);
-        let integrand_kernel = GwIntegrand::new(self.time_cutoff.clone(), w, cos_thetak, s, sign);
-        let integrand = |u: f64| -> Complex64 { integrand_kernel.compute(u, int_type) };
+    #[inline]
+    fn integral_u_quad<R, C>(&self, s: f64, cos_thetak: f64, w: f64) -> Complex64
+    where
+        R: SignRegion,
+        C: TensorComponent,
+    {
+        let u_min = R::U_MIN;
+        let u_max = self.time_cutoff.u_max(s);
+        let integrand_kernel =
+            GwIntegrand::<_, R, C>::new(self.time_cutoff.clone(), w, cos_thetak, s);
+        let integrand = |u: f64| -> Complex64 { integrand_kernel.compute(u) };
 
         integrate_with_method(integrand, (u_min, u_max), self.quadrature.method)
     }
