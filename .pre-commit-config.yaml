@@ -1,6 +1,19 @@
 repos:
 -   repo: https://github.com/mwouts/jupytext
-    rev: v1.11.2  # (replace with the latest stable version)
+    rev: v1.19.3
     hooks:
     - id: jupytext
       args: [--from, ipynb, --to, "py"]
+-   repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.15
+    hooks:
+    - id: ruff-format
+      types_or: [python, pyi]
+-   repo: local
+    hooks:
+    - id: cargo-fmt
+      name: cargo fmt
+      entry: bash -c 'cd rust && cargo fmt --all'
+      language: system
+      pass_filenames: false
+      types: [rust]

@@ -3,9 +3,14 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    rust-overlay.url = "github:oxalica/rust-overlay";
   };
 
-  outputs = {nixpkgs, ...}: let
+  outputs = {
+    nixpkgs,
+    rust-overlay,
+    ...
+  }: let
     systems = [
       "x86_64-linux"
       "aarch64-linux"
@@ -13,11 +18,11 @@
     forAllSystems = nixpkgs.lib.genAttrs systems;
   in {
     devShells = forAllSystems (system: let
-      pkgs = import nixpkgs {inherit system;};
+      pkgs = import nixpkgs {
+        inherit system;
+        overlays = [rust-overlay.overlays.default];
+      };
       nativeLibraries = with pkgs; [
-        # stdenv.cc.cc.lib
-        # openssl
-        # libffi
         # hdf5
         # openblas
       ];
@@ -26,28 +31,31 @@
         packages = with pkgs; [
           pkg-config
           git
+          uv
+          (rust-bin.stable.latest.default.override {
+            extensions = [
+              "clippy"
+              "rustfmt"
+            ];
+          })
         ];
 
         env = {
-          UV_PYTHON_DOWNLOADS = "managed";
-          UV_LINK_MODE = "copy";
+          UV_PYTHON_DOWNLOADS = "auto";
+          UV_LINK_MODE = "clone";
           RUST_BACKTRACE = "1";
           LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath nativeLibraries;
         };
 
         shellHook = ''
           echo "gw_fopt Nix shell"
-          echo "  Nix:    native libraries and build helpers only"
+          echo "  Nix:    native libraries, uv, and Rust toolchain"
           echo "  Python: managed by uv"
-          echo "  Rust:   managed by your external toolchain"
+          echo "  Rust:   managed by nixpkgs + rust-overlay"
           echo ""
 
           if ! command -v uv >/dev/null 2>&1; then
-            echo "warning: uv is not on PATH. Install uv outside Nix or expose it before entering this shell."
-          fi
-
-          if ! command -v cargo >/dev/null 2>&1; then
-            echo "warning: cargo is not on PATH. Load your external Rust toolchain before entering this shell."
+            echo "warning: uv is not on PATH."
           fi
 
           echo "Typical workflow:"
