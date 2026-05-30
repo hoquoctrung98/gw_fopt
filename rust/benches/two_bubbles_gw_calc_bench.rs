@@ -1,6 +1,7 @@
 use std::hint::black_box;
 use std::time::{Duration, Instant};
 
+use bubble_gw::two_bubbles::Integral;
 use bubble_gw::two_bubbles::gw_calc::{
     GravitationalWaveCalculator as OldGravitationalWaveCalculator,
     InitialFieldStatus as OldInitialFieldStatus,
@@ -86,7 +87,7 @@ fn setup_new_calculator(
     .expect("failed to construct new calculator");
     calc.set_num_threads(num_threads)
         .expect("failed to set new calculator thread count");
-    calc.set_integral_params(TOL, MAX_ITER)
+    calc.set_integration_params(Integral::G30K61(TOL, MAX_ITER))
         .expect("failed to set new calculator integral params");
     calc
 }

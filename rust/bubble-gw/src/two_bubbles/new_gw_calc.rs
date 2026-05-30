@@ -157,6 +157,8 @@ impl Default for QuadratureConfig {
     }
 }
 
+// there's an issue of using method `integrate` of peroxide directly with gauss-kronrod methods,
+// this is temporary solution
 #[inline]
 fn integrate_with_method<F>(f: F, interval: (f64, f64), method: Integral) -> Complex64
 where
@@ -359,34 +361,34 @@ where
         Ok(())
     }
 
-    pub fn set_integral_params(&mut self, tol: f64, max_iter: u32) -> Result<(), GWCalcError> {
-        if tol <= 0.0 {
-            return Err(GWCalcError::InvalidTolerance(tol));
-        }
-        if max_iter == 0 {
-            return Err(GWCalcError::InvalidMaxIter(max_iter));
-        }
-        self.quadrature.method = match self.quadrature.method {
-            Integral::G7K15(..) => Integral::G7K15(tol, max_iter),
-            Integral::G10K21(..) => Integral::G10K21(tol, max_iter),
-            Integral::G15K31(..) => Integral::G15K31(tol, max_iter),
-            Integral::G20K41(..) => Integral::G20K41(tol, max_iter),
-            Integral::G25K51(..) => Integral::G25K51(tol, max_iter),
-            Integral::G30K61(..) => Integral::G30K61(tol, max_iter),
-            Integral::G7K15R(..) => Integral::G7K15R(tol, max_iter),
-            Integral::G10K21R(..) => Integral::G10K21R(tol, max_iter),
-            Integral::G15K31R(..) => Integral::G15K31R(tol, max_iter),
-            Integral::G20K41R(..) => Integral::G20K41R(tol, max_iter),
-            Integral::G25K51R(..) => Integral::G25K51R(tol, max_iter),
-            Integral::G30K61R(..) => Integral::G30K61R(tol, max_iter),
-            Integral::GaussLegendre(_) | Integral::NewtonCotes(_) => {
-                return Err(GWCalcError::IntegralParamsUnsupported);
-            },
-        };
-        Ok(())
-    }
+    // pub fn set_integral_params(&mut self, tol: f64, max_iter: u32) -> Result<(), GWCalcError> {
+    //     if tol <= 0.0 {
+    //         return Err(GWCalcError::InvalidTolerance(tol));
+    //     }
+    //     if max_iter == 0 {
+    //         return Err(GWCalcError::InvalidMaxIter(max_iter));
+    //     }
+    //     self.quadrature.method = match self.quadrature.method {
+    //         Integral::G7K15(..) => Integral::G7K15(tol, max_iter),
+    //         Integral::G10K21(..) => Integral::G10K21(tol, max_iter),
+    //         Integral::G15K31(..) => Integral::G15K31(tol, max_iter),
+    //         Integral::G20K41(..) => Integral::G20K41(tol, max_iter),
+    //         Integral::G25K51(..) => Integral::G25K51(tol, max_iter),
+    //         Integral::G30K61(..) => Integral::G30K61(tol, max_iter),
+    //         Integral::G7K15R(..) => Integral::G7K15R(tol, max_iter),
+    //         Integral::G10K21R(..) => Integral::G10K21R(tol, max_iter),
+    //         Integral::G15K31R(..) => Integral::G15K31R(tol, max_iter),
+    //         Integral::G20K41R(..) => Integral::G20K41R(tol, max_iter),
+    //         Integral::G25K51R(..) => Integral::G25K51R(tol, max_iter),
+    //         Integral::G30K61R(..) => Integral::G30K61R(tol, max_iter),
+    //         Integral::GaussLegendre(_) | Integral::NewtonCotes(_) => {
+    //             return Err(GWCalcError::IntegralParamsUnsupported);
+    //         },
+    //     };
+    //     Ok(())
+    // }
 
-    pub fn set_integration_method(&mut self, method: Integral) -> Result<(), GWCalcError> {
+    pub fn set_integration_params(&mut self, method: Integral) -> Result<(), GWCalcError> {
         Self::validate_integration_method(method)?;
         self.quadrature.method = method;
         Ok(())

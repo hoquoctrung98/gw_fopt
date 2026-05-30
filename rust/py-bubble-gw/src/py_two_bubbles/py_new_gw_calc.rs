@@ -1,3 +1,4 @@
+use bubble_gw::two_bubbles::Integral;
 use bubble_gw::two_bubbles::new_gw_calc::{
     ExponentialTimeCutoff,
     GWCalcError,
@@ -13,7 +14,6 @@ use numpy::{
     PyReadonlyArray1,
     PyReadonlyArray3,
 };
-use peroxide::numerical::integral::Integral;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use thiserror::Error;
@@ -206,13 +206,8 @@ impl PyNewGravitationalWaveCalculator {
         Ok(())
     }
 
-    fn set_integral_params(&mut self, tol: f64, max_iter: u32) -> PyResult<()> {
-        self.inner.set_integral_params(tol, max_iter)?;
-        Ok(())
-    }
-
     #[pyo3(signature = (method, n = None, tol = None, max_iter = None))]
-    fn set_integration_method(
+    fn set_integration_params(
         &mut self,
         method: &str,
         n: Option<usize>,
@@ -220,7 +215,7 @@ impl PyNewGravitationalWaveCalculator {
         max_iter: Option<u32>,
     ) -> PyResult<()> {
         let method = parse_integration_method(method, n, tol, max_iter)?;
-        self.inner.set_integration_method(method)?;
+        self.inner.set_integration_params(method)?;
         Ok(())
     }
 

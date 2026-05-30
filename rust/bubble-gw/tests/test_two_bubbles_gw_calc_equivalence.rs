@@ -80,7 +80,8 @@ fn old_and_new_compute_angular_gw_spectrum_match() -> Result<(), Box<dyn Error>>
         time_cutoff,
     )?;
     new_calc.set_num_threads(1)?;
-    new_calc.set_integral_params(1e-8, 40)?;
+    new_calc.set_integration_params(Integral::G15K31(1e-8, 40))?;
+    // new_calc.set_integration_params("G15K31", 1e-8, 40)?;
 
     let w_arr = [0.4, 0.9, 1.7];
     let cos_thetak_arr = [-1.0, -0.65, -0.1, 0.45, 1.0];
@@ -114,7 +115,7 @@ fn new_gw_calc_supports_peroxide_integration_methods() -> Result<(), Box<dyn Err
             time_cutoff.clone(),
         )?;
         calc.set_num_threads(1)?;
-        calc.set_integration_method(method)?;
+        calc.set_integration_params(method)?;
         let spectrum = calc.compute_angular_gw_spectrum(w_arr, cos_thetak_arr)?;
         assert_eq!(spectrum.shape(), &[cos_thetak_arr.len(), w_arr.len()]);
         assert!(spectrum.iter().all(|value| value.is_finite()));

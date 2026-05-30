@@ -1,5 +1,6 @@
 use ndarray::prelude::*;
 use num_complex::Complex64;
+pub use peroxide::numerical::integral::Integral;
 use peroxide::numerical::integral::Integral::G30K61;
 use peroxide::numerical::integral::gauss_kronrod_quadrature;
 use rayon::prelude::*;

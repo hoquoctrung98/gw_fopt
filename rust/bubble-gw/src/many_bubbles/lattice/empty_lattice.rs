@@ -38,7 +38,8 @@ impl TransformationIsometry3 for EmptyLattice {
         EmptyLattice {}
     }
 
-    fn transform_mut<I: Into<Isometry3<f64>>>(&mut self, _iso: I) {}
+    fn transform_mut<I: Into<Isometry3<f64>>>(&mut self, _iso: I) {
+    }
 }
 
 // Generate no exterior bubbles as we have no information about the lattice
