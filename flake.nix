@@ -32,7 +32,7 @@
           pkg-config
           git
           uv
-          (rust-bin.stable.latest.default.override {
+          (rust-bin.nightly.latest.default.override {
             extensions = [
               "clippy"
               "rustfmt"
