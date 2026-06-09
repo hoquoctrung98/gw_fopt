@@ -21,7 +21,6 @@
 """
 
 import sys
-from typing import Any, Callable, Iterable, List, Optional, Tuple, Union
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -66,7 +65,6 @@ plt.rc("text.latex", preamble=r"\usepackage{amsmath}")
 # %%
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
-import numpy as np
 
 
 class BubbleCollision:
@@ -352,7 +350,6 @@ class BubbleCollision:
 
 # %%
 import matplotlib.pyplot as plt
-import numpy as np
 from matplotlib import colormaps
 from scipy.stats import linregress
 
@@ -652,7 +649,7 @@ fig, ax = plt.subplots(1, 1, figsize=(8, 6))
 bubble_collision.plot_first_collision_indices(fig, ax)
 ax.grid(True)
 fig.savefig(
-    f"./figures/two_bubbles/first_collision.png",
+    "./figures/two_bubbles/first_collision.png",
     bbox_inches="tight",
     facecolor="white",
 )
@@ -662,7 +659,7 @@ fig
 fig, ax = plt.subplots(1, 1, figsize=(8, 6))
 bubble_collision.plot_collision_time(fig, ax, vmax=10)
 fig.savefig(
-    f"./figures/two_bubbles/collision_time.png", bbox_inches="tight", facecolor="white"
+    "./figures/two_bubbles/collision_time.png", bbox_inches="tight", facecolor="white"
 )
 fig
 
@@ -672,7 +669,7 @@ bubble_collision.plot_collision_status(
     fig, ax, t=1, colors=["#000000", "#37ff00", "#ff3025"]
 )
 fig.savefig(
-    f"./figures/two_bubbles/collision_status.png",
+    "./figures/two_bubbles/collision_status.png",
     bbox_inches="tight",
     facecolor="white",
 )
@@ -733,7 +730,7 @@ ax.vlines(
 )
 ax.legend(bbox_to_anchor=(1.02, 1), loc="upper left", borderaxespad=0.0, fontsize=14)
 fig.savefig(
-    f"./figures/two_bubbles/gw_spectrum_apprx.png",
+    "./figures/two_bubbles/gw_spectrum_apprx.png",
     bbox_inches="tight",
     facecolor="white",
 )
@@ -778,7 +775,7 @@ fig, ax = plt.subplots(1, 1, figsize=(8, 6))
 bubble_collision.plot_first_collision_indices(fig, ax)
 ax.grid(True)
 fig.savefig(
-    f"./figures/many_bubbles/first_collision.png",
+    "./figures/many_bubbles/first_collision.png",
     bbox_inches="tight",
     facecolor="white",
 )
@@ -788,7 +785,7 @@ fig
 fig, ax = plt.subplots(1, 1, figsize=(8, 6))
 bubble_collision.plot_collision_time(fig, ax)
 fig.savefig(
-    f"./figures/many_bubbles/collision_time.png", bbox_inches="tight", facecolor="white"
+    "./figures/many_bubbles/collision_time.png", bbox_inches="tight", facecolor="white"
 )
 fig
 
@@ -798,7 +795,7 @@ bubble_collision.plot_collision_status(
     fig, ax, t=1, colors=["#000000", "#37ff00", "#ff3025"]
 )
 fig.savefig(
-    f"./figures/many_bubbles/collision_status.png",
+    "./figures/many_bubbles/collision_status.png",
     bbox_inches="tight",
     facecolor="white",
 )

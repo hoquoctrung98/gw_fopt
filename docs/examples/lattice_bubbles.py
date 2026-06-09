@@ -746,7 +746,7 @@ ax.set_xlim(-1.5 * L, 1.5 * L)
 ax.set_ylim(-1.5 * L, 1.5 * L)
 ax.set_zlim(-1.5 * L, 1.5 * L)
 fig.savefig(
-    f"./figures/many_bubbles/many_bubbles_centers_cartesian.png",
+    "./figures/many_bubbles/many_bubbles_centers_cartesian.png",
     bbox_inches="tight",
     facecolor="white",
 )
@@ -776,7 +776,7 @@ ax.set_xlim(-1.5 * L, 1.5 * L)
 ax.set_ylim(-1.5 * L, 1.5 * L)
 ax.set_zlim(-1.5 * L, 1.5 * L)
 fig.savefig(
-    f"./figures/many_bubbles/many_bubbles_at_time_cartesian.png",
+    "./figures/many_bubbles/many_bubbles_at_time_cartesian.png",
     bbox_inches="tight",
     facecolor="white",
 )
@@ -825,7 +825,7 @@ visualizer_spherical.plot_lattice(
     fig, ax, skeleton_alpha=0.1, fill_alpha=0.1, show_grid=True
 )
 fig.savefig(
-    f"./figures/many_bubbles/many_bubbles_centers_spherical.png",
+    "./figures/many_bubbles/many_bubbles_centers_spherical.png",
     bbox_inches="tight",
     facecolor="white",
 )
@@ -856,7 +856,7 @@ ax.set_xlim(-2 * L, 2 * L)
 ax.set_ylim(-2 * L, 2 * L)
 ax.set_zlim(-2 * L, 2 * L)
 fig.savefig(
-    f"./figures/many_bubbles/many_bubbles_at_time_spherical.png",
+    "./figures/many_bubbles/many_bubbles_at_time_spherical.png",
     bbox_inches="tight",
     facecolor="white",
 )
@@ -920,7 +920,7 @@ ax.set_title(
 ax.set_ylim(bottom=0.0)
 ax.legend()
 fig.savefig(
-    f"./figures/many_bubbles/f_FV.png",
+    "./figures/many_bubbles/f_FV.png",
     bbox_inches="tight",
     facecolor="white",
 )
@@ -1102,7 +1102,7 @@ for i in range(2):
 
 fig.suptitle(f"Distribution over {len(bubbles_len)} histories")
 fig.savefig(
-    f"./figures/many_bubbles/distributions_over_histories.png",
+    "./figures/many_bubbles/distributions_over_histories.png",
     bbox_inches="tight",
     facecolor="white",
 )
@@ -1148,7 +1148,7 @@ ax.grid(True, alpha=0.3)
 ax.legend(fontsize=10)
 
 fig.savefig(
-    f"./figures/many_bubbles/V_FV_over_histories.png",
+    "./figures/many_bubbles/V_FV_over_histories.png",
     bbox_inches="tight",
     facecolor="white",
 )

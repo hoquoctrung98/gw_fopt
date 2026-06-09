@@ -25,7 +25,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 
-from gw_fopt.bubble_dynamics.bubble_simulator import LatticeSetup, PDEBubbleSolver
+from gw_fopt.bubble_dynamics.bubble_simulator import LatticeSetup
 from gw_fopt.bubble_dynamics.bubble_simulator.potentials import (
     QuarticPotential,
 )
@@ -85,7 +85,7 @@ potential.plot_potential(fig=fig, ax=ax, phi_range=phi_range, num_points=100000)
 ax.set_xlim(left=phi_range[0], right=phi_range[1])
 ax.set_ylim(-0.5, 2)
 fig.savefig(
-    rf"./figures/two_bubbles/potential.png", bbox_inches="tight", facecolor="white"
+    r"./figures/two_bubbles/potential.png", bbox_inches="tight", facecolor="white"
 )
 
 setup = (
@@ -96,7 +96,7 @@ setup = (
 fig, ax = setup.plot_profiles(npoints=1000)
 ax.legend()
 fig.savefig(
-    rf"./figures/two_bubbles/bubble_profiles.png",
+    r"./figures/two_bubbles/bubble_profiles.png",
     bbox_inches="tight",
     facecolor="white",
 )
@@ -149,12 +149,12 @@ analyzer.compute_surface_tension()
 
 fig, ax = analyzer.plot_field_evolution()
 fig.savefig(
-    f"./figures/two_bubbles/evolution_field.png", bbox_inches="tight", facecolor="white"
+    "./figures/two_bubbles/evolution_field.png", bbox_inches="tight", facecolor="white"
 )
 
 fig, ax = analyzer.plot_gradient_energy_density(plot_boundaries=True, cutoff=1e-4)
 fig.savefig(
-    f"./figures/two_bubbles/evolution_gradient_energy_density.png",
+    "./figures/two_bubbles/evolution_gradient_energy_density.png",
     bbox_inches="tight",
     facecolor="white",
 )
@@ -164,7 +164,7 @@ fig, ax = analyzer.plot_surface_tension(
     small_s_range=(4e-1, 6e-1), large_s_range=(2.12, 4), normalized=True
 )
 fig.savefig(
-    f"./figures/two_bubbles/surface_tension.png", bbox_inches="tight", facecolor="white"
+    "./figures/two_bubbles/surface_tension.png", bbox_inches="tight", facecolor="white"
 )
 
 # %%
@@ -200,5 +200,5 @@ ax.yaxis.set_major_locator(mpl.ticker.LogLocator(numticks=999))
 ax.yaxis.set_minor_locator(mpl.ticker.LogLocator(numticks=999, subs="auto"))
 ax.grid(True, which="both", alpha=0.5)
 fig.savefig(
-    f"./figures/two_bubbles/gw_spectrum.png", bbox_inches="tight", facecolor="white"
+    "./figures/two_bubbles/gw_spectrum.png", bbox_inches="tight", facecolor="white"
 )
