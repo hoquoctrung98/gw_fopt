@@ -1,0 +1,366 @@
+from __future__ import annotations
+
+from typing import Literal, TypeAlias
+
+import numpy as np
+import numpy.typing as npt
+
+Vec3: TypeAlias = tuple[float, float, float]
+Mat3: TypeAlias = tuple[Vec3, Vec3, Vec3]
+BoundaryCondition = Literal["periodic", "reflection", "none"]
+FixedRateNucleationMethod = Literal[
+    "fixed_probability_time_stepping",
+    "fixed_probability_distribution",
+]
+
+class Isometry3:
+    def __init__(
+        self,
+        translation: Vec3 = ...,
+        *,
+        euler_angles: Vec3 | None = ...,
+        rotation_matrix: Mat3 | None = ...,
+    ) -> None: ...
+    @staticmethod
+    def identity() -> Isometry3: ...
+    @staticmethod
+    def from_translation(translation: Vec3) -> Isometry3: ...
+    @staticmethod
+    def from_rotation(
+        *,
+        euler_angles: Vec3 | None = ...,
+        rotation_matrix: Mat3 | None = ...,
+    ) -> Isometry3: ...
+    @staticmethod
+    def from_euler_angles(roll: float, pitch: float, yaw: float) -> Isometry3: ...
+    @staticmethod
+    def from_axis_angle(axis: Vec3, angle: float) -> Isometry3: ...
+    def transform(self, other: Isometry3) -> Isometry3: ...
+    def rotate(
+        self,
+        *,
+        euler_angles: Vec3 | None = ...,
+        rotation_matrix: Mat3 | None = ...,
+    ) -> Isometry3: ...
+    def translate(self, translation: Vec3) -> Isometry3: ...
+    @property
+    def translation(self) -> Vec3: ...
+    @property
+    def rotation_matrix(self) -> Mat3: ...
+
+class ParallelepipedLattice:
+    def __init__(self, origin: Vec3, basis: Mat3) -> None: ...
+    @staticmethod
+    def axis_aligned(
+        origin: Vec3, lx: float, ly: float, lz: float
+    ) -> ParallelepipedLattice: ...
+    @staticmethod
+    def cube_centered(center: Vec3, side: float) -> ParallelepipedLattice: ...
+    def name(self) -> str: ...
+    def transform(self, iso: Isometry3) -> ParallelepipedLattice: ...
+    @property
+    def origin(self) -> Vec3: ...
+    @property
+    def basis(self) -> Mat3: ...
+    @property
+    def normalized_basis(self) -> Mat3: ...
+    @property
+    def volume(self) -> float: ...
+
+class CartesianLattice:
+    def __init__(self, origin: Vec3, basis: Mat3) -> None: ...
+    @staticmethod
+    def with_origin_and_sizes(origin: Vec3, sizes: Vec3) -> CartesianLattice: ...
+    def name(self) -> str: ...
+    def transform(self, iso: Isometry3) -> CartesianLattice: ...
+    @property
+    def origin(self) -> Vec3: ...
+    @property
+    def basis(self) -> Mat3: ...
+    @property
+    def side_lengths(self) -> Vec3: ...
+    @property
+    def normalized_basis(self) -> Mat3: ...
+    @property
+    def volume(self) -> float: ...
+
+class SphericalLattice:
+    def __init__(self, center: Vec3, radius: float) -> None: ...
+    def name(self) -> str: ...
+    def transform(self, iso: Isometry3) -> SphericalLattice: ...
+    @property
+    def center(self) -> Vec3: ...
+    @property
+    def radius(self) -> float: ...
+    @property
+    def volume(self) -> float: ...
+
+class EmptyLattice:
+    def __init__(self) -> None: ...
+    def name(self) -> str: ...
+    def transform(self, iso: Isometry3) -> EmptyLattice: ...
+    @property
+    def volume(self) -> float: ...
+
+BuiltInLattice: TypeAlias = (
+    ParallelepipedLattice | CartesianLattice | SphericalLattice | EmptyLattice
+)
+
+class LatticeBubbles:
+    def __init__(
+        self,
+        lattice: BuiltInLattice,
+        bubbles_interior: npt.ArrayLike,
+        bubbles_exterior: npt.ArrayLike | None = ...,
+    ) -> None: ...
+    def parameters(self) -> list[float]: ...
+    def contains(self, points: list[Vec3]) -> list[bool]: ...
+    def transform(self, iso: Isometry3) -> LatticeBubbles: ...
+    def with_boundary_condition(
+        self, boundary_condition: BoundaryCondition | str = ...
+    ) -> None: ...
+    def translate_time_mut(self, t_shift: float) -> None: ...
+    def translate_time(self, t_shift: float) -> LatticeBubbles: ...
+    def normalize_time_mut(self) -> None: ...
+    def normalize_time(self) -> LatticeBubbles: ...
+    @property
+    def lattice(self) -> BuiltInLattice: ...
+    @property
+    def bubbles_interior(self) -> npt.NDArray[np.float64]: ...
+    @property
+    def bubbles_exterior(self) -> npt.NDArray[np.float64]: ...
+    @property
+    def lattice_type(self) -> str: ...
+    @property
+    def volume(self) -> float: ...
+    @property
+    def reference_point(self) -> Vec3: ...
+
+class ExponentialTimeCutoff:
+    def __init__(
+        self,
+        smax: float,
+        ratio_t_cut: float | None = ...,
+        ratio_t_0: float | None = ...,
+    ) -> None: ...
+    @property
+    def t_cut(self) -> float: ...
+    @property
+    def t_0(self) -> float: ...
+
+class GeneralizedBulkFlow:
+    def __init__(self, lattice_bubbles: LatticeBubbles) -> None: ...
+    def set_num_threads(self, num_threads: int) -> None: ...
+    def set_coefficients_sets(self, coefficients_sets: npt.ArrayLike) -> None: ...
+    def set_powers_sets(self, powers_sets: npt.ArrayLike) -> None: ...
+    def set_gradient_scaling_params(
+        self,
+        coefficients_sets: list[list[float]],
+        powers_sets: list[list[float]],
+        damping_factor: float | None = ...,
+    ) -> None: ...
+    def set_resolution(
+        self,
+        n_cos_thetax: int,
+        n_phix: int,
+        precompute_first_bubbles: bool = ...,
+    ) -> None: ...
+    def compute_first_colliding_bubble(
+        self,
+        a_idx: int,
+    ) -> npt.NDArray[np.int32]: ...
+    def compute_delta_tab(
+        self,
+        a_idx: int,
+        first_bubble: npt.ArrayLike,
+    ) -> npt.NDArray[np.float64]: ...
+    def compute_collision_status(
+        self,
+        a_idx: int,
+        t: float,
+        first_bubble: npt.ArrayLike,
+        delta_tab_grid: npt.ArrayLike,
+    ) -> npt.NDArray[np.int32]: ...
+    def compute_c_integral_fixed_bubble(
+        self,
+        a_idx: int,
+        w_arr: list[float],
+        t_begin: float | None,
+        t_end: float,
+        n_t: int,
+        time_cutoff: ExponentialTimeCutoff | None = ...,
+    ) -> npt.NDArray[np.complex128]: ...
+    def compute_c_integrand_fixed_bubble(
+        self,
+        a_idx: int,
+        w_arr: list[float],
+        t_begin: float | None,
+        t_end: float,
+        n_t: int,
+    ) -> npt.NDArray[np.complex128]: ...
+    def compute_c_integrand(
+        self,
+        w_arr: list[float],
+        *,
+        t_begin: float | None = ...,
+        t_end: float,
+        n_t: int,
+        selected_bubbles: npt.ArrayLike | None = ...,
+    ) -> npt.NDArray[np.complex128]: ...
+    def compute_c_integral(
+        self,
+        w_arr: list[float],
+        *,
+        t_begin: float | None = ...,
+        t_end: float,
+        n_t: int,
+        selected_bubbles: npt.ArrayLike | None = ...,
+        time_cutoff: ExponentialTimeCutoff | None = ...,
+    ) -> npt.NDArray[np.complex128]: ...
+    @property
+    def bubbles_interior(self) -> npt.NDArray[np.float64]: ...
+    @property
+    def bubbles_exterior(self) -> npt.NDArray[np.float64]: ...
+    @property
+    def coefficients_sets(self) -> npt.NDArray[np.float64]: ...
+    @property
+    def get_powers_sets(self) -> npt.NDArray[np.float64]: ...
+    @property
+    def cos_thetax(self) -> npt.NDArray[np.float64]: ...
+    @property
+    def phix(self) -> npt.NDArray[np.float64]: ...
+
+class NewGeneralizedBulkFlow:
+    def __init__(self, lattice_bubbles: LatticeBubbles) -> None: ...
+    def set_num_threads(self, num_threads: int) -> None: ...
+    def set_coefficients_sets(self, coefficients_sets: npt.ArrayLike) -> None: ...
+    def set_powers_sets(self, powers_sets: npt.ArrayLike) -> None: ...
+    def set_gradient_scaling_params(
+        self,
+        coefficients_sets: list[list[float]],
+        powers_sets: list[list[float]],
+        damping_factor: float | None = ...,
+    ) -> None: ...
+    def set_resolution(
+        self,
+        n_cos_thetax: int,
+        n_phix: int,
+        precompute_first_bubbles: bool = ...,
+    ) -> None: ...
+    def compute_c_tensor_fixed_bubble(
+        self,
+        a_idx: int,
+        w_arr: list[float],
+        t_begin: float | None,
+        t_end: float,
+        n_t: int,
+    ) -> npt.NDArray[np.complex128]: ...
+    def compute_c_tensor_integrand_fixed_bubble(
+        self,
+        a_idx: int,
+        w_arr: list[float],
+        t_begin: float | None,
+        t_end: float,
+        n_t: int,
+    ) -> npt.NDArray[np.complex128]: ...
+    def compute_c_tensor(
+        self,
+        w_arr: list[float],
+        *,
+        t_begin: float | None = ...,
+        t_end: float,
+        n_t: int,
+        selected_bubbles: npt.ArrayLike | None = ...,
+    ) -> npt.NDArray[np.complex128]: ...
+    def compute_c_tensor_integrand(
+        self,
+        w_arr: list[float],
+        *,
+        t_begin: float | None = ...,
+        t_end: float,
+        n_t: int,
+        selected_bubbles: npt.ArrayLike | None = ...,
+    ) -> npt.NDArray[np.complex128]: ...
+    def compute_first_colliding_bubble(self, a_idx: int) -> npt.NDArray[np.int32]: ...
+    def compute_delta_tab(
+        self,
+        a_idx: int,
+        first_bubble: npt.ArrayLike,
+    ) -> npt.NDArray[np.float64]: ...
+    def compute_collision_status(
+        self,
+        a_idx: int,
+        t: float,
+        first_bubble: npt.ArrayLike,
+        delta_tab_grid: npt.ArrayLike,
+    ) -> npt.NDArray[np.int32]: ...
+    @property
+    def bubbles_interior(self) -> npt.NDArray[np.float64]: ...
+    @property
+    def bubbles_exterior(self) -> npt.NDArray[np.float64]: ...
+    @property
+    def coefficients_sets(self) -> npt.NDArray[np.float64]: ...
+    @property
+    def get_powers_sets(self) -> npt.NDArray[np.float64]: ...
+    @property
+    def cos_thetax(self) -> npt.NDArray[np.float64]: ...
+    @property
+    def phix(self) -> npt.NDArray[np.float64]: ...
+
+class SpontaneousNucleation:
+    def __init__(
+        self, n_bubbles: int, t0: float = ..., seed: int | None = ...
+    ) -> None: ...
+    def nucleate(
+        self,
+        lattice: BuiltInLattice,
+        boundary_condition: BoundaryCondition | str = ...,
+    ) -> LatticeBubbles: ...
+    @property
+    def n_bubbles(self) -> int: ...
+    @property
+    def t0(self) -> float: ...
+    @property
+    def seed(self) -> int | None: ...
+
+class FixedRateNucleationResult:
+    lattice_bubbles: LatticeBubbles
+    time_history: npt.NDArray[np.float64]
+    volume_false_vacuum_history: npt.NDArray[np.float64]
+
+class FixedRateNucleation:
+    def __init__(
+        self,
+        beta: float,
+        gamma0: float,
+        t0: float,
+        d_p0: float,
+        seed: int | None = ...,
+        n_points: int = ...,
+        max_time_iterations: int | None = ...,
+        cutoff_fraction_false_vacuum: float | None = ...,
+    ) -> None: ...
+    def solve_bubbles_distribution(
+        self,
+        taumax: float,
+        volume_lattice: float,
+        rtol: float = ...,
+        atol: float = ...,
+    ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]: ...
+    def nucleate(
+        self,
+        lattice: BuiltInLattice,
+        boundary_condition: BoundaryCondition | str = ...,
+        method: FixedRateNucleationMethod | str = ...,
+        d_p0: float = ...,
+    ) -> FixedRateNucleationResult: ...
+    @property
+    def beta(self) -> float: ...
+    @property
+    def gamma0(self) -> float: ...
+    @property
+    def t0(self) -> float: ...
+    @property
+    def seed(self) -> int | None: ...
+    @property
+    def n_points(self) -> int: ...
