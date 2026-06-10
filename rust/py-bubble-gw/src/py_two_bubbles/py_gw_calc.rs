@@ -1,4 +1,6 @@
+use bubble_gw::two_bubbles::Integral;
 use bubble_gw::two_bubbles::gw_calc::{
+    ExponentialTimeCutoff,
     GWCalcError,
     GravitationalWaveCalculator,
     InitialFieldStatus,
@@ -30,6 +32,15 @@ pub enum PyGWCalcError {
     #[error("Maximum iterations must be > 0: got {0}")]
     InvalidMaxIter(u32),
 
+    #[error("Gauss-Legendre integration order must be in 2..=30: got {0}")]
+    InvalidGaussLegendreOrder(usize),
+
+    #[error("Newton-Cotes integration requires at least 1 subinterval: got {0}")]
+    InvalidNewtonCotesOrder(usize),
+
+    #[error("The selected integration method does not accept tolerance/max_iter parameters")]
+    IntegralParamsUnsupported,
+
     #[error("Failed to build thread pool: {0}")]
     ThreadPoolBuild(String),
 
@@ -41,6 +52,9 @@ pub enum PyGWCalcError {
 
     #[error("Invalid initial_field_status: {0}")]
     InvalidInitialFieldStatus(String),
+
+    #[error("Invalid integration method: {0}")]
+    InvalidIntegrationMethod(String),
 }
 
 impl From<GWCalcError> for PyGWCalcError {
@@ -52,8 +66,13 @@ impl From<GWCalcError> for PyGWCalcError {
             GWCalcError::LengthMismatch { w_len, k_len } => {
                 PyGWCalcError::LengthMismatch { w_len, k_len }
             },
-            GWCalcError::InvalidTolerance(t) => PyGWCalcError::InvalidTolerance(t),
-            GWCalcError::InvalidMaxIter(n) => PyGWCalcError::InvalidMaxIter(n),
+            GWCalcError::InvalidTolerance(tol) => PyGWCalcError::InvalidTolerance(tol),
+            GWCalcError::InvalidMaxIter(max_iter) => PyGWCalcError::InvalidMaxIter(max_iter),
+            GWCalcError::InvalidGaussLegendreOrder(n) => {
+                PyGWCalcError::InvalidGaussLegendreOrder(n)
+            },
+            GWCalcError::InvalidNewtonCotesOrder(n) => PyGWCalcError::InvalidNewtonCotesOrder(n),
+            GWCalcError::IntegralParamsUnsupported => PyGWCalcError::IntegralParamsUnsupported,
             GWCalcError::ThreadPoolBuildError(e) => PyGWCalcError::ThreadPoolBuild(e.to_string()),
             GWCalcError::IntegrationFailed(s) => PyGWCalcError::IntegrationFailed(s),
             GWCalcError::InvalidCutoff { t_cut, t_0, smax } => {
@@ -70,8 +89,12 @@ impl From<PyGWCalcError> for PyErr {
             | PyGWCalcError::LengthMismatch { .. }
             | PyGWCalcError::InvalidTolerance(_)
             | PyGWCalcError::InvalidMaxIter(_)
+            | PyGWCalcError::InvalidGaussLegendreOrder(_)
+            | PyGWCalcError::InvalidNewtonCotesOrder(_)
+            | PyGWCalcError::IntegralParamsUnsupported
             | PyGWCalcError::InvalidCutoff { .. }
-            | PyGWCalcError::InvalidInitialFieldStatus(_) => PyValueError::new_err(err.to_string()),
+            | PyGWCalcError::InvalidInitialFieldStatus(_)
+            | PyGWCalcError::InvalidIntegrationMethod(_) => PyValueError::new_err(err.to_string()),
             PyGWCalcError::ThreadPoolBuild(_) | PyGWCalcError::IntegrationFailed(_) => {
                 PyRuntimeError::new_err(err.to_string())
             },
@@ -81,9 +104,65 @@ impl From<PyGWCalcError> for PyErr {
 
 type PyResult<T> = Result<T, PyGWCalcError>;
 
+fn parse_initial_field_status(initial_field_status: &str) -> PyResult<InitialFieldStatus> {
+    match initial_field_status.to_lowercase().as_str() {
+        "one_bubble" => Ok(InitialFieldStatus::OneBubble),
+        "two_bubbles" => Ok(InitialFieldStatus::TwoBubbles),
+        _ => Err(PyGWCalcError::InvalidInitialFieldStatus(initial_field_status.to_string())),
+    }
+}
+
+fn parse_integration_method(
+    method: &str,
+    n: Option<usize>,
+    tol: Option<f64>,
+    max_iter: Option<u32>,
+) -> PyResult<Integral> {
+    let method = method.to_lowercase().replace(['-', ' '], "_");
+    let tol = tol.unwrap_or(1e-5);
+    let max_iter = max_iter.unwrap_or(20);
+
+    match method.as_str() {
+        "gauss_legendre" => Ok(Integral::GaussLegendre(n.unwrap_or(16))),
+        "newton_cotes" => Ok(Integral::NewtonCotes(n.unwrap_or(6))),
+        "g7k15" => Ok(Integral::G7K15(tol, max_iter)),
+        "g10k21" => Ok(Integral::G10K21(tol, max_iter)),
+        "g15k31" => Ok(Integral::G15K31(tol, max_iter)),
+        "g20k41" => Ok(Integral::G20K41(tol, max_iter)),
+        "g25k51" => Ok(Integral::G25K51(tol, max_iter)),
+        "g30k61" | "gauss_kronrod" => Ok(Integral::G30K61(tol, max_iter)),
+        "g7k15r" => Ok(Integral::G7K15R(tol, max_iter)),
+        "g10k21r" => Ok(Integral::G10K21R(tol, max_iter)),
+        "g15k31r" => Ok(Integral::G15K31R(tol, max_iter)),
+        "g20k41r" => Ok(Integral::G20K41R(tol, max_iter)),
+        "g25k51r" => Ok(Integral::G25K51R(tol, max_iter)),
+        "g30k61r" | "gauss_kronrod_relative" => Ok(Integral::G30K61R(tol, max_iter)),
+        _ => Err(PyGWCalcError::InvalidIntegrationMethod(method)),
+    }
+}
+
+fn format_integration_method(method: Integral) -> String {
+    match method {
+        Integral::GaussLegendre(n) => format!("gauss_legendre(n={n})"),
+        Integral::NewtonCotes(n) => format!("newton_cotes(n={n})"),
+        Integral::G7K15(tol, max_iter) => format!("g7k15(tol={tol}, max_iter={max_iter})"),
+        Integral::G10K21(tol, max_iter) => format!("g10k21(tol={tol}, max_iter={max_iter})"),
+        Integral::G15K31(tol, max_iter) => format!("g15k31(tol={tol}, max_iter={max_iter})"),
+        Integral::G20K41(tol, max_iter) => format!("g20k41(tol={tol}, max_iter={max_iter})"),
+        Integral::G25K51(tol, max_iter) => format!("g25k51(tol={tol}, max_iter={max_iter})"),
+        Integral::G30K61(tol, max_iter) => format!("g30k61(tol={tol}, max_iter={max_iter})"),
+        Integral::G7K15R(tol, max_iter) => format!("g7k15r(tol={tol}, max_iter={max_iter})"),
+        Integral::G10K21R(tol, max_iter) => format!("g10k21r(tol={tol}, max_iter={max_iter})"),
+        Integral::G15K31R(tol, max_iter) => format!("g15k31r(tol={tol}, max_iter={max_iter})"),
+        Integral::G20K41R(tol, max_iter) => format!("g20k41r(tol={tol}, max_iter={max_iter})"),
+        Integral::G25K51R(tol, max_iter) => format!("g25k51r(tol={tol}, max_iter={max_iter})"),
+        Integral::G30K61R(tol, max_iter) => format!("g30k61r(tol={tol}, max_iter={max_iter})"),
+    }
+}
+
 #[pyclass(name = "GravitationalWaveCalculator")]
 pub struct PyGravitationalWaveCalculator {
-    inner: GravitationalWaveCalculator,
+    inner: GravitationalWaveCalculator<ExponentialTimeCutoff>,
 }
 
 #[pymethods]
@@ -102,16 +181,9 @@ impl PyGravitationalWaveCalculator {
         let phi1 = phi1.to_owned_array();
         let phi2 = phi2.to_owned_array();
         let z_grid = z_grid.to_owned_array();
-
-        let initial_field_status = match initial_field_status.to_lowercase().as_str() {
-            "one_bubble" => InitialFieldStatus::OneBubble,
-            "two_bubbles" => InitialFieldStatus::TwoBubbles,
-            _ => {
-                return Err(PyGWCalcError::InvalidInitialFieldStatus(
-                    initial_field_status.to_string(),
-                ));
-            },
-        };
+        let initial_field_status = parse_initial_field_status(initial_field_status)?;
+        let smax = (phi1.shape()[1] - 1) as f64 * ds;
+        let time_cutoff = ExponentialTimeCutoff::new(smax, ratio_t_cut, ratio_t_0);
 
         let inner = GravitationalWaveCalculator::new(
             initial_field_status,
@@ -119,8 +191,7 @@ impl PyGravitationalWaveCalculator {
             phi2,
             z_grid,
             ds,
-            ratio_t_cut,
-            ratio_t_0,
+            time_cutoff,
         )?;
 
         Ok(Self { inner })
@@ -128,6 +199,19 @@ impl PyGravitationalWaveCalculator {
 
     pub fn set_num_threads(&mut self, num_threads: usize) -> PyResult<()> {
         self.inner.set_num_threads(num_threads)?;
+        Ok(())
+    }
+
+    #[pyo3(signature = (method, n = None, tol = None, max_iter = None))]
+    fn set_integration_params(
+        &mut self,
+        method: &str,
+        n: Option<usize>,
+        tol: Option<f64>,
+        max_iter: Option<u32>,
+    ) -> PyResult<()> {
+        let method = parse_integration_method(method, n, tol, max_iter)?;
+        self.inner.set_integration_params(method)?;
         Ok(())
     }
 
@@ -271,22 +355,17 @@ impl PyGravitationalWaveCalculator {
 
     #[getter]
     fn t_cut(&self) -> f64 {
-        self.inner.config.t_cut
+        self.inner.time_cutoff.t_cut
     }
 
     #[getter]
     fn t_0(&self) -> f64 {
-        self.inner.config.t_0
+        self.inner.time_cutoff.t_0
     }
 
     #[getter]
-    fn tol(&self) -> f64 {
-        self.inner.tol
-    }
-
-    #[getter]
-    fn max_iter(&self) -> u32 {
-        self.inner.max_iter
+    fn integration_method(&self) -> String {
+        format_integration_method(self.inner.quadrature.method)
     }
 
     #[getter]

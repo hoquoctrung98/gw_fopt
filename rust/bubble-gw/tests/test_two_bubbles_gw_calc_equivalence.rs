@@ -1,13 +1,9 @@
 use std::error::Error;
 
 use bubble_gw::two_bubbles::gw_calc::{
-    GravitationalWaveCalculator as OldGravitationalWaveCalculator,
-    InitialFieldStatus as OldInitialFieldStatus,
-};
-use bubble_gw::two_bubbles::new_gw_calc::{
     ExponentialTimeCutoff,
-    GravitationalWaveCalculator as NewGravitationalWaveCalculator,
-    InitialFieldStatus as NewInitialFieldStatus,
+    GravitationalWaveCalculator,
+    InitialFieldStatus,
 };
 use ndarray::{Array1, Array2, Array3};
 use peroxide::numerical::integral::Integral;
@@ -51,50 +47,48 @@ fn assert_arrays_close(actual: &Array2<f64>, expected: &Array2<f64>, abs_tol: f6
 }
 
 #[test]
-fn old_and_new_compute_angular_gw_spectrum_match() -> Result<(), Box<dyn Error>> {
+fn set_integral_params_matches_explicit_g30k61() -> Result<(), Box<dyn Error>> {
     let (phi1, phi2, z_grid, ds) = synthetic_fields();
     let ratio_t_cut = Some(0.8);
     let ratio_t_0 = Some(0.12);
     let smax = (phi1.shape()[1] - 1) as f64 * ds;
 
-    let mut old_calc = OldGravitationalWaveCalculator::new(
-        OldInitialFieldStatus::TwoBubbles,
+    let time_cutoff = ExponentialTimeCutoff::new(smax, ratio_t_cut, ratio_t_0);
+    let mut compatibility_calc = GravitationalWaveCalculator::new(
+        InitialFieldStatus::TwoBubbles,
         phi1.clone(),
         phi2.clone(),
         z_grid.clone(),
         ds,
-        ratio_t_cut,
-        ratio_t_0,
+        time_cutoff.clone(),
     )?;
-    old_calc.set_num_threads(1)?;
-    old_calc.set_integral_params(1e-8, 40)?;
+    compatibility_calc.set_num_threads(1)?;
+    compatibility_calc.set_integral_params(1e-8, 40)?;
 
-    let time_cutoff = ExponentialTimeCutoff::new(smax, ratio_t_cut, ratio_t_0);
-    // let integrand = IntegrandCalculator::new(cutoff);
-    let mut new_calc = NewGravitationalWaveCalculator::new(
-        NewInitialFieldStatus::TwoBubbles,
+    let mut explicit_calc = GravitationalWaveCalculator::new(
+        InitialFieldStatus::TwoBubbles,
         phi1,
         phi2,
         z_grid,
         ds,
         time_cutoff,
     )?;
-    new_calc.set_num_threads(1)?;
-    new_calc.set_integration_params(Integral::G30K61(1e-8, 40))?;
-    // new_calc.set_integration_params("G15K31", 1e-8, 40)?;
+    explicit_calc.set_num_threads(1)?;
+    explicit_calc.set_integration_params(Integral::G30K61(1e-8, 40))?;
 
     let w_arr = [0.4, 0.9, 1.7];
     let cos_thetak_arr = [-1.0, -0.65, -0.1, 0.45, 1.0];
 
-    let old_spectrum = old_calc.compute_angular_gw_spectrum(w_arr, cos_thetak_arr)?;
-    let new_spectrum = new_calc.compute_angular_gw_spectrum(w_arr, cos_thetak_arr)?;
+    let compatibility_spectrum =
+        compatibility_calc.compute_angular_gw_spectrum(w_arr, cos_thetak_arr)?;
+    let explicit_spectrum = explicit_calc.compute_angular_gw_spectrum(w_arr, cos_thetak_arr)?;
 
-    assert_arrays_close(&new_spectrum, &old_spectrum, 1e-10, 1e-10);
+    assert_arrays_close(&compatibility_spectrum, &explicit_spectrum, 1e-10, 1e-10);
     Ok(())
 }
 
 #[test]
-fn new_gw_calc_supports_peroxide_integration_methods() -> Result<(), Box<dyn Error>> {
+fn gw_calc_supports_peroxide_integration_methods() -> Result<(), Box<dyn Error>> {
     let (phi1, phi2, z_grid, ds) = synthetic_fields();
     let time_cutoff =
         ExponentialTimeCutoff::new((phi1.shape()[1] - 1) as f64 * ds, Some(0.8), Some(0.12));
@@ -106,8 +100,8 @@ fn new_gw_calc_supports_peroxide_integration_methods() -> Result<(), Box<dyn Err
         Integral::NewtonCotes(6),
         Integral::G15K31(1e-7, 30),
     ] {
-        let mut calc = NewGravitationalWaveCalculator::new(
-            NewInitialFieldStatus::TwoBubbles,
+        let mut calc = GravitationalWaveCalculator::new(
+            InitialFieldStatus::TwoBubbles,
             phi1.clone(),
             phi2.clone(),
             z_grid.clone(),

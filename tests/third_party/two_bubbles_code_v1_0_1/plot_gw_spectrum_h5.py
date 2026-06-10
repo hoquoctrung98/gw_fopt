@@ -93,7 +93,7 @@ def compute_gw_fopt_spectrum(
     if ratio_t_cut is None:
         ratio_t_cut = float(gw_input.attrs.get("cutoff_ratio", 0.9))
 
-    gw_calc = two_bubbles.NewGravitationalWaveCalculator(
+    gw_calc = two_bubbles.GravitationalWaveCalculator(
         initial_field_status="two_bubbles",
         phi1=gw_input["phi_region1"][:][np.newaxis, :, :],
         phi2=gw_input["phi_region2"][:][np.newaxis, :, :],
@@ -235,7 +235,7 @@ def main() -> None:
     parser.add_argument(
         "--method",
         default="g7k15",
-        help="gw_fopt integration method for NewGravitationalWaveCalculator.",
+        help="gw_fopt integration method for GravitationalWaveCalculator.",
     )
     parser.add_argument(
         "--tol", type=float, default=1e-5, help="gw_fopt quadrature tolerance."

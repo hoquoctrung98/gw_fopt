@@ -10,8 +10,6 @@ fn _py_bubble_gw(py: Python, module_parent: &Bound<'_, PyModule>) -> PyResult<()
     // Create submodules
     let module_two_bubbles = PyModule::new(module_parent.py(), "two_bubbles")?;
     module_two_bubbles.add_class::<py_two_bubbles::py_gw_calc::PyGravitationalWaveCalculator>()?;
-    module_two_bubbles
-        .add_class::<py_two_bubbles::py_new_gw_calc::PyNewGravitationalWaveCalculator>()?;
 
     let module_many_bubbles = PyModule::new(module_parent.py(), "many_bubbles")?;
     module_many_bubbles.add_class::<crate::py_many_bubbles::py_lattice::PyParallelepiped>()?;

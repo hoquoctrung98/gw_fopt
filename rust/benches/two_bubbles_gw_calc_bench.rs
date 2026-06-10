@@ -3,13 +3,9 @@ use std::time::{Duration, Instant};
 
 use bubble_gw::two_bubbles::Integral;
 use bubble_gw::two_bubbles::gw_calc::{
-    GravitationalWaveCalculator as OldGravitationalWaveCalculator,
-    InitialFieldStatus as OldInitialFieldStatus,
-};
-use bubble_gw::two_bubbles::new_gw_calc::{
     ExponentialTimeCutoff,
-    GravitationalWaveCalculator as NewGravitationalWaveCalculator,
-    InitialFieldStatus as NewInitialFieldStatus,
+    GravitationalWaveCalculator,
+    InitialFieldStatus,
 };
 use ndarray::{Array1, Array3};
 
@@ -51,44 +47,23 @@ fn synthetic_fields() -> (Array3<f64>, Array3<f64>, Array1<f64>, f64) {
     (phi1, phi2, z_grid, ds)
 }
 
-fn setup_old_calculator(num_threads: usize) -> OldGravitationalWaveCalculator {
-    let (phi1, phi2, z_grid, ds) = synthetic_fields();
-    let mut calc = OldGravitationalWaveCalculator::new(
-        OldInitialFieldStatus::TwoBubbles,
-        phi1,
-        phi2,
-        z_grid,
-        ds,
-        RATIO_T_CUT,
-        RATIO_T_0,
-    )
-    .expect("failed to construct old calculator");
-    calc.set_num_threads(num_threads)
-        .expect("failed to set old calculator thread count");
-    calc.set_integral_params(TOL, MAX_ITER)
-        .expect("failed to set old calculator integral params");
-    calc
-}
-
-fn setup_new_calculator(
-    num_threads: usize,
-) -> NewGravitationalWaveCalculator<ExponentialTimeCutoff> {
+fn setup_calculator(num_threads: usize) -> GravitationalWaveCalculator<ExponentialTimeCutoff> {
     let (phi1, phi2, z_grid, ds) = synthetic_fields();
     let smax = (N_S - 1) as f64 * ds;
     let time_cutoff = ExponentialTimeCutoff::new(smax, RATIO_T_CUT, RATIO_T_0);
-    let mut calc = NewGravitationalWaveCalculator::new(
-        NewInitialFieldStatus::TwoBubbles,
+    let mut calc = GravitationalWaveCalculator::new(
+        InitialFieldStatus::TwoBubbles,
         phi1,
         phi2,
         z_grid,
         ds,
         time_cutoff,
     )
-    .expect("failed to construct new calculator");
+    .expect("failed to construct calculator");
     calc.set_num_threads(num_threads)
-        .expect("failed to set new calculator thread count");
+        .expect("failed to set calculator thread count");
     calc.set_integration_params(Integral::G30K61(TOL, MAX_ITER))
-        .expect("failed to set new calculator integral params");
+        .expect("failed to set calculator integral params");
     calc
 }
 
@@ -124,35 +99,16 @@ fn print_result(label: &str, durations: &[Duration]) {
 }
 
 fn bench_pair(num_threads: usize, w_arr: &[f64], cos_thetak_arr: &[f64]) {
-    let old_calc = setup_old_calculator(num_threads);
-    let new_calc = setup_new_calculator(num_threads);
+    let calc = setup_calculator(num_threads);
 
-    let old_durations = time_repeated(|| {
+    let durations = time_repeated(|| {
         black_box(
-            old_calc
-                .compute_angular_gw_spectrum(black_box(w_arr), black_box(cos_thetak_arr))
-                .expect("old calculator spectrum failed"),
+            calc.compute_angular_gw_spectrum(black_box(w_arr), black_box(cos_thetak_arr))
+                .expect("calculator spectrum failed"),
         );
     });
 
-    let new_durations = time_repeated(|| {
-        black_box(
-            new_calc
-                .compute_angular_gw_spectrum(black_box(w_arr), black_box(cos_thetak_arr))
-                .expect("new calculator spectrum failed"),
-        );
-    });
-
-    print_result(&format!("old_gw_calc threads={num_threads}"), &old_durations);
-    print_result(&format!("new_gw_calc threads={num_threads}"), &new_durations);
-
-    let old_mean = mean_duration(&old_durations).as_secs_f64();
-    let new_mean = mean_duration(&new_durations).as_secs_f64();
-    println!(
-        "{:<34} {:.3}x",
-        format!("new/old ratio threads={num_threads}"),
-        new_mean / old_mean
-    );
+    print_result(&format!("gw_calc threads={num_threads}"), &durations);
     println!();
 }
 

@@ -180,7 +180,7 @@ gw_calc = two_bubbles.GravitationalWaveCalculator(
     z_grid=solver.z_grid,
     ds=solver.ds * solver.history_interval,
 )
-gw_calc.set_integral_params(tol=1e-7, max_iter=20)
+gw_calc.set_integration_params(method="g30k61", tol=1e-7, max_iter=20)
 dE_dlogw_dcosthetak = gw_calc.compute_angular_gw_spectrum(
     w_arr=w_arr, cos_thetak_arr=cos_thetak_arr
 )
