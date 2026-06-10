@@ -1,14 +1,18 @@
 /target
+**/*.h5
 **/target
 notebooks/
 .vscode
 **/*.vim
 *.md
+!tests/third_party/two_bubbles_code_v1_0_1/upstream/two_bubbles_code-v1.0.1/README.md
+metadata/
 **/todo.md
 **/todo/
 **/*.ipynb
 **/*.csv
 .gitignore
+!tests/third_party/two_bubbles_code_v1_0_1/upstream/two_bubbles_code-v1.0.1/.gitignore
 .envrc
 .direnv/*
 

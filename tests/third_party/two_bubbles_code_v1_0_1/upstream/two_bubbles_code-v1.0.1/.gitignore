@@ -1,0 +1,5 @@
+fourier/build/*
+gw_spec/build/*
+*.c
+*.html
+*.so

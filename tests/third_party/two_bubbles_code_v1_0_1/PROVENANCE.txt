@@ -1,0 +1,25 @@
+two_bubbles_code v1.0.1
+========================
+
+This directory vendors third-party reference code for regression tests only.
+
+Source
+------
+
+- Title: Two-bubble simulation and gravitational wave spectrum codes and data
+- Authors: Satumaaria Sukuvaara, David Weir, Oliver Gould
+- Source record: https://zenodo.org/records/14446671
+- DOI: https://doi.org/10.5281/zenodo.14446671
+- File: two_bubbles_code-v1.0.1.zip
+- Version: 1.0.1
+- Published: 2024-12-13
+- MD5: f6a8f271c6c72298519443d3906bc7bb
+- License: Creative Commons Attribution 4.0 International
+
+Local Layout
+------------
+
+- upstream/two_bubbles_code-v1.0.1/ contains the unmodified extracted archive.
+
+Keep this code isolated from src/gw_fopt; tests may import or execute it as a
+reference implementation, but it is not part of the public gw_fopt package.

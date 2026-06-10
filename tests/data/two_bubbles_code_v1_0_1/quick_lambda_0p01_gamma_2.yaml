@@ -1,0 +1,25 @@
+run:
+  id: quick_lambda_0p01_gamma_2
+  output_dir: tests/data/two_bubbles_code_v1_0_1
+  overwrite: true
+  keep_workdir: false
+
+upstream:
+  root: tests/third_party/two_bubbles_code_v1_0_1/upstream/two_bubbles_code-v1.0.1
+  build_cython: true
+
+simulation:
+  lambda_bar: 0.01
+  gamma: 2
+  bubble_type: whole
+  ratio_smax_d: 0.8
+  dz_times: null
+  ds: null
+
+gw:
+  wmin: null
+  wmax: null
+  n_w: 32
+  n_k: 10
+  n_workers: null
+  cutoff_ratio: 0.9
