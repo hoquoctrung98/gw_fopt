@@ -306,7 +306,13 @@ pub enum GWCalcError {
     InvalidCutoff { t_cut: f64, t_0: f64, smax: f64 },
 }
 
-/// Struct to hold precomputed field arrays and weights.
+/// Precomputed finite-difference derivatives and quadrature weights used in the
+/// discrete approximation of the Fourier-transformed stress tensor.
+///
+/// The stored arrays correspond to lattice approximations of
+/// $\left(\partial_s \Phi_\pm\right)^2$, $\left(\partial_z \Phi_\pm\right)^2$,
+/// and $\partial_s \Phi_\pm \partial_z \Phi_\pm$, together with the
+/// one-dimensional weights appearing in the outer $s$ integration.
 #[derive(Debug, Clone)]
 pub struct PrecomputedFieldArrays {
     pub dphi1_dz_sq: Array3<f64>,
@@ -322,16 +328,24 @@ pub struct PrecomputedFieldArrays {
     pub xz_weights: Array1<f64>,
 }
 
-// Enum to hold the number of bubbles in the simulation.
-// Depending on whether we have OneBubble or TwoBubbles, the computation of GW
-// spectrum should be scaled differently.
+/// Indicates whether the input field data represents a half-domain
+/// single-bubble-symmetry setup or a full two-bubble domain.
+///
+/// This affects the normalization of the discrete $z$ integral:
+/// `OneBubble` uses the mirror-symmetry factor $2\,dz$, while `TwoBubbles`
+/// uses the full-domain factor $dz$.
 #[derive(Debug, Clone, PartialEq)]
 pub enum InitialFieldStatus {
     OneBubble,
     TwoBubbles,
 }
 
-/// Configuration for the space-time lattice.
+/// Geometry of the discrete $(s,z)$ lattice used for the two-bubble field
+/// evolution.
+///
+/// The fields $\phi_+(s,z)$ and $\phi_-(s,z)$ are sampled on this grid, where
+/// $\phi_+$ denotes the region $t^2 > x^2 + y^2$ and $\phi_-$ denotes the
+/// region $t^2 < x^2 + y^2$.
 #[derive(Debug, Clone)]
 pub struct LatticeConfig {
     pub z_grid: Array1<f64>,
@@ -343,8 +357,22 @@ pub struct LatticeConfig {
     pub initial_field_status: InitialFieldStatus,
 }
 
-/// Gravitational wave calculator for computing the spectrum.
-/// phi1 is the solution for t >= r, phi2 is the solution for t < r.
+/// Computes the exact two-bubble gravitational-wave spectrum from lattice field
+/// data.
+///
+/// Here `phi1` stores the plus-region field $\phi_+(s, z)$ for $t^2 > x^2 + y^2$,
+/// while `phi2` stores the minus-region field $\phi_-(s, z)$ for
+/// $t^2 < x^2 + y^2$.
+///
+/// The calculator evaluates the Fourier-space stress tensor components and
+/// combines them into the angular GW
+/// spectrum. Following `docs/two_bubbles.md`, the basic building blocks are
+/// <div>\[ \widetilde{T}_{ij}(\omega,\theta_k) = \int ds \int dz\ \mathcal{K}_{ij}(s,z;\omega,\theta_k). \]</div>
+/// The kernel <span>\(\mathcal{K}_{ij}\)</span> contains the
+/// field-derivative bilinears, the phase
+/// <span>\(e^{-i \omega z \cos \theta_k}\)</span>, Bessel kernels from the
+/// transverse coordinates, and the time cutoff
+/// <span>\(C(t) = C(su)\)</span>.
 pub struct GravitationalWaveCalculator<T>
 where
     T: TimeCutoff + IntegrationDomain,
@@ -364,6 +392,11 @@ impl<T> GravitationalWaveCalculator<T>
 where
     T: TimeCutoff + IntegrationDomain,
 {
+    /// Builds a calculator from the sampled fields $\phi_+(s,z)$ (identified with `phi1`) and
+    /// $\phi_-(s,z)$ (identified with `phi2`).
+    ///
+    /// `phi1` and `phi2` must have shape `(n_fields, n_s, n_z)` and share the
+    /// same `z_grid` and spacing `ds`.
     pub fn new(
         initial_field_status: InitialFieldStatus,
         phi1: Array3<f64>,
@@ -479,6 +512,15 @@ where
         }
     }
 
+    /// Precomputes the discrete derivative bilinears used in the tensor
+    /// integrals.
+    ///
+    /// In continuum form, the tensor components depend on
+    /// $\left(\partial_s \Phi_\pm\right)^2$,
+    /// $\left(\partial_z \Phi_\pm\right)^2$, and
+    /// $\partial_s \Phi_\pm \partial_z \Phi_\pm$.
+    /// This method replaces those by centered or one-sided lattice finite
+    /// differences and stores the corresponding $s$-integration weights.
     pub fn compute_precomputed_arrays(
         phi1: &Array3<f64>,
         phi2: &Array3<f64>,
@@ -567,7 +609,12 @@ where
         }
     }
 
-    /// The zz component of energy momentum tensor after Fourier transform
+    /// Computes the Fourier-space tensor component $\widetilde{T}_{zz}$.
+    ///
+    /// The continuum expression is
+    /// <div>$ \widetilde{T}_{zz} = \int ds\ s^2 \int dz\ e^{-i \omega z \cos\theta_k} \left[ \left(\partial_z \Phi_+\right)^2 I^{(+)}_{zz}(s) + \left(\partial_z \Phi_-\right)^2 I^{(-)}_{zz}(s) \right]. $</div>
+    /// where
+    /// <div>\[ I^{(\pm)}_{zz}(s) = \int du\ C(su)\ e^{i \omega s u} J_0\!\left(\omega s \sin\theta_k \sqrt{u^2 \pm 1}\right). \]</div>
     #[inline]
     pub fn compute_t_zz(
         &self,
@@ -618,8 +665,12 @@ where
         t_zz
     }
 
-    /// Computes the xx component of the energy-momentum tensor after Fourier
-    /// transform.
+    /// Computes the Fourier-space tensor component $\widetilde{T}_{xx}$.
+    ///
+    /// The continuum expression is
+    /// <div>\[ \widetilde{T}_{xx} = \frac{1}{2} \int ds\ s^2 \int dz\ e^{-i \omega z \cos\theta_k} \left[ \left(\partial_s \Phi_+\right)^2 I^{(+)}_{xx}(s) + \left(\partial_s \Phi_-\right)^2 I^{(-)}_{xx}(s) \right]. \]</div>
+    /// with
+    /// <div>\[ I^{(\pm)}_{xx}(s) = \int du\ C(su)\ (u^2 \pm 1)\ e^{i \omega s u} \left[ J_0\!\left(\omega s \sin\theta_k \sqrt{u^2 \pm 1}\right) - J_2\!\left(\omega s \sin\theta_k \sqrt{u^2 \pm 1}\right) \right]. \]</div>
     #[inline]
     pub fn compute_t_xx(&self, w: f64, cos_thetak: f64, exp_wkz: &Array1<Complex64>) -> Complex64 {
         let dz_factor = match self.lattice.initial_field_status {
@@ -667,8 +718,11 @@ where
         t_xx
     }
 
-    /// Computes the yy component of the energy-momentum tensor after Fourier
-    /// transform.
+    /// Computes the Fourier-space tensor component $\widetilde{T}_{yy}$.
+    ///
+    /// This differs from <span>\(\widetilde{T}_{xx}\)</span> only in the
+    /// Bessel-kernel combination:
+    /// <div>\[ I^{(\pm)}_{yy}(s) = \int du\ C(su)\ (u^2 \pm 1)\ e^{i \omega s u} \left[ J_0\!\left(\omega s \sin\theta_k \sqrt{u^2 \pm 1}\right) + J_2\!\left(\omega s \sin\theta_k \sqrt{u^2 \pm 1}\right) \right]. \]</div>
     #[inline]
     pub fn compute_t_yy(&self, w: f64, cos_thetak: f64, exp_wkz: &Array1<Complex64>) -> Complex64 {
         let dz_factor = match self.lattice.initial_field_status {
@@ -716,7 +770,12 @@ where
         t_yy
     }
 
-    /// The xz component of energy momentum tensor after Fourier transform
+    /// Computes the Fourier-space tensor component $\widetilde{T}_{xz}$.
+    ///
+    /// The continuum expression is
+    /// <div>\[ \widetilde{T}_{xz} = i \int ds\ s^2 \int dz\ e^{-i \omega z \cos\theta_k} \left[ \left(\partial_s \Phi_+ \partial_z \Phi_+\right) I^{(+)}_{xz}(s) - \left(\partial_s \Phi_- \partial_z \Phi_-\right) I^{(-)}_{xz}(s) \right]. \]</div>
+    /// with
+    /// <div>\[ I^{(\pm)}_{xz}(s) = \int du\ C(su)\ \sqrt{u^2 \pm 1}\ e^{i \omega s u} J_1\!\left(\omega s \sin\theta_k \sqrt{u^2 \pm 1}\right). \]</div>
     #[inline]
     pub fn compute_t_xz(
         &self,
@@ -781,15 +840,19 @@ where
         integrate_with_method(integrand, (u_min, u_max), self.quadrature.method)
     }
 
-    /// Computes the energy-momentum tensor components (t_xx, t_yy, t_zz, t_xz)
-    /// on the full Cartesian product of `w_arr` × `cos_thetak_arr`.
+    /// Computes the tensor components
+    /// <div>\[ (\widetilde{T}_{xx}, \widetilde{T}_{yy}, \widetilde{T}_{zz}, \widetilde{T}_{xz}) \]</div>
+    /// on the full Cartesian product of `w_arr × cos_thetak_arr`.
     ///
     /// Returns `Array3<Complex64>` of shape `(n_k, n_w, 4)`:
-    /// - axis 0 → cosθ_k index
-    /// - axis 1 → ω index
-    /// - axis 2 → component: [0]=t_xx, [1]=t_yy, [2]=t_zz, [3]=t_xz
+    /// - axis 0: `cos(theta_k)` index
+    /// - axis 1: `omega` index
+    /// - axis 2: tensor component, namely
+    ///   `result[..., 0] = T_xx`, `result[..., 1] = T_yy`,
+    ///   `result[..., 2] = T_zz`, `result[..., 3] = T_xz`
     ///
-    /// Points with |cosθ_k| = 1.0 are left as zero.
+    /// Points with `|cos(theta_k)| = 1` are left as zero because the transverse
+    /// direction degenerates at the poles.
     #[inline]
     pub fn compute_t_tensor<W, C>(
         &self,
@@ -877,10 +940,21 @@ where
         (t_xx, t_yy, t_zz, t_xz)
     }
 
-    /// Computes the gravitational wave spectrum on a full (w × cosθ_k) grid.
-    /// Returns an Array2<f64> of shape (n_cos_thetak, n_w) where:
-    ///   result[i_k, i_w] = dE/(dlogω dcosθ_k) at cos_thetak_arr[i_k] and
-    /// w_arr[i_w]
+    /// Computes the angular spectrum
+    /// $\dfrac{dE_{\mathrm{GW}}}{d\log\omega\ d\cos\theta_k}$ on the full
+    /// $(n_\omega \times n_{\cos \theta_k})$ grid.
+    ///
+    /// With $\hat{k} = (\sin\theta_k, 0, \cos\theta_k)$, the projection formula
+    /// reduces to
+    /// <div>\[ \frac{dE_{\mathrm{GW}}}{d\omega\, d\Omega} = G \omega^2 \left| \cos^2\theta_k\, \widetilde{T}_{xx} - \widetilde{T}_{yy} + \sin^2\theta_k\, \widetilde{T}_{zz} - \sin(2\theta_k)\, \widetilde{T}_{xz} \right|^2. \]</div>
+    /// Since this method returns the spectrum per logarithmic frequency
+    /// interval and per `dcos(theta_k)`, the implementation uses the equivalent
+    /// normalization
+    /// <div>\[ \frac{dE_{\mathrm{GW}}}{d\log\omega\, d\cos\theta_k} = 2\pi\, \omega^3 \left| \cos^2\theta_k\, \widetilde{T}_{xx} - \widetilde{T}_{yy} + \sin^2\theta_k\, \widetilde{T}_{zz} - 2 \sin\theta_k \cos\theta_k\, \widetilde{T}_{xz} \right|^2. \]</div>
+    ///
+    /// Returns `Array2<f64>` of shape $(n_{\cos \theta_k}, n_\omega)$ where
+    /// `result[i_k, i_w]` is the spectrum evaluated at
+    /// `cos_thetak_arr[i_k]` and `w_arr[i_w]`.
     #[inline]
     pub fn compute_angular_gw_spectrum<W, C>(
         &self,
@@ -964,7 +1038,13 @@ where
         t_total_squared * w_cubed * two_pi
     }
 
-    /// Computes the direction-averaged GW spectrum dE/dlogω
+    /// Computes the direction-averaged spectrum
+    /// $\dfrac{dE_{\mathrm{GW}}}{d\log\omega}$ by integrating over
+    /// $\cos\theta_k$.
+    ///
+    /// Numerically this applies a trapezoidal rule to
+    /// `compute_angular_gw_spectrum`, i.e.
+    /// <div>\[ \frac{dE_{\mathrm{GW}}}{d\log\omega} = \int_{-1}^{1} d \cos\theta_k\, \frac{dE_{\mathrm{GW}}}{d\log\omega\, d\cos\theta_k}. \]</div>
     pub fn compute_averaged_gw_spectrum<W, C>(
         &self,
         w_arr: W,

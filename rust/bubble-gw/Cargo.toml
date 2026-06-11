@@ -31,3 +31,6 @@ differential-equations.workspace = true
 [lib]
 # crate-type = ["cdylib", "lib"]
 crate-type = ["lib"]
+
+[package.metadata.docs.rs]
+rustdoc-args = ["--html-in-header", "../docs/rustdoc/katex-header.html"]

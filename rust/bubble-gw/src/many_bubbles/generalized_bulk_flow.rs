@@ -12,7 +12,7 @@ use crate::many_bubbles::lattice_bubbles::{BubbleIndex, LatticeBubbles, LatticeB
 use crate::many_bubbles::spacetime::Lorentzian;
 use crate::time_cutoff::TimeCutoff;
 
-/// Represents the causal collision status of a direction $(\cos\theta, \phi)$
+/// Represents the causal collision status of a direction $(\cos\theta_x, \phi_x)$
 /// relative to a reference bubble $n$, used to evaluate the Heaviside functions
 /// $\Theta(t_{n,c} - t)$ and $\Theta(t - t_{n,c})$ in the scaling function
 /// $f(t, t_n, t_{n, c})$.
@@ -57,13 +57,9 @@ pub enum GeneralizedBulkFlowError {
 /// Computes the frequency-domain bulk-flow integrals $C_{+}(\omega)$ and
 /// $C_{\times}(\omega)$ for gravitational-wave emission from colliding vacuum
 /// lattice_bubbles in a first-order phase transition. Implements the triple
-/// integral: $$
-/// C_{+,\times}(\omega) = \frac{1}{6\pi} \sum_n \int dt\ e^{i\omega(t - z_n)}
-/// A_{n,\pm}(\omega, t), \\ A_{n,\pm}(\omega, t) = \int_{-1}^{1} d\zeta\
-/// e^{-i\omega(t-t_n)\zeta} B_{n,\pm}(\zeta, t), \\ B_{n,\pm}(\zeta, t) =
-/// \frac{1-\zeta^2}{2} \int_0^{2\pi} d\phi\ g_{\pm}(\phi)\ (t-t_n)^3 f(t, t_n,
-/// t_{n,c}), $$
-/// where $g_{+} = \cos 2\phi$, $g_{\times} = \sin 2\phi$, $\zeta = \cos\theta$,
+/// integral:
+/// \\[ \\begin{aligned} C_{+,\times}(\omega) &= \frac{1}{6\pi} \sum_n \int dt\ e^{i\omega(t - z_n)} A_{n,\pm}(\omega, t), \\\\ A_{n,\pm}(\omega, t) &= \int_{-1}^{1} d\zeta\ e^{-i\omega(t-t_n)\zeta} B_{n,\pm}(\zeta, t), \\\\ B_{n,\pm}(\zeta, t) &= \frac{1-\zeta^2}{2} \int_0^{2\pi} d\phi_x\ g_{\pm}(\phi)\ (t-t_n)^3 f(t, t_n, t_{n,c}). \\end{aligned} \\]
+/// where $g_{+} = \cos 2\phi_x$, $g_{\times} = \sin 2\phi$, $\zeta = \cos\theta_x$,
 /// and $f$ is the collision-aware scaling function.
 #[derive(Debug)]
 pub struct GeneralizedBulkFlow<L>
@@ -123,10 +119,10 @@ where
         self.first_colliding_bubbles.as_ref()
     }
 
-    /// For reference bubble $n$, computes $t_{n,c}(\theta,\phi)$,
+    /// For reference bubble $n$, computes $t_{n,c}(\cos\theta_x,\phi_x)$,
     /// the index of the first bubble that collides with bubble $n$ along each
-    /// direction $(\cos\theta, \phi)$. This defines the collision time
-    /// function $t_{n,c}(\cos\theta, \phi)$ required for the scaling function
+    /// direction $(\cos\theta_x, \phi_x)$. This defines the collision time
+    /// function $t_{n,c}(\cos\theta_x, \phi_x)$ required for the scaling function
     /// $f$.
     pub fn compute_first_colliding_bubble(
         &self,
@@ -313,7 +309,7 @@ where
     /// $$
     /// f = \sum_\xi a_\xi \left(\frac{t_{n,c} - t_n}{t - t_n}\right)^\xi,
     /// $$
-    /// where `coefficients_sets[s][k] = a_\xi`, `powers_sets[s][k] = \xi` for
+    /// where `coefficients_sets[s][k]` = $a_\xi$, `powers_sets[s][k]` = $\xi$ for
     /// model set `s`. Enforces physical constraints: coefficients=0 (no
     /// flow) or  or sum to 1 (full bulk-flow).
     pub fn set_gradient_scaling_params(
@@ -418,10 +414,10 @@ where
     }
 
     /// Computes the collision time delay $\Delta t_{n,c} = t_{n,c} - t_n$ on a
-    /// $(\cos\theta, \phi)$ grid, where $t_{n,c} - t_n = \frac{1}{2}
+    /// $(\cos\theta_x, \phi_x)$ grid, where $t_{n,c} - t_n = \frac{1}{2}
     /// \frac{(x_c - x_n)^2}{(x_c - x_n) \cdot \hat{x}}$ is the solution to
     /// the null-intersection condition for bubbles $n$ and $c$ along direction
-    /// $\hat{x} = (1,\sin\theta\cos\phi,\sin\theta\sin\phi,\cos\theta)$.
+    /// $\hat{x} = (1,\sin\theta_x\cos\phi_x,\sin\theta\sin\phi,\cos\theta)$.
     pub fn compute_delta_tab(
         &self,
         a_idx: usize,
@@ -474,10 +470,10 @@ where
         Ok(delta_tab_grid)
     }
 
-    /// Computes $B_{n,\pm}(\zeta, t)$ for fixed $\zeta = \cos\theta$ by
+    /// Computes $B_{n,\pm}(\zeta, t)$ for fixed $\zeta = \cos\theta_x$ by
     /// numerically evaluating: $$
-    /// B_{n,\pm} = \frac{1-\zeta^2}{2} \int_0^{2\pi} g_{\pm}(\phi)\ (t - t_n)^3
-    /// f(t, t_n, t_{n,c})\, d\phi, $$
+    /// B_{n,\pm} = \frac{1-\zeta^2}{2} \int_0^{2\pi} g_{\pm}(\phi_x)\ (t - t_n)^3
+    /// f(t, t_n, t_{n,c}) d\phi_x, $$
     /// where $f$ switches between pre-collision ($f=1$) and post-collision
     /// profiles using user-defined coefficients $a_\xi$ and powers $\xi$
     /// (stored in `coefficients_sets`, `powers_sets`), with optional
