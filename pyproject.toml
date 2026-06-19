@@ -55,7 +55,10 @@ include = ["src/**/*.pyi"]
 [tool.uv]
 cache-keys = [
     { file = "pyproject.toml" },
-    { file = "rust/**/Cargo.toml" },
+    { file = "rust/Cargo.toml" },
     { file = "rust/Cargo.lock" },
-    { file = "rust/**/*.rs" },
+    { file = "rust/bubble-gw/Cargo.toml" },
+    { file = "rust/bubble-gw/src/**/*.rs" },
+    { file = "rust/py-bubble-gw/Cargo.toml" },
+    { file = "rust/py-bubble-gw/src/**/*.rs" },
 ]

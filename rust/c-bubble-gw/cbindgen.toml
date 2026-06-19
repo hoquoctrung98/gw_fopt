@@ -1,0 +1,43 @@
+language = "C"
+include_guard = "BUBBLE_GW_H"
+pragma_once = true
+cpp_compat = true
+usize_is_size_t = true
+documentation = true
+style = "type"
+tab_width = 4
+
+[parse]
+parse_deps = false
+include = ["bubble_gw_c"]
+
+[export]
+prefix = ""
+include = [
+    "BgwStatus",
+    "BgwInitialFieldStatus",
+    "BgwIntegrationKind",
+    "BgwIntegrationConfig",
+    "BgwTimeCutoffKind",
+    "BgwTimeCutoffConfig",
+    "BgwComplex64",
+    "bgw_two_bubbles_calculator",
+    "bgw_generalized_bulk_flow",
+    "bgw_version",
+    "bgw_last_error_message",
+    "bgw_two_bubbles_calculator_new",
+    "bgw_two_bubbles_calculator_free",
+    "bgw_two_bubbles_calculator_set_num_threads",
+    "bgw_two_bubbles_calculator_set_integration_params",
+    "bgw_two_bubbles_calculator_compute_angular_gw_spectrum",
+    "bgw_two_bubbles_calculator_compute_averaged_gw_spectrum",
+    "bgw_generalized_bulk_flow_empty_lattice_new",
+    "bgw_generalized_bulk_flow_free",
+    "bgw_generalized_bulk_flow_set_num_threads",
+    "bgw_generalized_bulk_flow_set_resolution",
+    "bgw_generalized_bulk_flow_set_gradient_scaling_params",
+    "bgw_generalized_bulk_flow_compute_c_integral",
+]
+
+[enum]
+prefix_with_name = true

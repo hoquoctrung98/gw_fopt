@@ -1,0 +1,21 @@
+[package]
+name = "c-bubble-gw"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "C/C++ ABI bindings for bubble_gw"
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "bubble_gw_c"
+crate-type = ["cdylib", "staticlib", "lib"]
+
+[dependencies]
+bubble_gw = { path = "../bubble-gw" }
+ndarray = { workspace = true }
+num-complex = { workspace = true }
+peroxide = { version = "0.41.2", features = ["complex"] }
+
+[dev-dependencies]
+approx = { version = "0.5.1", features = ["num-complex"] }
