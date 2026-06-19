@@ -1,27 +1,52 @@
 # gw_fopt
 
-**gw_fopt** is a high-performance Python package with Rust bindings, designed to compute the gravitational wave (GW) spectrum arising from bubbles collisions in first order phase transition.
-Currently, this is a workspace containing two different packages: **bubble_dynamics** and **bubble_gw**, each taking care of different computational aspects
+**gw_fopt** is a mixed Python/Rust scientific package for computing gravitational-wave (GW) spectra sourced by bubble collisions in first-order phase transitions.
+The project can be used from three language interfaces:
+
++ **Rust**: the native computational crate `bubble_gw`.
++ **Python**: the main user-facing interface, installed with `uv sync`.
++ **C/C++**: an opt-in C ABI crate that exposes selected `bubble_gw` functionality through a generated header.
+
+At the Python package level, the workspace contains two main namespaces: **bubble_dynamics** and **bubble_gw**, each taking care of different computational aspects.
 
 + **bubble_dynamics** is a Python library that mainly solves the equation of motion of two bubbles system in $(1+1)D$ spacetime (instead of the full $(3+1)D$ equation of motion, thanks to the $O(2,1)$ symmetry of this system). This package also includes tools to extract the surface tension of the wall before and after collision, which is later used in fitting to extract coefficients for the generalized bulk-flow method in computing the GW spectrum.
 
-+ **bubble_gw** leveraging Rust for improved computational efficiency and PyO3 for generating a Python interface. This package computes the GW spectrum via different modules:
++ **bubble_gw** leverages Rust for improved computational efficiency and PyO3 for generating a Python interface. This package computes the GW spectrum via different modules:
 
   + **bubble_gw.two_bubbles** compute the exact GW spectrum of two bubbles system by taking the input of fields evolution on the $(1+1)D$ lattice computed from **bubbles_dynamics** and numerically compute the GW spectrum via  the fourier transformed stress-energy tensor.
 The core computation of exact two bubbles spectrum is a reimplementation of the [two_bubbles_code-v1.0.1](https://zenodo.org/records/5127538.).
 
   + **bubble_gw.many_bubbles** compute the approximate GW spectrum via the generalized bulk-flow, with the input are lattice sizes and the bubble configuration of an arbitrary number of bubbles.
 
-## Installation
+## Common Prerequisite
 
-**gw_fopt** requires the Rust toolchain to be installed on your system.
-The simplest way to install **gw_fopt** is via the **uv**, a Python package and project manager
+All three usage paths require the Rust toolchain to be installed on your system.
+Install Rust first if it is not already available:
 
-1. Ensure you have the Rust toolchain installed
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
 
-  ```bash
-  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-  ```
+## Use From Rust
+
+The native Rust crate lives in `rust/bubble-gw` and is part of the Rust workspace.
+Use it directly when writing Rust code or when benchmarking/debugging the numerical core without Python or C ABI layers.
+
+From `rust/`:
+
+```bash
+cargo build -p bubble_gw --release
+cargo test -p bubble_gw
+```
+
+The Rust crate provides the core modules:
+
++ `bubble_gw::two_bubbles`: exact two-bubble GW calculations from sampled field evolution.
++ `bubble_gw::many_bubbles`: lattice bubbles, nucleation utilities, and generalized bulk-flow calculations.
+
+## Use From Python
+
+The simplest way to install **gw_fopt** for Python use is via **uv**, a Python package and project manager.
 
 1. Install **uv**
 
@@ -29,18 +54,50 @@ The simplest way to install **gw_fopt** is via the **uv**, a Python package and 
   curl -LsSf https://astral.sh/uv/install.sh | sh
   ```
 
-1. Build and install **gw_fopt**: from the workspace directory run
+1. Build and install the Python package: from the workspace directory run
 
   ```bash
   uv sync
   ```
 
-  This command creates an virtual environment in .venv, install the necessary packages, compile and install the Rust code in release mode.
+  This command creates a virtual environment in `.venv`, installs the Python dependencies, and builds the PyO3 extension from `rust/py-bubble-gw`.
 In order to use the installed packages, you need to source the virtual environment corresponding to your shell, for example if you use `bash`, from the workspace directory run
 
   ```bash
   source .venv/bin/activate
   ```
+
+## Use From C/C++
+
+The C/C++ interface is provided by the separate crate `rust/c-bubble-gw`.
+It exposes a C ABI over selected `bubble_gw` functionality and commits the generated header at `rust/c-bubble-gw/include/bubble_gw.h`.
+This interface is highly experimental and may not work as expected; prefer the Rust or Python APIs unless you specifically need C/C++ integration.
+This path is independent from the Python `uv sync` workflow.
+
+From `rust/`:
+
+```bash
+cargo build -p c-bubble-gw --release
+```
+
+This produces linkable libraries under `rust/target/release/`.
+C and C++ callers should include:
+
+```c
+#include "bubble_gw.h"
+```
+
+Regenerate the header with `cbindgen` after changing exported C ABI types or functions:
+
+```bash
+cbindgen --config c-bubble-gw/cbindgen.toml \
+  --crate c-bubble-gw \
+  --lang c \
+  --output c-bubble-gw/include/bubble_gw.h
+```
+
+The C ABI uses opaque handles, caller-owned row-major arrays, explicit dimensions, and `BgwStatus` return codes.
+Use `bgw_last_error_message()` to inspect the latest failure message.
 
 ## Examples of using the package **gw_fopt**
 
