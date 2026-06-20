@@ -5,17 +5,17 @@
 Consider the gravitational waves (GW) background sourced by bubble collisions during First Order Phase Transition (FOPT).
 The GW energy radiated inside a differential solid angle $d \Omega_{\mathbf{k}}$ the direction of unit momentum vector $\hat{\mathbf{k}}$ is
 
-```math
+$$
 \begin{align}
 \frac{d E_{GW}}{d \ln \omega \, d \Omega_{\mathbf{k}}}
     &= 2 G \omega^3 \Lambda_{ij,lm}(\hat{\mathbf{k}}) \widetilde{T}^{*}_{ij}(\hat{\mathbf{k}},\omega) \widetilde{T}_{lm}(\hat{\mathbf{k}},\omega) \nonumber \\
     &= 2 G \omega^3 \left( \mathrm{Tr}\left[ P_{\hat{\mathbf{k}}} \widetilde{T}^\ast_{} P_{\hat{\mathbf{k}}} \widetilde{T} \right] - \dfrac{1}{2} \left\vert \mathrm{Tr}\left[ P_{\hat{\mathbf{k}}} \widetilde{T} \right] \right\vert^2 \right),
 \end{align}
-```
+$$
 
 where
 
-```math
+$$
 \begin{align*}
     \Lambda_{ij,lm}(\hat{\mathbf{k}}) &= P_{\hat{\mathbf{k}}}^{il} P_{\hat{\mathbf{k}}}^{jm} - \dfrac{1}{2} P_{\hat{\mathbf{k}}}^{ij} P_{\hat{\mathbf{k}}}^{lm}, \qquad P_{\hat{\mathbf{k}}}^{ij} = \delta_{ij} - \hat{k}_i \hat{k}_j \\
     T_{ij}(\hat{\mathbf{k}},\omega) &=\frac{1}{2\pi}\int dt \, d^3x \, e^{i\omega(t-\hat{\mathbf{k}} \cdot \mathbf{x})}T_{ij}(\mathbf{x},t)
@@ -23,7 +23,7 @@ where
     C_{ij}(\hat{\mathbf{k}},\omega) &= \dfrac{1}{6 \pi} \sum_n \int dt \, e^{i \omega (t - \hat{\mathbf{k}} \cdot \mathbf{x}_n)} A_{n, ij}(\hat{\mathbf{k}},\omega), \\
     A_{n, ij}(\hat{\mathbf{k}},\omega, t) &= \int_{S_n} d \Omega_{\mathbf{x}} \, e^{-i \omega v_w (t - t_n) \hat{\mathbf{k}} \cdot \mathbf{\hat{x}}} \hat{\mathbf{x}}_i \hat{\mathbf{x}}_j \left[ (t - t_n)^3  f(t, t_n, t_{n,c})\right]
 \end{align*}
-```
+$$
 
 Where
 
@@ -40,13 +40,13 @@ $$
 
 + $f(t, t_n, t_{n, c})$ is the scaling function, which can be decomposed into the envelope contribution (i.e before first collision) and generalized bulk-flow contribution (i.e after first collision) as follows
 
-```math
+$$
 \begin{align}
 f_\sigma(t, t_n, t_{n, c}) &\equiv \Theta(t_{n, c}-t)
     + \Theta(t - t_{n, c}) \left(\frac{t_{n, c}-t_n}{t-t_n}\right)^3 \sum_\xi a_\xi \left(\frac{t_{n, c}-t_n}{t-t_n}\right)^\xi, \\
     &= f_\sigma^{(\text{env})}(t, t_{n, c}) + \sum_\xi f_\sigma^{(\xi)}(t, t_n, t_{n, c})
 \end{align}
-```
+$$
 
 where the coefficients $a_\xi$ can be extracted from fitting the surface tension of the bubble wall from e.g $(1+1)D$ simulation using package **bubble_dynamics**
 
@@ -59,20 +59,20 @@ $$
 
 + With the choice $\hat{\mathbf{k}} = \hat{\mathbf{z}} = (0, 0, 1)$, the computations reduce to
 
-    ```math
-    \begin{align}
-        \frac{d E_{GW}}{d \ln \omega \, d \Omega_{\mathbf{k}}}
-        &=  G \omega^3 \left(\left\vert \widetilde{T}_{xx} - \widetilde{T}_{yy}\right\vert^2+2 \left\vert \widetilde{T}_{xy} \right\vert^2 + 2 \left\vert\widetilde{T}_{yx} \right\vert^2 \right) \nonumber \\
-        &= 4 G \rho_\text{vac}^2 \omega^3 \left( \vert C_+ \vert^2 + \vert C_- \vert^2 \right), \\
-        C_\pm(\omega) &= \dfrac{1}{6 \pi} \sum_{n=1}^N \int dt \ e^{i \omega (t - z_n)} A_{n, \pm}(\omega, t), \\
-        A_{n, \pm}(\omega, t) &= \int_{-1}^1 d \cos \theta_x \ e^{-i \omega v_w (t - t_n) \cos \theta_x} B_{n, \pm} (\cos \theta_x, t), \\
-        B_{n, \pm}(\cos \theta_x, t) &= \dfrac{\sin^2 \theta_x}{2} \int_0^{2 \pi} d \phi_x \ X_\pm(\phi_x) \left[ (t - t_n)^3  f(t, t_n, t_{n,c})\right]
-    \end{align}
-    ```
+$$
+\begin{align}
+    \frac{d E_{GW}}{d \ln \omega \, d \Omega_{\mathbf{k}}}
+    &=  G \omega^3 \left(\left\vert \widetilde{T}_{xx} - \widetilde{T}_{yy}\right\vert^2+2 \left\vert \widetilde{T}_{xy} \right\vert^2 + 2 \left\vert\widetilde{T}_{yx} \right\vert^2 \right) \nonumber \\
+    &= 4 G \rho_\text{vac}^2 \omega^3 \left( \vert C_+ \vert^2 + \vert C_- \vert^2 \right), \\
+    C_\pm(\omega) &= \dfrac{1}{6 \pi} \sum_{n=1}^N \int dt \ e^{i \omega (t - z_n)} A_{n, \pm}(\omega, t), \\
+    A_{n, \pm}(\omega, t) &= \int_{-1}^1 d \cos \theta_x \ e^{-i \omega v_w (t - t_n) \cos \theta_x} B_{n, \pm} (\cos \theta_x, t), \\
+    B_{n, \pm}(\cos \theta_x, t) &= \dfrac{\sin^2 \theta_x}{2} \int_0^{2 \pi} d \phi_x \ X_\pm(\phi_x) \left[ (t - t_n)^3  f(t, t_n, t_{n,c})\right]
+\end{align}
+$$
 
-    In the final line, we define $X_+ \equiv \cos 2\phi_x$, $X_- \equiv \sin 2\phi_x$.
-    Here, $z_n$ and $t_n$ denote the $z$-coordinate and the nucleation time of the $n$-th bubble, respectively.
-    This way, we can compute $B_{n, \pm}$ once and reuse for all input frequencies $\omega$, hence reduce the computational cost by a factor of $\mathcal{O}(n_\omega)$.
+In the final line, we define $X_+ \equiv \cos 2\phi_x$, $X_- \equiv \sin 2\phi_x$.
+Here, $z_n$ and $t_n$ denote the $z$-coordinate and the nucleation time of the $n$-th bubble, respectively.
+This way, we can compute $B_{n, \pm}$ once and reuse for all input frequencies $\omega$, hence reduce the computational cost by a factor of $\mathcal{O}(n_\omega)$.
 
 + Assuming that the scaling functions $f(t, t_n, t_{n, c})$ can be well approximated by the Taylor series form as above, we can compute the coefficients $C_\pm^{(\xi)}(\omega)$ corresponding to $f^{(\xi)}(t, t_n, t_{n, c})$ and $C_\pm^{(\text{env})}(\omega)$ corresponding to $f^{(\text{env})}(t, t_{n, c})$.
     Then for any phase transition models, we find $f(t, t_n, t_{n, c})$ from e.g $(1+1)D$ simulation, then fit to extract the coefficients $a_\xi$, and obtain the spectrum $dE_{GW}/(d \ln \omega d \Omega_{\mathbf{k}})$ without having to recompute $C_\pm(\omega)$.
@@ -80,7 +80,24 @@ $$
 ## Example of computing GW spectrum in many bubbles set-up
 
 The bubble configuration file is given at [input configuration](./examples/inputs/confY.txt), which is a table containing four columns corresponding to $(t_c, x_c, y_c, z_c)$ of the nucleated bubbles, and each row corresponds to one bubble.
-The example code to reproduce the results below is [generalized_bulkflow.ipynb](./examples/generalized_bulkflow.ipynb).
+
+=== "Python"
+
+    The example code to reproduce the results below is available as [generalized_bulkflow.py](./examples/generalized_bulkflow.py) and [generalized_bulkflow.ipynb](./examples/generalized_bulkflow.ipynb).
+
+    ```bash
+    cd docs/examples
+    uv run python generalized_bulkflow.py
+    ```
+
+=== "Rust"
+
+    The native crate contains a generalized bulk-flow example:
+
+    ```bash
+    cd rust
+    cargo run -p bubble_gw --example example_many_bubbles_bulkflow
+    ```
 
 ### First collided bubbles
 

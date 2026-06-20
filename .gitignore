@@ -5,6 +5,8 @@ notebooks/
 .vscode
 **/*.vim
 *.md
+!docs/**/*.md
+!README.md
 !tests/third_party/two_bubbles_code_v1_0_1/upstream/two_bubbles_code-v1.0.1/README.md
 metadata/
 **/todo.md
@@ -77,6 +79,8 @@ coverage.xml
 
 # Sphinx documentation
 docs/_build/
+site/
+docs/site/
 
 # PyCharm
 .idea/

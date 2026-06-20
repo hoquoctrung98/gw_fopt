@@ -36,7 +36,24 @@ This approach is much slower, but we correctly take into account the overlapping
 
 ## Example code
 
-An example of creating a lattice, attaching with bubbles_interior and do various verifications (bubbles causality, bubbles_interior outside of a given lattice, ...) as well as performing Isometry3 transformations on both the lattice and the bubbles can be found at [lattice_bubbles.py](./examples/lattice_bubbles.py)
+=== "Python"
+
+    An example of creating a lattice, attaching bubbles, verifying causality and boundary placement, and applying `Isometry3` transformations is available at [lattice_bubbles.py](./examples/lattice_bubbles.py).
+
+    ```bash
+    cd docs/examples
+    uv run python lattice_bubbles.py
+    ```
+
+=== "Rust"
+
+    Matching Rust entry points are available in the native crate examples:
+
+    ```bash
+    cd rust
+    cargo run -p bubble_gw --example example_lattice_bubbles
+    cargo run -p bubble_gw --example example_spherical_lattice
+    ```
 
 ### Read bubbles from input file in CartesianLattice
 

@@ -99,6 +99,42 @@ cbindgen --config c-bubble-gw/cbindgen.toml \
 The C ABI uses opaque handles, caller-owned row-major arrays, explicit dimensions, and `BgwStatus` return codes.
 Use `bgw_last_error_message()` to inspect the latest failure message.
 
+## Build and open the local documentation
+
+The user guide is built with Zensical and includes the narrative Markdown pages and Python API pages.
+Rust API documentation is generated separately with `cargo doc`.
+
+1. Install the documentation dependencies:
+
+  ```bash
+  uv sync --extra docs
+  ```
+
+1. Build the Zensical site only:
+
+  ```bash
+  uv run zensical build
+  ```
+
+1. Optionally build Rust API docs and copy them into the generated site so the Rust API link works:
+
+  ```bash
+  cd rust
+  cargo doc -p bubble_gw --no-deps
+  cd ..
+  rm -rf site/rustdoc
+  mkdir -p site/rustdoc
+  cp -R rust/target/doc/. site/rustdoc/
+  ```
+
+1. Open a live local preview:
+
+  ```bash
+  uv run zensical serve
+  ```
+
+  Then visit the local URL printed by Zensical, usually <http://localhost:8000/>.
+
 ## Examples of using the package **gw_fopt**
 
 + [two bubbles](./docs/two_bubbles.md): Here we use `bubbles_dynamics` to solve the equation of motion on $(1+1)D$ lattice of a quartic potential and plugging this to `bubbles_gw.two_bubbles` to compute the exact GW spectrum.

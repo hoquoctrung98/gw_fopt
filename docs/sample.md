@@ -19,18 +19,40 @@ A high-performance adaptive sampling tool for generating hierarchical, non-unifo
 
 ## Basic Examples
 
-```python
-from bubble_gw.utils import sample
+=== "Python"
 
-# Linear spacing (equivalent to np.linspace)
-sample(start=1.0, stop=100.0, n_sample=5, n_grid=2, n_iter=0, sample_type="linear")
+    ```python
+    from gw_fopt.bubble_gw import utils
 
-# Logarithmic spacing (equivalent to np.geomspace with base 10)
-sample(start=1.0, stop=100.0, n_sample=5, n_grid=2, n_iter=0, sample_type="log")
-# or with a different base
-sample(start=1.0, stop=100.0, n_sample=5, n_grid=2, n_iter=0, sample_type="log", base=2.0)
-```
+    # Linear spacing (equivalent to np.linspace)
+    utils.sample(start=1.0, stop=100.0, n_sample=5, n_grid=2, n_iter=0, sample_type="linear")
+
+    # Logarithmic spacing (equivalent to np.geomspace with base 10)
+    utils.sample(start=1.0, stop=100.0, n_sample=5, n_grid=2, n_iter=0, sample_type="log")
+
+    # Or with a different base
+    utils.sample(start=1.0, stop=100.0, n_sample=5, n_grid=2, n_iter=0, sample_type="log", base=2.0)
+    ```
+
+=== "Rust"
+
+    ```rust
+    use bubble_gw::utils::sample::{SampleParams, SampleType};
+
+    fn main() -> Result<(), Box<dyn std::error::Error>> {
+        let params = SampleParams::new(1.0, 100.0, SampleType::Logarithmic { base: 10.0 })?;
+        let points = params.sample(5, 2, 0)?;
+        println!("{points:?}");
+        Ok(())
+    }
+    ```
 
 To better visualize the usage of this util, run the example [visualize_samples.py](./examples/visualize_samples.py)
+
+```bash
+cd docs/examples
+uv run python visualize_samples.py
+```
+
 ![uniform](examples/figures/sample_uniform.png)
 ![log](examples/figures/sample_log.png)
