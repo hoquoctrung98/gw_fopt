@@ -1,7 +1,8 @@
 site_name: gw_fopt User Guide
 site_description: Gravitational-wave spectra from first-order phase-transition bubble collisions
-repo_url: https://github.com/hoquoctrung/gw_fopt
-repo_name: hoquoctrung/gw_fopt
+site_url: https://hoquoctrung98.github.io/gw_fopt/
+repo_url: https://github.com/hoquoctrung98/gw_fopt
+repo_name: hoquoctrung98/gw_fopt
 
 theme:
   name: material
